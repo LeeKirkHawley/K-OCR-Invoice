@@ -64,7 +64,7 @@
                               ShowsPreview="True"/>
 
                 <Border Grid.Column="2" BorderBrush="LightGray" BorderThickness="1" Padding="8">
-                    <TextBlock Name="OCRdTextPanel" />
+                    <RichTextBox Name="OCRdTextPanel" />
                 </Border>
             </Grid>
         </Grid>
