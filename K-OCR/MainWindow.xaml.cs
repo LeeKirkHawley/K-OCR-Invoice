@@ -10,6 +10,7 @@ namespace K_OCR
     public partial class MainWindow : Window
     {
         private readonly List<OCRFile> filesToProcess = new List<OCRFile>();
+        private int currentIndex = -1;
 
         public MainWindow()
         {
@@ -33,8 +34,13 @@ namespace K_OCR
                     filesToProcess.Add(new OCRFile { filePath = fileName });
                 }
 
+                currentIndex = filesToProcess.Count > 0 ? 0 : -1;
+
                 await RunOcrAsync(filesToProcess);
                 OnProcessingCompleted(filesToProcess);
+
+                // Show first file without rebuilding document
+                ShowFileAt(currentIndex);
             }
         }
 
@@ -56,32 +62,36 @@ namespace K_OCR
             {
                 try
                 {
-
                     var engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default);
 
                     var img = Pix.LoadFromFile(ocrFile.filePath);
                     using (var page = engine.Process(img))
                     {
                         var text = page.GetText();
-                        Console.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
-                        Console.WriteLine("Text (GetText): \r\n{0}", text);
-                        Console.WriteLine("Text (iterator):");
-
+                        Debug.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
                         ocrFile.ocrText = text;
 
-                        if (true)
-                        {
-                            List<OcrBlock> blocks = new List<OcrBlock>();
-                            blocks = GetBlocks(page);
+                        // Compute all layout artifacts during OCR step
+                        var blocks = GetBlocks(page);
+                        var lineBlocks = GetLineBlocks(page);
+                        var tableBlocks = DetectTables(lineBlocks, page);
 
-                            await Dispatcher.InvokeAsync(() =>
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            // Build and store the FlowDocument once
+                            var flowDocument = BuildFlowDocument(blocks);
+                            ocrFile.Document = flowDocument;
+
+                            // Optionally show the document of the currently selected item if it's the one just processed
+                            if (currentIndex >= 0 && currentIndex < filesToProcess.Count)
                             {
-                                List<OcrBlock> lineBlocks = GetLineBlocks(page);
-                                FlowDocument flowDocument = BuildFlowDocument(blocks);
-                                List<OcrBlock> tableBlocks = DetectTables(lineBlocks, page);
-                                OCRdTextPanel.Document = flowDocument;
-                            });
-                        }
+                                var current = filesToProcess[currentIndex];
+                                if (ReferenceEquals(current, ocrFile))
+                                {
+                                    OCRdTextPanel.Document = ocrFile.Document;
+                                }
+                            }
+                        });
 
                         Debug.WriteLine($"OCR'd {System.IO.Path.GetFileName(ocrFile.filePath)}");
                     }
@@ -95,10 +105,9 @@ namespace K_OCR
             });
         }
 
-
         private static List<OcrBlock> GetBlocks(Page page)
         {
-            List<OcrBlock> blocks = new List<OcrBlock>();
+            var blocks = new List<OcrBlock>();
 
             using (var iter = page.GetIterator())
             {
@@ -115,7 +124,7 @@ namespace K_OCR
                         {
                             blocks.Add(new OcrBlock
                             {
-                                Type = OcrBlockType.Text, // default, you can reclassify later
+                                Type = OcrBlockType.Text,
                                 Text = text,
                                 Confidence = conf,
                                 BoundingBox = rect
@@ -135,7 +144,6 @@ namespace K_OCR
             using (var iter = page.GetIterator())
             {
                 iter.Begin();
-                // Walk lines and collect text + bounding box
                 do
                 {
                     if (iter.TryGetBoundingBox(PageIteratorLevel.TextLine, out var rect))
@@ -163,11 +171,9 @@ namespace K_OCR
             if (textLineBlocks == null || textLineBlocks.Count == 0)
                 return tableRows;
 
-            // Tolerances tuned for typical scanned docs; adjust as needed
-            const int yTolerance = 8;     // lines within ~8 px considered same row band
-            const int colGapMin = 20;     // min gap between words to consider a column split
+            const int yTolerance = 8;
+            const int colGapMin = 20;
 
-            // Group lines into row bands by Y1 (top) with tolerance
             var groupedRows = textLineBlocks
                 .OrderBy(b => b.BoundingBox.Y1)
                 .GroupBy(b => b.BoundingBox.Y1 / yTolerance);
@@ -175,17 +181,12 @@ namespace K_OCR
             foreach (var rowGroup in groupedRows)
             {
                 var lines = rowGroup.OrderBy(b => b.BoundingBox.X1).ToList();
-
-                // Split each line into "cells" by large gaps in words
                 var rowCells = new List<string>();
 
                 foreach (var line in lines)
                 {
-                    // Tokenize line by words with positions
                     var words = new List<(string text, int x1, int x2)>();
 
-                    // Re-iterate at word level within the page to get positions for this line’s span.
-                    // If you cannot filter to the exact line, approximate by taking words whose Y overlaps the line’s Y-band.
                     using (var iter = page.GetIterator())
                     {
                         iter.Begin();
@@ -193,7 +194,6 @@ namespace K_OCR
                         {
                             if (iter.TryGetBoundingBox(PageIteratorLevel.Word, out var wRect))
                             {
-                                // Overlap check: word belongs to this row band
                                 bool overlapsY = Math.Abs(wRect.Y1 - line.BoundingBox.Y1) < yTolerance * 2;
                                 if (overlapsY)
                                 {
@@ -208,11 +208,9 @@ namespace K_OCR
                     if (words.Count == 0)
                         continue;
 
-                    // Sort words by X, then split into clusters where gaps exceed threshold
                     words.Sort((a, b) => a.x1.CompareTo(b.x1));
                     var clusters = new List<List<(string text, int x1, int x2)>>();
-                    var current = new List<(string text, int x1, int x2)>();
-                    current.Add(words[0]);
+                    var current = new List<(string text, int x1, int x2)> { words[0] };
 
                     for (int i = 1; i < words.Count; i++)
                     {
@@ -229,7 +227,6 @@ namespace K_OCR
                     }
                     clusters.Add(current);
 
-                    // Each cluster becomes a "cell" for this row
                     foreach (var cl in clusters)
                     {
                         var cellText = string.Join(" ", cl.Select(w => w.text));
@@ -238,7 +235,6 @@ namespace K_OCR
                     }
                 }
 
-                // If the row has 2+ cells, consider it a table row
                 if (rowCells.Count >= 2)
                 {
                     tableRows.Add(new OcrBlock
@@ -283,17 +279,10 @@ namespace K_OCR
             return doc;
         }
 
-
-        // Your completion hook: update UI, raise an event, or call into another service
         private void OnProcessingCompleted(IReadOnlyCollection<OCRFile> completed)
         {
-            // Or simple UI notification
-            //MessageBox.Show(this, $"Completed OCR for {completed.Count} file(s).", "Done",
-            //    MessageBoxButton.OK, MessageBoxImage.Information);
-
             Dispatcher.Invoke(() =>
             {
-                // Show the first image on the left panel
                 var first = completed.FirstOrDefault();
                 if (first != null && System.IO.File.Exists(first.filePath))
                 {
@@ -302,12 +291,16 @@ namespace K_OCR
                     bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
                     bmp.UriSource = new Uri(first.filePath, UriKind.Absolute);
                     bmp.EndInit();
-                    bmp.Freeze(); // for cross-thread safety
+                    bmp.Freeze();
 
                     ImagePanel.Source = bmp;
+                    if (first.Document != null)
+                    {
+                        OCRdTextPanel.Document = first.Document;
+                    }
                 }
 
-                // Update OCR text on the right panel (keep existing behavior)
+                // Aggregated text remains optional; do not rebuild per navigation
                 if (OCRdTextPanel != null)
                 {
                     var sb = new System.Text.StringBuilder();
@@ -317,9 +310,31 @@ namespace K_OCR
                         sb.AppendLine(file.ocrText);
                         sb.AppendLine();
                     }
-                    //OCRdTextPanel.Text = sb.ToString();
+                    // OCRdTextPanel.Text = sb.ToString();
                 }
             });
+        }
+
+        // Navigation shows prebuilt document; no BuildFlowDocument calls here
+        private void ShowFileAt(int index)
+        {
+            if (index < 0 || index >= filesToProcess.Count)
+                return;
+
+            var file = filesToProcess[index];
+            if (System.IO.File.Exists(file.filePath))
+            {
+                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bmp.UriSource = new Uri(file.filePath, UriKind.Absolute);
+                bmp.EndInit();
+                bmp.Freeze();
+
+                ImagePanel.Source = bmp;
+            }
+
+            OCRdTextPanel.Document = file.Document ?? new FlowDocument(new Paragraph(new Run(file.ocrText ?? string.Empty)));
         }
     }
 }
