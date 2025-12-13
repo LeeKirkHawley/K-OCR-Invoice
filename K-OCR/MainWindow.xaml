@@ -14,6 +14,10 @@
                 <Separator/>
                 <MenuItem Header="E_xit" Click="OnExitClick"/>
             </MenuItem>
+            <MenuItem Header="_Export">
+                <MenuItem Header="_Docx" Click="OnExportDocx"/>
+                <!--<MenuItem Header="_Pdf" Click="OnExportPdf"/>-->
+            </MenuItem>
             <MenuItem Header="_Edit">
                 <MenuItem Header="_Copy" Command="ApplicationCommands.Copy"/>
                 <MenuItem Header="_Paste" Command="ApplicationCommands.Paste"/>

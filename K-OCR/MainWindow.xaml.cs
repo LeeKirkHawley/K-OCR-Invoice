@@ -1,5 +1,9 @@
-﻿using K_OCR.Models;
+﻿using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using K_OCR.Models;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Documents;
@@ -257,18 +261,18 @@ namespace K_OCR
             {
                 if (block.Type == OcrBlockType.Text)
                 {
-                    doc.Blocks.Add(new Paragraph(new Run(block.Text)));
+                    doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(block.Text)));
                 }
                 else if (block.Type == OcrBlockType.Table && block.RowData != null)
                 {
-                    Table table = new Table();
+                    System.Windows.Documents.Table table = new System.Windows.Documents.Table();
                     for (int c = 0; c < block.RowData.Length; c++)
                         table.Columns.Add(new TableColumn());
 
                     TableRowGroup trg = new TableRowGroup();
-                    TableRow row = new TableRow();
+                    System.Windows.Documents.TableRow row = new System.Windows.Documents.TableRow();
                     foreach (var cellText in block.RowData)
-                        row.Cells.Add(new TableCell(new Paragraph(new Run(cellText))));
+                        row.Cells.Add(new System.Windows.Documents.TableCell(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(cellText))));
                     trg.Rows.Add(row);
                     table.RowGroups.Add(trg);
 
@@ -334,7 +338,152 @@ namespace K_OCR
                 ImagePanel.Source = bmp;
             }
 
-            OCRdTextPanel.Document = file.Document ?? new FlowDocument(new Paragraph(new Run(file.ocrText ?? string.Empty)));
+            OCRdTextPanel.Document = file.Document ?? new FlowDocument(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(file.ocrText ?? string.Empty)));
         }
+
+
+        private void OnExportDocx(object sender, RoutedEventArgs e)
+        {
+            var doc = OCRdTextPanel?.Document;
+            if (doc == null)
+            {
+                MessageBox.Show(this, "No document to export.", "Export DOCX", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            ExportAsDocx(doc);
+        }
+
+        private void ExportAsDocx(FlowDocument flowDocument)
+        {
+            var doc = flowDocument;
+            if (doc == null)
+            {
+                MessageBox.Show(this, "No document to export.", "Export DOCX", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var sfd = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "Save as Word (DOCX)",
+                Filter = "Word Document|*.docx",
+                AddExtension = true,
+                DefaultExt = ".docx"
+            };
+            if (sfd.ShowDialog(this) == true)
+            {
+                try
+                {
+                    using var wordDoc = WordprocessingDocument.Create(sfd.FileName, WordprocessingDocumentType.Document);
+                    var mainPart = wordDoc.AddMainDocumentPart();
+                    mainPart.Document = new Document(new Body());
+                    var body = mainPart.Document.Body;
+
+                    foreach (var block in doc.Blocks)
+                    {
+                        if (block is System.Windows.Documents.Paragraph wpfParagraph)
+                        {
+                            var p = new DocumentFormat.OpenXml.Wordprocessing.Paragraph();
+                            foreach (Inline inline in wpfParagraph.Inlines)
+                            {
+                                if (inline is System.Windows.Documents.Run wpfRun)
+                                {
+                                    var text = new DocumentFormat.OpenXml.Wordprocessing.Text(wpfRun.Text ?? string.Empty)
+                                    {
+                                        Space = SpaceProcessingModeValues.Preserve
+                                    };
+                                    var oxRun = new DocumentFormat.OpenXml.Wordprocessing.Run(text);
+                                    p.AppendChild(oxRun);
+                                }
+                                else
+                                {
+                                    var raw = new TextRange(inline.ContentStart, inline.ContentEnd).Text;
+                                    var text = new DocumentFormat.OpenXml.Wordprocessing.Text(raw ?? string.Empty)
+                                    {
+                                        Space = SpaceProcessingModeValues.Preserve
+                                    };
+                                    var oxRun = new DocumentFormat.OpenXml.Wordprocessing.Run(text);
+                                    p.AppendChild(oxRun);
+                                }
+                            }
+                            body.AppendChild(p);
+                        }
+                        else if (block is System.Windows.Documents.Table wpfTable)
+                        {
+                            var oxTable = new DocumentFormat.OpenXml.Wordprocessing.Table();
+
+                            // Basic table properties (optional)
+                            var tblProps = new TableProperties(
+                                new TableBorders(
+                                    new TopBorder { Val = BorderValues.Single, Size = 4 },
+                                    new LeftBorder { Val = BorderValues.Single, Size = 4 },
+                                    new BottomBorder { Val = BorderValues.Single, Size = 4 },
+                                    new RightBorder { Val = BorderValues.Single, Size = 4 },
+                                    new InsideHorizontalBorder { Val = BorderValues.Single, Size = 4 },
+                                    new InsideVerticalBorder { Val = BorderValues.Single, Size = 4 }
+                                )
+                            );
+                            oxTable.AppendChild(tblProps);
+
+                            foreach (var trg in wpfTable.RowGroups)
+                            {
+                                foreach (var row in trg.Rows)
+                                {
+                                    var oxRow = new DocumentFormat.OpenXml.Wordprocessing.TableRow();
+                                    foreach (var cell in row.Cells)
+                                    {
+                                        var oxCell = new DocumentFormat.OpenXml.Wordprocessing.TableCell();
+
+                                        foreach (var cb in cell.Blocks)
+                                        {
+                                            if (cb is System.Windows.Documents.Paragraph cellParagraph)
+                                            {
+                                                var p = new DocumentFormat.OpenXml.Wordprocessing.Paragraph();
+                                                foreach (Inline inline in cellParagraph.Inlines)
+                                                {
+                                                    if (inline is System.Windows.Documents.Run wpfRun)
+                                                    {
+                                                        var text = new DocumentFormat.OpenXml.Wordprocessing.Text(wpfRun.Text ?? string.Empty)
+                                                        {
+                                                            Space = SpaceProcessingModeValues.Preserve
+                                                        };
+                                                        var oxRun = new DocumentFormat.OpenXml.Wordprocessing.Run(text);
+                                                        p.AppendChild(oxRun);
+                                                    }
+                                                    else
+                                                    {
+                                                        var raw = new TextRange(inline.ContentStart, inline.ContentEnd).Text;
+                                                        var text = new DocumentFormat.OpenXml.Wordprocessing.Text(raw ?? string.Empty)
+                                                        {
+                                                            Space = SpaceProcessingModeValues.Preserve
+                                                        };
+                                                        var oxRun = new DocumentFormat.OpenXml.Wordprocessing.Run(text);
+                                                        p.AppendChild(oxRun);
+                                                    }
+                                                }
+                                                oxCell.AppendChild(p);
+                                            }
+                                        }
+
+                                        oxRow.AppendChild(oxCell);
+                                    }
+                                    oxTable.AppendChild(oxRow);
+                                }
+                            }
+
+                            body.AppendChild(oxTable);
+                        }
+                    }
+
+                    mainPart.Document.Save();
+                    MessageBox.Show(this, "DOCX saved.", "Export DOCX", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, $"Failed to save DOCX: {ex.Message}", "Export DOCX", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
     }
 }
