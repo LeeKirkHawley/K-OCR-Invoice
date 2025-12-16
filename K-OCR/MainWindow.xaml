@@ -39,7 +39,8 @@
             <!-- Top content (20px tall) -->
             <TextBlock Grid.Row="0"
                        Text="Welcome to K-OCR"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Name="FileCaption"/>
 
             <!-- Bottom panel: two panes with a vertical splitter centered -->
             <Grid Grid.Row="1">

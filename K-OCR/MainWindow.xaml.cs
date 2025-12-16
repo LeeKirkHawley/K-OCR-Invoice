@@ -75,18 +75,17 @@ namespace K_OCR
                         Debug.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
                         ocrFile.ocrText = text;
 
-                        // Compute all layout artifacts during OCR step
+                        // Compute layout artifacts
                         var blocks = GetBlocks(page);
                         var lineBlocks = GetLineBlocks(page);
                         var tableBlocks = DetectTables(lineBlocks, page);
 
                         await Dispatcher.InvokeAsync(() =>
                         {
-                            // Build and store the FlowDocument once
-                            var flowDocument = BuildFlowDocument(blocks);
+                            // Build FlowDocument including tables
+                            var flowDocument = BuildFlowDocument(lineBlocks, tableBlocks);
                             ocrFile.Document = flowDocument;
 
-                            // Optionally show the document of the currently selected item if it's the one just processed
                             if (currentIndex >= 0 && currentIndex < filesToProcess.Count)
                             {
                                 var current = filesToProcess[currentIndex];
@@ -253,26 +252,46 @@ namespace K_OCR
             return tableRows;
         }
 
-        public FlowDocument BuildFlowDocument(List<OcrBlock> blocks)
+        public FlowDocument BuildFlowDocument(List<OcrBlock> lineBlocks, List<OcrBlock> tableBlocks)
         {
-            FlowDocument doc = new FlowDocument();
+            var doc = new FlowDocument();
 
-            foreach (var block in blocks.OrderBy(b => b.BoundingBox.Y1))
+            var tables = tableBlocks ?? new List<OcrBlock>();
+            var lines = lineBlocks ?? new List<OcrBlock>();
+
+            // Exclude text lines that overlap table regions to avoid duplicates
+            static bool Overlaps(Tesseract.Rect a, Tesseract.Rect b, int tol = 4)
+            {
+                var ax1 = a.X1 - tol; var ay1 = a.Y1 - tol; var ax2 = a.X2 + tol; var ay2 = a.Y2 + tol;
+                var bx1 = b.X1 - tol; var by1 = b.Y1 - tol; var bx2 = b.X2 + tol; var by2 = b.Y2 + tol;
+                return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+            }
+
+            var filteredLines = lines.Where(l => !tables.Any(t => Overlaps(l.BoundingBox, t.BoundingBox))).ToList();
+
+            var all = new List<OcrBlock>();
+            all.AddRange(filteredLines);
+            all.AddRange(tables);
+
+            foreach (var block in all.OrderBy(b => b.BoundingBox.Y1).ThenBy(b => b.BoundingBox.X1))
             {
                 if (block.Type == OcrBlockType.Text)
                 {
-                    doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(block.Text)));
+                    doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(block.Text ?? string.Empty)));
                 }
-                else if (block.Type == OcrBlockType.Table && block.RowData != null)
+                else if (block.Type == OcrBlockType.Table && block.RowData != null && block.RowData.Length > 0)
                 {
-                    System.Windows.Documents.Table table = new System.Windows.Documents.Table();
+                    var table = new System.Windows.Documents.Table();
+
                     for (int c = 0; c < block.RowData.Length; c++)
                         table.Columns.Add(new TableColumn());
 
-                    TableRowGroup trg = new TableRowGroup();
-                    System.Windows.Documents.TableRow row = new System.Windows.Documents.TableRow();
+                    var trg = new TableRowGroup();
+                    var row = new System.Windows.Documents.TableRow();
+
                     foreach (var cellText in block.RowData)
                         row.Cells.Add(new System.Windows.Documents.TableCell(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(cellText))));
+
                     trg.Rows.Add(row);
                     table.RowGroups.Add(trg);
 
@@ -301,6 +320,7 @@ namespace K_OCR
                     if (first.Document != null)
                     {
                         OCRdTextPanel.Document = first.Document;
+                        FileCaption.Text = first.filePath;
                     }
                 }
 
