@@ -24,18 +24,6 @@
     <Delete Files="@(OldNative)" Condition="@(OldNative) != ''" />
   </Target>
 
-  <!-- Copy latest native DLL/PDB after build; fail fast if missing -->
-  <Target Name="CopyNativeOutputs" AfterTargets="Build">
-    <Message Text="Copying native outputs from $(NativeOutputDir) to $(TargetDir)" Importance="High" />
-    <Error Text="Native K-OCRLib.dll not found at $(NativeOutputDir)\K-OCRLib.dll" Condition="!Exists('$(NativeOutputDir)\K-OCRLib.dll')" />
-
-    <ItemGroup>
-      <NativeOutputs Include="$(NativeOutputDir)\K-OCRLib.dll" />
-      <NativeOutputs Include="$(NativeOutputDir)\K-OCRLib.pdb" Condition="Exists('$(NativeOutputDir)\K-OCRLib.pdb')" />
-    </ItemGroup>
-
-    <Copy SourceFiles="@(NativeOutputs)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="false" />
-  </Target>
   <ItemGroup>
     <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
     <PackageReference Include="Tesseract" Version="5.2.0" />
