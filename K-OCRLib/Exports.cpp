@@ -41,4 +41,9 @@ __declspec(dllexport) void ImageToText_FreeMessage(ImageToText* instance, const 
     instance->FreeMessage(const_cast<char*>(str));
 }
 
+__declspec(dllexport) void FreeMessage(char* str)
+{
+    free(str);
+}
+
 } // extern "C"

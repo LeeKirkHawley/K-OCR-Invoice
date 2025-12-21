@@ -3,15 +3,17 @@ using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using K_OCR.Models;
 using System.Diagnostics;
-using System.IO;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Documents;
 using Tesseract;
+//using OpenCvSharp;
+//using System;
+//using Point = OpenCvSharp.Point;
+//using Size = OpenCvSharp.Size;
 
 namespace K_OCR
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : System.Windows.Window
     {
         private readonly List<OCRFile> filesToProcess = new List<OCRFile>();
         private int currentIndex = -1;
@@ -76,7 +78,6 @@ namespace K_OCR
                         ocrFile.ocrText = text;
 
                         // Compute layout artifacts
-                        var blocks = GetBlocks(page);
                         var lineBlocks = GetLineBlocks(page);
                         var tableBlocks = DetectTables(lineBlocks, page);
 
@@ -108,38 +109,6 @@ namespace K_OCR
             });
         }
 
-        private static List<OcrBlock> GetBlocks(Page page)
-        {
-            var blocks = new List<OcrBlock>();
-
-            using (var iter = page.GetIterator())
-            {
-                iter.Begin();
-
-                do
-                {
-                    if (iter.IsAtBeginningOf(PageIteratorLevel.Block))
-                    {
-                        string text = iter.GetText(PageIteratorLevel.Block);
-                        float conf = iter.GetConfidence(PageIteratorLevel.Block);
-
-                        if (iter.TryGetBoundingBox(PageIteratorLevel.Block, out var rect))
-                        {
-                            blocks.Add(new OcrBlock
-                            {
-                                Type = OcrBlockType.Text,
-                                Text = text,
-                                Confidence = conf,
-                                BoundingBox = rect
-                            });
-                        }
-                    }
-                } while (iter.Next(PageIteratorLevel.Block));
-            }
-
-            return blocks;
-        }
-
         private static List<OcrBlock> GetLineBlocks(Page page)
         {
             var blocks = new List<OcrBlock>();
@@ -151,16 +120,23 @@ namespace K_OCR
                 {
                     if (iter.TryGetBoundingBox(PageIteratorLevel.TextLine, out var rect))
                     {
-                        var text = iter.GetText(PageIteratorLevel.TextLine) ?? string.Empty;
-                        var conf = iter.GetConfidence(PageIteratorLevel.TextLine);
+                        string text = iter.GetText(PageIteratorLevel.TextLine) ?? string.Empty;
+                        text = text.Trim();
+                        if (String.IsNullOrWhiteSpace(text))
+                            continue;
 
-                        blocks.Add(new OcrBlock
+                        float conf = iter.GetConfidence(PageIteratorLevel.TextLine);
+
+                        OcrBlock block = new OcrBlock
                         {
                             Type = OcrBlockType.Text,
                             Text = text.Trim(),
                             Confidence = conf,
                             BoundingBox = rect
-                        });
+                        };
+
+                        if (!String.IsNullOrWhiteSpace(block.Text))
+                            blocks.Add(block);
                     }
                 } while (iter.Next(PageIteratorLevel.TextLine));
             }
@@ -351,7 +327,7 @@ namespace K_OCR
                 var bmp = new System.Windows.Media.Imaging.BitmapImage();
                 bmp.BeginInit();
                 bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bmp.UriSource = new Uri(file.filePath, UriKind.Absolute);
+                bmp.UriSource = new Uri(file.filePath, UriKind.Absolute);  // Fixed: Use 'file.filePath' instead of 'first.filePath'
                 bmp.EndInit();
                 bmp.Freeze();
 
@@ -426,7 +402,7 @@ namespace K_OCR
                                     p.AppendChild(oxRun);
                                 }
                             }
-                            body.AppendChild(p);
+                            body?.AppendChild(p);
                         }
                         else if (block is System.Windows.Documents.Table wpfTable)
                         {
@@ -491,7 +467,7 @@ namespace K_OCR
                                 }
                             }
 
-                            body.AppendChild(oxTable);
+                            body?.AppendChild(oxTable);
                         }
                     }
 

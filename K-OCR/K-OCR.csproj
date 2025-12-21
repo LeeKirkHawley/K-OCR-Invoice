@@ -37,6 +37,7 @@
     <Copy SourceFiles="@(NativeOutputs)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="false" />
   </Target>
   <ItemGroup>
+    <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
     <PackageReference Include="Tesseract" Version="5.2.0" />
     <PackageReference Include="Tesseract.Drawing" Version="5.2.0" />
   </ItemGroup>
