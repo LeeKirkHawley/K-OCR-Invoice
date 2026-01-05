@@ -13,5 +13,9 @@ namespace K_OCR.Models
 
         // Pre-built document produced during OCR step; used directly on navigation
         public System.Windows.Documents.FlowDocument? Document { get; set; }
+
+        public List<OcrBlock> LineBlocks;
+        public List<OcrBlock> TableBlocks;
+
     }
 }

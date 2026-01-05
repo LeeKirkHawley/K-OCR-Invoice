@@ -16,7 +16,6 @@
             </MenuItem>
             <MenuItem Header="_Export">
                 <MenuItem Header="_Docx" Click="OnExportDocx"/>
-                <!--<MenuItem Header="_Pdf" Click="OnExportPdf"/>-->
             </MenuItem>
             <MenuItem Header="_Edit">
                 <MenuItem Header="_Copy" Command="ApplicationCommands.Copy"/>
@@ -69,7 +68,14 @@
                               ShowsPreview="True"/>
 
                 <Border Grid.Column="2" BorderBrush="LightGray" BorderThickness="1" Padding="8">
-                    <RichTextBox Name="OCRdTextPanel" />
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Name="OCRScrollViewer">
+                        <Grid>
+                            <!-- Image as background -->
+                            <Image Name="OCRImagePanel" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                            <!-- Canvas for absolute positioned text overlays -->
+                            <Canvas Name="OCRdTextPanel" Background="Transparent" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                        </Grid>
+                    </ScrollViewer>
                 </Border>
             </Grid>
         </Grid>

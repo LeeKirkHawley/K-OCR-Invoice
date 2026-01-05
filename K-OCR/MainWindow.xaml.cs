@@ -2,14 +2,20 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using K_OCR.Models;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
 using System.Diagnostics;
+using System.IO;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using Tesseract;
-//using OpenCvSharp;
-//using System;
-//using Point = OpenCvSharp.Point;
-//using Size = OpenCvSharp.Size;
 
 namespace K_OCR
 {
@@ -17,10 +23,17 @@ namespace K_OCR
     {
         private readonly List<OCRFile> filesToProcess = new List<OCRFile>();
         private int currentIndex = -1;
+        private readonly IConfiguration _config;
 
         public MainWindow()
         {
             InitializeComponent();
+
+            var basePath = AppDomain.CurrentDomain.BaseDirectory;
+            _config = new ConfigurationBuilder()
+                .SetBasePath(basePath)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
         }
 
         private async void OnOpenClick(object sender, RoutedEventArgs e)
@@ -42,10 +55,18 @@ namespace K_OCR
 
                 currentIndex = filesToProcess.Count > 0 ? 0 : -1;
 
-                await RunOcrAsync(filesToProcess);
+
+                string provider = _config["OCRProvider"];
+                if(provider == "Azure")
+                {
+                    await RunAzureOcrAsync(filesToProcess);
+                }
+                else
+                    await RunOcrAsync(filesToProcess);
+
+
                 OnProcessingCompleted(filesToProcess);
 
-                // Show first file without rebuilding document
                 ShowFileAt(currentIndex);
             }
         }
@@ -58,6 +79,53 @@ namespace K_OCR
         private void OnAboutClick(object sender, RoutedEventArgs e)
         {
             MessageBox.Show(this, "K-OCR\nVersion 1.0\nPowered by Tesseract OCR", "About", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private async Task RunAzureOcrAsync(IEnumerable<OCRFile> items)
+        {
+            foreach (OCRFile ocrFile in items)
+            {
+
+                string endpoint = _config["AzureCognitiveServicesEndpoint"];
+                string apiKey = _config["AzureCognitiveServicesKey"];
+
+                string filePath = ocrFile.filePath;
+               
+
+                var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
+
+                var url = $"{endpoint}vision/v3.2/read/analyze";
+
+                byte[] fileBytes = File.ReadAllBytes(filePath);
+                using var content = new ByteArrayContent(fileBytes);
+                content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");  // WILL CHANGE PER IMAGE TYPE
+
+                // 1. Submit OCR job
+                var response = await client.PostAsync(url, content);
+                response.EnsureSuccessStatusCode();
+
+                // 2. Get operation URL
+                string operationUrl = response.Headers.GetValues("Operation-Location").First();
+
+                // 3. Poll until OCR completes
+                string resultJson = "";
+                while (true)
+                {
+                    await Task.Delay(1000);
+
+                    var resultResponse = await client.GetAsync(operationUrl);
+                    resultJson = await resultResponse.Content.ReadAsStringAsync();
+
+                    using var doc = JsonDocument.Parse(resultJson);
+                    string status = doc.RootElement.GetProperty("status").GetString();
+
+                    if (status == "succeeded" || status == "failed")
+                        break;
+                }
+
+                Console.WriteLine(resultJson);
+            }
         }
 
         private async Task RunOcrAsync(IEnumerable<OCRFile> items)
@@ -78,12 +146,16 @@ namespace K_OCR
                         ocrFile.ocrText = text;
 
                         // Compute layout artifacts
-                        var lineBlocks = GetLineBlocks(page);
-                        var tableBlocks = DetectTables(lineBlocks, page);
+                        List<OcrBlock> lineBlocks = GetLineBlocks(page);
+                        List<OcrBlock> tableBlocks = DetectTables(lineBlocks, page);
+
+                        // Store blocks for rendering
+                        ocrFile.LineBlocks = lineBlocks;
+                        ocrFile.TableBlocks = tableBlocks;
 
                         await Dispatcher.InvokeAsync(() =>
                         {
-                            // Build FlowDocument including tables
+                            // Build FlowDocument for export only
                             var flowDocument = BuildFlowDocument(lineBlocks, tableBlocks);
                             ocrFile.Document = flowDocument;
 
@@ -92,7 +164,7 @@ namespace K_OCR
                                 var current = filesToProcess[currentIndex];
                                 if (ReferenceEquals(current, ocrFile))
                                 {
-                                    OCRdTextPanel.Document = ocrFile.Document;
+                                    DrawOCROverlay(ocrFile);
                                 }
                             }
                         });
@@ -109,7 +181,7 @@ namespace K_OCR
             });
         }
 
-        private static List<OcrBlock> GetLineBlocks(Page page)
+        private static List<OcrBlock> GetLineBlocks(Tesseract.Page page)
         {
             var blocks = new List<OcrBlock>();
 
@@ -144,7 +216,7 @@ namespace K_OCR
             return blocks;
         }
 
-        public List<OcrBlock> DetectTables(List<OcrBlock> textLineBlocks, Page page)
+        public List<OcrBlock> DetectTables(List<OcrBlock> textLineBlocks, Tesseract.Page page)
         {
             var tableRows = new List<OcrBlock>();
             if (textLineBlocks == null || textLineBlocks.Count == 0)
@@ -228,6 +300,84 @@ namespace K_OCR
             return tableRows;
         }
 
+        // New method to draw OCR overlay with absolute positioning
+        private void DrawOCROverlay(OCRFile ocrFile)
+        {
+            // Clear previous overlays
+            OCRdTextPanel.Children.Clear();
+
+            if (ocrFile.LineBlocks == null || ocrFile.LineBlocks.Count == 0)
+                return;
+
+            // Load and display the background image
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.UriSource = new Uri(ocrFile.filePath, UriKind.Absolute);
+            bmp.EndInit();
+            bmp.Freeze();
+
+            //OCRImagePanel.Source = bmp;
+
+            // Set Canvas size to match image dimensions
+            OCRdTextPanel.Width = bmp.PixelWidth;
+            OCRdTextPanel.Height = bmp.PixelHeight;
+
+            var tables = ocrFile.TableBlocks ?? new List<OcrBlock>();
+            var lines = ocrFile.LineBlocks ?? new List<OcrBlock>();
+
+            // Filter out text lines that overlap with tables
+            static bool Overlaps(Tesseract.Rect a, Tesseract.Rect b, int tol = 4)
+            {
+                var ax1 = a.X1 - tol; var ay1 = a.Y1 - tol; var ax2 = a.X2 + tol; var ay2 = a.Y2 + tol;
+                var bx1 = b.X1 - tol; var by1 = b.Y1 - tol; var bx2 = b.X2 + tol; var by2 = b.Y2 + tol;
+                return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+            }
+
+            var filteredLines = lines.Where(l => !tables.Any(t => Overlaps(l.BoundingBox, t.BoundingBox))).ToList();
+
+            // Draw text blocks with absolute positioning
+            //foreach (var block in filteredLines)
+            foreach (var block in lines)
+            {
+                if (block.Type == OcrBlockType.Text && !string.IsNullOrWhiteSpace(block.Text))
+                {
+                    var textBlock = new TextBlock
+                    {
+                        Text = block.Text,
+                        FontSize = 12,
+                        Foreground = new SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 255, 0, 0)), // Semi-transparent red
+                        Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(100, 255, 255, 255)), // Semi-transparent white
+                        Padding = new Thickness(2)
+                    };
+
+                    // Position using bounding box
+                    Canvas.SetLeft(textBlock, block.BoundingBox.X1);
+                    Canvas.SetTop(textBlock, block.BoundingBox.Y1);
+
+                    OCRdTextPanel.Children.Add(textBlock);
+                }
+            }
+
+            // Draw table regions with rectangles
+            foreach (var table in tables)
+            {
+                var rect = new Rectangle
+                {
+                    Width = table.BoundingBox.Width,
+                    Height = table.BoundingBox.Height,
+                    Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(50, 255, 255, 0)), // Semi-transparent yellow
+                    Stroke = Brushes.Black,
+                    StrokeThickness = 2
+                };
+
+                Canvas.SetLeft(rect, table.BoundingBox.X1);
+                Canvas.SetTop(rect, table.BoundingBox.Y1);
+                OCRdTextPanel.Children.Add(rect);
+            }
+        }
+
+        // Keep BuildFlowDocument for DOCX export
         public FlowDocument BuildFlowDocument(List<OcrBlock> lineBlocks, List<OcrBlock> tableBlocks)
         {
             var doc = new FlowDocument();
@@ -235,7 +385,6 @@ namespace K_OCR
             var tables = tableBlocks ?? new List<OcrBlock>();
             var lines = lineBlocks ?? new List<OcrBlock>();
 
-            // Exclude text lines that overlap table regions to avoid duplicates
             static bool Overlaps(Tesseract.Rect a, Tesseract.Rect b, int tol = 4)
             {
                 var ax1 = a.X1 - tol; var ay1 = a.Y1 - tol; var ax2 = a.X2 + tol; var ay2 = a.Y2 + tol;
@@ -285,37 +434,21 @@ namespace K_OCR
                 var first = completed.FirstOrDefault();
                 if (first != null && System.IO.File.Exists(first.filePath))
                 {
-                    var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                    var bmp = new BitmapImage();
                     bmp.BeginInit();
-                    bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
                     bmp.UriSource = new Uri(first.filePath, UriKind.Absolute);
                     bmp.EndInit();
                     bmp.Freeze();
 
                     ImagePanel.Source = bmp;
-                    if (first.Document != null)
-                    {
-                        OCRdTextPanel.Document = first.Document;
-                        FileCaption.Text = first.filePath;
-                    }
-                }
+                    FileCaption.Text = first.filePath;
 
-                // Aggregated text remains optional; do not rebuild per navigation
-                if (OCRdTextPanel != null)
-                {
-                    var sb = new System.Text.StringBuilder();
-                    foreach (var file in completed)
-                    {
-                        sb.AppendLine($"{System.IO.Path.GetFileName(file.filePath)}:");
-                        sb.AppendLine(file.ocrText);
-                        sb.AppendLine();
-                    }
-                    // OCRdTextPanel.Text = sb.ToString();
+                    DrawOCROverlay(first);
                 }
             });
         }
 
-        // Navigation shows prebuilt document; no BuildFlowDocument calls here
         private void ShowFileAt(int index)
         {
             if (index < 0 || index >= filesToProcess.Count)
@@ -324,23 +457,21 @@ namespace K_OCR
             var file = filesToProcess[index];
             if (System.IO.File.Exists(file.filePath))
             {
-                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                var bmp = new BitmapImage();
                 bmp.BeginInit();
-                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bmp.UriSource = new Uri(file.filePath, UriKind.Absolute);  // Fixed: Use 'file.filePath' instead of 'first.filePath'
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.UriSource = new Uri(file.filePath, UriKind.Absolute);
                 bmp.EndInit();
                 bmp.Freeze();
 
                 ImagePanel.Source = bmp;
+                DrawOCROverlay(file);
             }
-
-            OCRdTextPanel.Document = file.Document ?? new FlowDocument(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(file.ocrText ?? string.Empty)));
         }
-
 
         private void OnExportDocx(object sender, RoutedEventArgs e)
         {
-            var doc = OCRdTextPanel?.Document;
+            var doc = filesToProcess[currentIndex]?.Document;
             if (doc == null)
             {
                 MessageBox.Show(this, "No document to export.", "Export DOCX", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -408,7 +539,6 @@ namespace K_OCR
                         {
                             var oxTable = new DocumentFormat.OpenXml.Wordprocessing.Table();
 
-                            // Basic table properties (optional)
                             var tblProps = new TableProperties(
                                 new TableBorders(
                                     new TopBorder { Val = BorderValues.Single, Size = 4 },
@@ -480,6 +610,5 @@ namespace K_OCR
                 }
             }
         }
-
     }
 }
