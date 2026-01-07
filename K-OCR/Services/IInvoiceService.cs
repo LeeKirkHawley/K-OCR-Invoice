@@ -1,4 +1,5 @@
-﻿using System;
+﻿using K_OCR.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,6 +9,6 @@ namespace K_OCR.Services
 {
     public interface IInvoiceService
     {
-        public Task<string> RunAzureInvoiceParse(string imagePath);
+        public Task<List<InvoiceDto>> RunAzureInvoiceParse(string imagePath);
     }
 }

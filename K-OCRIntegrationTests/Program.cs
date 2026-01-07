@@ -1,4 +1,5 @@
-﻿using K_OCR.Services;
+﻿using K_OCR.Models;
+using K_OCR.Services;
 using System.Diagnostics;
 
 public class Program
@@ -8,8 +9,8 @@ public class Program
 
         Program program = new Program();
         //program.ReadJsonTest();
-        await program.ParseInvoiceTest();
-        //await program.ParseMultipleInvoicesTest();
+        //await program.ParseInvoiceTest();
+        await program.ParseMultipleInvoicesTest();
     }
 
     private bool ReadJsonTest()
@@ -24,7 +25,7 @@ public class Program
         var invoiceService = new InvoiceService();
 
         var sw = Stopwatch.StartNew();
-        var results = await invoiceService.RunAzureInvoiceParse("C:/OCR/Invoices/Sample-Invoice-printable.png");
+        List<InvoiceDto> results = await invoiceService.RunAzureInvoiceParse("C:/OCR/Invoices/Sample-Invoice-printable.png");
 
         sw.Stop();
         

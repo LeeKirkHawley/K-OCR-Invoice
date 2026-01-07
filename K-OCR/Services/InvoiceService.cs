@@ -1,26 +1,10 @@
 ﻿using Azure;
 using Azure.AI.DocumentIntelligence;
-using DocumentFormat.OpenXml;
-using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Wordprocessing;
-using K_OCR.Models;
-using K_OCR.Services;
-using Microsoft.Extensions.Configuration;
-using System.Diagnostics;
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text.Json;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Documents;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
-using Tesseract;
+using K_OCR.Models;
 using System;
-using System.IO;
 using System.Threading.Tasks;
+using System.IO;
 
 namespace K_OCR.Services
 {
@@ -30,23 +14,16 @@ namespace K_OCR.Services
         {
         }
 
-        public async Task<string> RunAzureInvoiceParse(string imagePath)
+        public async Task<List<InvoiceDto>> RunAzureInvoiceParse(string imagePath)
         {
-
             string endpoint = "https://parsedocimage.cognitiveservices.azure.com/";
             string key = "8DfAO78fFo48z5mMerbuJ6dLGvUFLS7CcF9qUvsrCVfWPGGno5O6JQQJ99CAACrJL3JXJ3w3AAALACOGJQx4";
-            string? analysisResult = "";
+            List<InvoiceDto> invoices;
 
-            var client = new DocumentIntelligenceClient(
-                new Uri(endpoint),
-                new AzureKeyCredential(key));
+            var client = new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(key));
 
             using var stream = File.OpenRead(imagePath);
-            // Construct options with model id and bytes source for the current SDK
-            var options = new AnalyzeDocumentOptions("prebuilt-invoice", BinaryData.FromStream(stream))
-            {
-                //Features = { DocumentAnalysisFeature.OcrHighResolution }
-            };
+            var options = new AnalyzeDocumentOptions("prebuilt-invoice", BinaryData.FromStream(stream));
 
             Azure.Operation<AnalyzeResult>? operation = null;
             try
@@ -55,51 +32,98 @@ namespace K_OCR.Services
             }
             catch (Exception ex)
             {
-
+                Console.WriteLine($"Error occurred while analyzing document: {ex.Message}");
+                return new List<InvoiceDto>();
             }
 
-            AnalyzeResult result = operation!.Value;
-            if (result != null)
-            {
-                analysisResult = JsonSerializer.Serialize(result, new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
-            }
+            var result = operation!.Value;
 
-            Console.WriteLine("=== Invoice Fields ===");
-
-            foreach (var doc in result.Documents)
+            invoices = result.Documents.Select(doc =>
             {
-                foreach (var field in doc.Fields)
+                string GetString(string name)
                 {
-                    Console.WriteLine($"{field.Key}: {field.Value?.Content}");
+                    if (doc.Fields.TryGetValue(name, out var f))
+                    {
+                        if (!string.IsNullOrEmpty(f.ValueString)) return f.ValueString!;
+                        if (!string.IsNullOrEmpty(f.Content)) return f.Content!;
+                    }
+                    return string.Empty;
                 }
-            }
 
-            Console.WriteLine("\n=== Line Items ===");
+                decimal? GetDecimal(string name)
+                {
+                    if (doc.Fields.TryGetValue(name, out var field))
+                    {
+                        if (field.ValueCurrency?.Amount is double a) return (decimal)a;
+                        if (field.ValueDouble is double d) return (decimal)d;
+                        if (field.ValueInt64 is long l) return l;
+                    }
+                    return null;
+                }
 
-            foreach (var doc in result.Documents)
-            {
+                var items = new List<InvoiceItemDto>();
                 if (doc.Fields.TryGetValue("Items", out var itemsField) &&
                     itemsField.FieldType == DocumentFieldType.List)
                 {
                     foreach (var item in itemsField.ValueList)
                     {
-                        var itemFields = item.ValueDictionary;
-                        foreach (var kvp in itemFields)
+                        var dict = item.ValueDictionary;
+
+                        string desc = dict.TryGetValue("Description", out var vDesc)
+                            ? (vDesc?.ValueString ?? vDesc?.Content ?? string.Empty)
+                            : string.Empty;
+
+                        decimal? qty = null;
+                        if (dict.TryGetValue("Quantity", out var vQty))
                         {
-                            var fieldName = kvp.Key;
-                            var fieldValue = kvp.Value;
-                            var content = fieldValue?.Content ?? string.Empty;
-                            Console.WriteLine($"{fieldName}: {content}");
+                            if (vQty.ValueDouble is double qd) qty = (decimal)qd;
+                            else if (vQty.ValueInt64 is long ql) qty = ql;
                         }
+
+                        decimal? unitPrice = null;
+                        if (dict.TryGetValue("UnitPrice", out var vUnit))
+                        {
+                            if (vUnit.ValueCurrency?.Amount is double ud) unitPrice = (decimal)ud;
+                            else if (vUnit.ValueDouble is double nd) unitPrice = (decimal)nd;
+                            else if (vUnit.ValueInt64 is long nl) unitPrice = nl;
+                        }
+
+                        decimal? lineTotal = null;
+                        if (dict.TryGetValue("Amount", out var vAmt))
+                        {
+                            if (vAmt.ValueCurrency?.Amount is double ld) lineTotal = (decimal)ld;
+                            else if (vAmt.ValueDouble is double nd2) lineTotal = (decimal)nd2;
+                            else if (vAmt.ValueInt64 is long nl2) lineTotal = nl2;
+                        }
+
+                        items.Add(new InvoiceItemDto
+                        {
+                            Description = desc,
+                            Quantity = qty,
+                            UnitPrice = unitPrice,
+                            LineTotal = lineTotal
+                        });
                     }
                 }
-            }
 
-            return analysisResult;
+                return new InvoiceDto
+                {
+                    VendorName = GetString("VendorName"),
+                    CustomerName = GetString("CustomerName"),
+                    InvoiceId = GetString("InvoiceId"),
+                    InvoiceDate = GetString("InvoiceDate"),
+                    DueDate = GetString("DueDate"),
+                    PurchaseOrder = GetString("PurchaseOrder"),
+                    Subtotal = GetDecimal("Subtotal"),
+                    TotalTax = GetDecimal("TotalTax"),
+                    Shipping = GetDecimal("Shipping"),
+                    Total = GetDecimal("Total"),
+                    Items = items
+                };
+            }).ToList();
+
+            // invoices is now List<InvoiceDto>
+            return invoices;
         }
-        
     }
 }
