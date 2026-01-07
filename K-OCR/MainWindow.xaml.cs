@@ -2,8 +2,8 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using K_OCR.Models;
+using K_OCR.Services;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration.Json;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -16,6 +16,12 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Tesseract;
+using Azure;
+using Azure.AI.DocumentIntelligence;
+using System;
+using System.IO;
+using System.Threading.Tasks;
+
 
 namespace K_OCR
 {
@@ -24,8 +30,10 @@ namespace K_OCR
         private readonly List<OCRFile> filesToProcess = new List<OCRFile>();
         private int currentIndex = -1;
         private readonly IConfiguration _config;
+        private readonly IFileService _fileService;
+        private readonly IInvoiceService _invoiceService;
 
-        public MainWindow()
+        public MainWindow(IFileService fileService, IInvoiceService invoiceService)
         {
             InitializeComponent();
 
@@ -34,6 +42,8 @@ namespace K_OCR
                 .SetBasePath(basePath)
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .Build();
+            _fileService = fileService;
+            _invoiceService = invoiceService;
         }
 
         private async void OnOpenClick(object sender, RoutedEventArgs e)
@@ -69,6 +79,13 @@ namespace K_OCR
 
                 ShowFileAt(currentIndex);
             }
+        }
+
+        private async void OnParseInvoiceClick(object sender, RoutedEventArgs e)
+        {
+            string filePath = "C:/OCR/Invoices/invoice-template-us-mono-black-750px.png";
+
+            await _invoiceService.RunAzureInvoiceParse(filePath);
         }
 
         private void OnExitClick(object sender, RoutedEventArgs e)
@@ -124,9 +141,15 @@ namespace K_OCR
                         break;
                 }
 
+                if(resultJson.Length > 0)
+                {
+                    _fileService.WriteJsonToDisk(filePath, resultJson);
+                }
+
                 Console.WriteLine(resultJson);
             }
         }
+
 
         private async Task RunOcrAsync(IEnumerable<OCRFile> items)
         {
