@@ -23,14 +23,18 @@ namespace InvoiceParser
         public bool IsTableCell { get; set; } = false;
         public int TableRow { get; set; } = -1;
         public int TableCol { get; set; } = -1;
+        
+        
     }
 
     class Program
     {
         static void Main(string[] args)
         {
-            string imagePath = "C:/OCR/Invoices/Test1.jpg";
-            string yoloModelPath = "C:/libraries/DocLayout-YOLO/doclayout_yolo_d4la_imgsz1600_docsynth_pretrain.onnx";
+            //string imagePath = "C:/OCR/Invoices/Simple-invoice-e1718189030194.jpg";
+            string imagePath = "C:/OCR/Invoices/Sample-Invoice-printable.png";
+            //string yoloModelPath = "C:/libraries/DocLayout-YOLO/doclayout_yolo_d4la_imgsz1600_docsynth_pretrain.onnx";
+            string yoloModelPath = "C:/libraries/DocLayout-YOLO/doclayout_yolo_docstructbench_imgsz1024.onnx";
 
             var boxes = RunYolo(yoloModelPath, imagePath);
             SaveImageWithBoxes(imagePath, boxes);
@@ -38,7 +42,7 @@ namespace InvoiceParser
             var fields = RunOcr(imagePath, boxes);
             fields = DeduplicateOcr(fields);
 
-            var tableFields = DetectTables(fields);
+            var tableFields = DetectTables(fields, imagePath);
 
             var finalBoxes = fields.Select(f => (f.X, f.Y, f.Width, f.Height, f.Label)).ToList();
             SaveImageWithBoxes(imagePath, finalBoxes, "_AfterDedupe.jpg");
@@ -73,7 +77,8 @@ namespace InvoiceParser
                     return md.Dimensions?.Length == 4;
                 });
 
-            using var bmp = new Bitmap(imagePath);
+            using var bmpSrc = new Bitmap(imagePath);
+            using var bmp = EnsureNonIndexed(bmpSrc, PixelFormat.Format24bppRgb);
             var (letterboxed, scale, padX, padY) = Letterbox(bmp, inputSize, inputSize, DrawingColor.Black);
 
             var inputTensor = new DenseTensor<float>(new[] { 1, 3, inputSize, inputSize });
@@ -225,9 +230,8 @@ namespace InvoiceParser
 
             foreach (var box in boxes)
             {
-                // Skip very small or narrow boxes (likely noise)
-                const float minWidth = 100f;  // Minimum width in pixels
-                const float minHeight = 50f;  // Minimum height in pixels
+                const float minWidth = 100f;
+                const float minHeight = 50f;
                 if (box.Width < minWidth || box.Height < minHeight)
                 {
                     Console.WriteLine($"[{box.Label}] ({box.X},{box.Y},{box.Width},{box.Height}) SKIPPED (too small)");
@@ -251,8 +255,7 @@ namespace InvoiceParser
                 string text = page.GetText().Trim();
                 float conf = page.GetMeanConfidence();
 
-                // Skip empty, short, or low-confidence OCR results
-                if (string.IsNullOrWhiteSpace(text) || text.Length < 10 || conf < .60f)  // Raised length to 10
+                if (string.IsNullOrWhiteSpace(text) || text.Length < 10 || conf < .60f)
                 {
                     Console.WriteLine($"[{box.Label}] ({x},{y},{w},{h}) SKIPPED (short/low conf: len={text.Length}, conf={conf:F1})");
                     continue;
@@ -292,7 +295,7 @@ namespace InvoiceParser
                     NormText = NormalizeForCompare(f.Text),
                     Area = Math.Max(1f, f.Width) * Math.Max(1f, f.Height)
                 })
-                .OrderByDescending(i => i.Area)  // Prefer larger boxes first
+                .OrderByDescending(i => i.Area)
                 .ThenByDescending(i => i.NormText.Length)
                 .ToList();
 
@@ -307,7 +310,6 @@ namespace InvoiceParser
                     float iou = IoU(cur.Field, keptField);
                     float contain = Containment(cur.Field, keptField);
 
-                    // High containment: check substring + fuzzy similarity
                     if (contain >= containmentThreshold)
                     {
                         var keptNorm = NormalizeForCompare(keptField.Text);
@@ -320,7 +322,6 @@ namespace InvoiceParser
                         }
                     }
 
-                    // Moderate overlap: check IoU + similarity
                     if (iou >= iouThreshold)
                     {
                         var keptNorm = NormalizeForCompare(keptField.Text);
@@ -347,7 +348,7 @@ namespace InvoiceParser
             {
                 if (string.IsNullOrWhiteSpace(s)) return string.Empty;
                 s = s.ToLowerInvariant();
-                s = Regex.Replace(s, @"[^a-z0-9\s]", "");  // Remove punctuation, keep letters/numbers/spaces
+                s = Regex.Replace(s, @"[^a-z0-9\s]", "");
                 s = Regex.Replace(s, @"\s{2,}", " ").Trim();
                 return s;
             }
@@ -426,46 +427,226 @@ namespace InvoiceParser
             }
         }
 
-        static List<InvoiceField> DetectTables(List<InvoiceField> fields)
+        static List<InvoiceField> DetectTables(List<InvoiceField> fields, string imagePath)
         {
-            var tableCells = new List<InvoiceField>();
-            const int yTolerance = 8;
-            const int colGapMin = 20;
+            // Tunables
+            const float yRowTolerance = 12f;
+            const float xCenterTolerance = 20f;
+            const float minCellWidth = 32f;
+            const float minCellHeight = 12f;
+            const int minColumns = 2;
+            const int minAlignedRows = 2;
 
-            var rows = fields
-                .OrderBy(f => f.Y)
-                .GroupBy(f => (int)(f.Y / yTolerance))
-                .Where(g => g.Count() >= 2)
+            var tableCells = new List<InvoiceField>();
+            var items = fields
+                .Where(f => !string.IsNullOrWhiteSpace(f.Text))
+                .Where(f => f.Width >= minCellWidth && f.Height >= minCellHeight)
+                .OrderBy(f => f.Y).ThenBy(f => f.X)
                 .ToList();
 
-            foreach (var rowGroup in rows)
+            if (items.Count == 0)
             {
-                var rowFields = rowGroup.OrderBy(f => f.X).ToList();
+                Console.WriteLine("DetectTables: no usable items.");
+                return tableCells;
+            }
 
-                bool hasGaps = false;
-                for (int i = 1; i < rowFields.Count; i++)
+            // 1) Find header anchors
+            static bool Has(string s, params string[] keys)
+            {
+                var t = s.ToLowerInvariant();
+                foreach (var k in keys)
                 {
-                    float gap = rowFields[i].X - (rowFields[i - 1].X + rowFields[i - 1].Width);
-                    if (gap >= colGapMin)
-                    {
-                        hasGaps = true;
-                        break;
-                    }
+                    if (t.Contains(k.ToLowerInvariant()))
+                        return true;
+                }
+                return false;
+            }
+
+            var headerCandidates = items
+                .Where(f => Has(f.Text, "description", "qty", "qty/ hr", "quantity", "unit price", "price", "total", "DESCRIPTION"))
+                .ToList();
+
+            if (headerCandidates.Count == 0)
+            {
+                Console.WriteLine("DetectTables: no header candidates in YOLO OCR fields; trying full-page OCR words.");
+
+                // Pull fine-grained words and retry header search
+                var wordFields = RunOcrFullPageWords(imagePath);
+
+                // If you have `imagePath` available, prefer passing it directly:
+                // var wordFields = RunOcrFullPageWords(imagePath);
+
+                // Use words, but filter tiny artifacts
+                var words = wordFields
+                    .Where(f => f.Width >= minCellWidth / 2 && f.Height >= minCellHeight / 2)
+                    .OrderBy(f => f.Y).ThenBy(f => f.X)
+                    .ToList();
+
+                var headerWords = words
+                    .Where(f => Has(f.Text, "description", "qty", "quantity", "unit price", "price", "total", "qty/hr", "unit price" ))
+                    .ToList();
+
+                if (headerWords.Count == 0)
+                {
+                    Console.WriteLine("DetectTables: still no headers after full-page OCR; abort.");
+                    return tableCells;
                 }
 
-                if (!hasGaps) continue;
+                // Replace `items` with words so downstream logic can infer rows/columns
+                items = words;
+                headerCandidates = headerWords;
+            }
 
-                for (int col = 0; col < rowFields.Count; col++)
+            // 2) Choose the top-most header line (largest Y that still looks like a header row)
+            var headerY = headerCandidates.Min(h => h.Y);
+            var headerLine = items.Where(f => Math.Abs(f.Y - headerY) <= yRowTolerance).ToList();
+            if (headerLine.Count < minColumns)
+            {
+                Console.WriteLine($"DetectTables: header row too sparse (count={headerLine.Count}).");
+                return tableCells;
+            }
+
+            float headerBottom = headerLine.Max(f => f.Y + f.Height);
+
+            // 3) Find bottom anchor (subtotal/total/tax area)
+            var footerCandidates = items
+                .Where(f => f.Y > headerBottom + 10f)
+                .Where(f => Has(f.Text, "subtotal", "total", "tax"))
+                .ToList();
+
+            float tableBottom = footerCandidates.Count > 0
+                ? footerCandidates.Min(f => f.Y) // first totals line
+                : items.Max(f => f.Y + f.Height); // fallback: to the end
+
+            // 4) Crop to table region
+            var inRegion = items
+                .Where(f => f.Y >= headerBottom && (f.Y + f.Height) <= tableBottom + 4f)
+                .ToList();
+
+            if (inRegion.Count < minColumns)
+            {
+                Console.WriteLine($"DetectTables: region too small (count={inRegion.Count}).");
+                return tableCells;
+            }
+
+            // 5) Build rows by Y proximity/overlap
+            var rows = new List<List<InvoiceField>>();
+            foreach (var f in inRegion)
+            {
+                var target = rows.FirstOrDefault(r =>
                 {
-                    var cell = rowFields[col];
+                    float ry1 = r.Min(x => x.Y);
+                    float ry2 = r.Max(x => x.Y + x.Height);
+                    bool yClose = (f.Y >= ry1 - yRowTolerance && f.Y <= ry2 + yRowTolerance)
+                                  || OverlapY(f, r);
+                    return yClose;
+                });
+
+                if (target == null) rows.Add(new List<InvoiceField> { f });
+                else target.Add(f);
+            }
+
+            rows = rows
+                .Select(r => r.OrderBy(x => x.X).ToList())
+                .Where(r => r.Count >= minColumns)
+                .OrderBy(r => r.Min(x => x.Y))
+                .ToList();
+
+            if (rows.Count < minAlignedRows)
+            {
+                Console.WriteLine($"DetectTables: not enough rows (rows={rows.Count}).");
+                return tableCells;
+            }
+
+            // 6) Global column centers from all rows
+            var perRowCenters = rows
+                .Select(r => r.Select(c => c.X + c.Width / 2f).OrderBy(x => x).ToList())
+                .ToList();
+
+            var globalCenters = ClusterColumnCenters(perRowCenters, xCenterTolerance);
+            if (globalCenters.Count < minColumns)
+            {
+                Console.WriteLine($"DetectTables: clustered columns too few (cols={globalCenters.Count}).");
+                return tableCells;
+            }
+
+            // 7) Assign TableRow/TableCol
+            for (int ri = 0; ri < rows.Count; ri++)
+            {
+                var row = rows[ri];
+                int aligned = row.Count(c => Math.Abs((c.X + c.Width / 2f) - Nearest(globalCenters, c.X + c.Width / 2f)) <= xCenterTolerance);
+                if (aligned < minColumns) continue;
+
+                foreach (var cell in row)
+                {
+                    float cx = cell.X + cell.Width / 2f;
+                    int col = IndexOfClosest(globalCenters, cx);
+                    if (col < 0) continue;
+
                     cell.IsTableCell = true;
-                    cell.TableRow = rowGroup.Key;
+                    cell.TableRow = ri;
                     cell.TableCol = col;
                     tableCells.Add(cell);
                 }
             }
 
+            Console.WriteLine($"DetectTables: table cells={tableCells.Count}, rows={rows.Count}, cols={globalCenters.Count}");
+            if (tableCells.Count == 0)
+            {
+                Console.WriteLine("DetectTables: header-based detection yielded 0 cells; falling back to geometric word clustering.");
+                var wordFields = RunOcrFullPageWords(imagePath);
+                var fallback = DetectTableFromWords(wordFields);
+                Console.WriteLine($"DetectTables/Fallback: cells={fallback.Count}");
+                return fallback;
+            }
             return tableCells;
+
+            Console.WriteLine($"DetectTables: table cells={tableCells.Count}, rows={rows.Count}, cols={globalCenters.Count}");
+            return tableCells;
+
+            // helpers
+            static bool OverlapY(InvoiceField f, List<InvoiceField> row)
+            {
+                float y1 = f.Y, y2 = f.Y + f.Height;
+                float ry1 = row.Min(x => x.Y);
+                float ry2 = row.Max(x => x.Y + x.Height);
+                return Math.Max(0, Math.Min(y2, ry2) - Math.Max(y1, ry1)) > 0;
+            }
+
+            static List<float> ClusterColumnCenters(List<List<float>> perRowCenters, float tol)
+            {
+                var all = perRowCenters.SelectMany(x => x).OrderBy(x => x).ToList();
+                if (all.Count == 0) return new List<float>();
+
+                var clusters = new List<List<float>> { new List<float> { all[0] } };
+                foreach (var v in all.Skip(1))
+                {
+                    var last = clusters[^1];
+                    var mean = last.Average();
+                    if (Math.Abs(v - mean) <= tol) last.Add(v);
+                    else clusters.Add(new List<float> { v });
+                }
+                return clusters.Select(c => c.Average()).ToList();
+            }
+
+            static float Nearest(List<float> centers, float v)
+            {
+                float best = float.MaxValue;
+                foreach (var c in centers) best = Math.Min(best, Math.Abs(c - v));
+                return best;
+            }
+
+            static int IndexOfClosest(List<float> centers, float v)
+            {
+                int idx = -1;
+                float best = float.MaxValue;
+                for (int i = 0; i < centers.Count; i++)
+                {
+                    float d = Math.Abs(centers[i] - v);
+                    if (d < best) { best = d; idx = i; }
+                }
+                return idx;
+            }
         }
 
         static void SaveAsCsv(IEnumerable<InvoiceField> fields, string path)
@@ -477,13 +658,13 @@ namespace InvoiceParser
             {
                 var cells = new[]
                 {
-                    CsvEscape(f.Label),
-                    f.X.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    f.Y.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    f.Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    f.Height.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    CsvEscape(f.Text)
-                };
+                        CsvEscape(f.Label),
+                        f.X.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        f.Y.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        f.Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        f.Height.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        CsvEscape(f.Text)
+                    };
                 sb.AppendLine(string.Join(",", cells));
             }
 
@@ -535,7 +716,8 @@ namespace InvoiceParser
                 })
                 .ToList();
 
-            using var img = new Bitmap(imagePath);
+            using var imgSrc = new Bitmap(imagePath);
+            using var img = EnsureNonIndexed(imgSrc, PixelFormat.Format24bppRgb);
             int imgW = img.Width;
             int imgH = img.Height;
 
@@ -625,9 +807,10 @@ namespace InvoiceParser
 
         static void SaveImageWithBoxes(string imagePath, List<(float X, float Y, float Width, float Height, string Label)> boxes, string suffix = "_AfterYOLO.jpg")
         {
-            using var img = new Bitmap(imagePath);
+            using var src = new Bitmap(imagePath);
+            using var img = EnsureNonIndexed(src, PixelFormat.Format24bppRgb);
             using var g = Graphics.FromImage(img);
-            var pen = new Pen(DrawingColor.Red, 2);
+            using var pen = new Pen(DrawingColor.Red, 2);
 
             foreach (var box in boxes)
             {
@@ -642,5 +825,229 @@ namespace InvoiceParser
             img.Save(outPath, System.Drawing.Imaging.ImageFormat.Jpeg);
             Console.WriteLine($"Saved debug image: {outPath}");
         }
+
+        static Bitmap EnsureNonIndexed(Bitmap src, PixelFormat target = PixelFormat.Format24bppRgb)
+        {
+            if ((src.PixelFormat & PixelFormat.Indexed) == PixelFormat.Indexed)
+            {
+                var dest = new Bitmap(src.Width, src.Height, target);
+                using var g = Graphics.FromImage(dest);
+                g.DrawImage(src, new Rectangle(0, 0, dest.Width, dest.Height));
+                return dest;
+            }
+            return (Bitmap)src.Clone();
+        }
+
+        static List<InvoiceField> RunOcrFullPageWords(string imagePath)
+        {
+            var fields = new List<InvoiceField>();
+
+            using var engine = new TesseractEngine(@"C:\Work\K-OCR\K-OCR\tessdata", "eng", EngineMode.LstmOnly);
+            using var img = Pix.LoadFromFile(imagePath);
+
+            engine.SetVariable("user_defined_dpi", "300");
+            engine.SetVariable("preserve_interword_spaces", "1");
+
+            using var page = engine.Process(img, PageSegMode.Auto);
+            using var iter = page.GetIterator();
+            iter.Begin();
+
+            // Collect words (and short phrases)
+            do
+            {
+                if (!iter.IsAtBeginningOf(PageIteratorLevel.Word))
+                    continue;
+
+                if (iter.TryGetBoundingBox(PageIteratorLevel.Word, out var rect))
+                {
+                    string text = iter.GetText(PageIteratorLevel.Word) ?? string.Empty;
+                    text = text.Trim();
+                    float conf = iter.GetConfidence(PageIteratorLevel.Word);
+
+                    if (string.IsNullOrWhiteSpace(text)) continue;
+
+                    // Keep even short headers like "QTY", "TOTAL" with slightly lower conf
+                    if (text.Length >= 2 || conf >= 0.55f)
+                    {
+                        fields.Add(new InvoiceField
+                        {
+                            Text = text,
+                            X = rect.X1,
+                            Y = rect.Y1,
+                            Width = rect.Width,
+                            Height = rect.Height,
+                            Label = "Word"
+                        });
+                    }
+                }
+            }
+            while (iter.Next(PageIteratorLevel.Word));
+
+            Console.WriteLine($"RunOcrFullPageWords: collected {fields.Count} word boxes.");
+            return fields;
+        }
+
+        static List<InvoiceField> DetectTableFromWords(List<InvoiceField> wordItems)
+        {
+            // Tunables
+            const float yRowTolerance = 12f;
+            const float xCenterTolerance = 18f;
+            const int minColumns = 3;         // invoices usually have >=3 columns
+            const int minRows = 3;            // at least 3 data rows
+            const float minWordW = 12f;       // filter noise
+            const float minWordH = 10f;
+
+            var tableCells = new List<InvoiceField>();
+
+            var items = wordItems
+                .Where(f => !string.IsNullOrWhiteSpace(f.Text))
+                .Where(f => f.Width >= minWordW && f.Height >= minWordH)
+                .OrderBy(f => f.Y).ThenBy(f => f.X)
+                .ToList();
+
+            if (items.Count == 0) return tableCells;
+
+            // 1) Build rows by Y proximity and vertical overlap
+            var rows = new List<List<InvoiceField>>();
+            foreach (var f in items)
+            {
+                var target = rows.FirstOrDefault(r =>
+                {
+                    float ry1 = r.Min(x => x.Y);
+                    float ry2 = r.Max(x => x.Y + x.Height);
+                    bool yClose = (f.Y >= ry1 - yRowTolerance && f.Y <= ry2 + yRowTolerance)
+                                  || OverlapY(f, r);
+                    return yClose;
+                });
+                if (target == null) rows.Add(new List<InvoiceField> { f });
+                else target.Add(f);
+            }
+
+            rows = rows
+                .Select(r => r.OrderBy(x => x.X).ToList())
+                .Where(r => r.Count >= 2) // need at least 2 items to be a row candidate
+                .OrderBy(r => r.Min(x => x.Y))
+                .ToList();
+
+            if (rows.Count < minRows) return tableCells;
+
+            // 2) Compute per-row centers and cluster to global columns
+            var perRowCenters = rows
+                .Select(r => r.Select(c => c.X + c.Width / 2f).OrderBy(x => x).ToList())
+                .ToList();
+
+            var globalCenters = ClusterColumnCenters(perRowCenters, xCenterTolerance);
+            if (globalCenters.Count < minColumns)
+            {
+                // Try stricter clustering if too many near-duplicate centers bloated clusters
+                globalCenters = ClusterColumnCenters(perRowCenters, xCenterTolerance * 0.8f);
+            }
+            if (globalCenters.Count < minColumns) return tableCells;
+
+            // 3) Bias columns that look numeric (prices/qty)
+            static bool LooksNumeric(string s)
+            {
+                var t = s.Trim();
+                if (t.Length == 0) return false;
+                // simple number/amount pattern
+                return System.Text.RegularExpressions.Regex.IsMatch(t, @"^[\$]?\d{1,3}(?:[,]\d{3})*(?:\.\d{1,2})?$")
+                    || System.Text.RegularExpressions.Regex.IsMatch(t, @"^\d+$");
+            }
+
+            var numericHits = new int[globalCenters.Count];
+            foreach (var r in rows)
+            {
+                foreach (var c in r)
+                {
+                    float cx = c.X + c.Width / 2f;
+                    int colIdx = IndexOfClosest(globalCenters, cx);
+                    if (colIdx >= 0 && LooksNumeric(c.Text)) numericHits[colIdx]++;
+                }
+            }
+
+            // Keep dominant columns if too many columns detected
+            if (globalCenters.Count > 6)
+            {
+                var ranked = Enumerable.Range(0, globalCenters.Count)
+                    .OrderByDescending(i => numericHits[i])
+                    .ThenBy(i => globalCenters[i])
+                    .Take(6)
+                    .ToArray();
+
+                globalCenters = ranked.Select(i => globalCenters[i]).ToList();
+            }
+
+            // 4) Assign cells to nearest global column; keep rows that align with columns
+            var alignedRows = new List<(int idx, List<InvoiceField> row)>();
+            for (int ri = 0; ri < rows.Count; ri++)
+            {
+                var row = rows[ri];
+                int alignedCount = row.Count(c => Math.Abs((c.X + c.Width / 2f) - Nearest(globalCenters, c.X + c.Width / 2f)) <= xCenterTolerance);
+                if (alignedCount >= Math.Min(minColumns, globalCenters.Count - 1))
+                    alignedRows.Add((ri, row));
+            }
+
+            if (alignedRows.Count < minRows) return tableCells;
+
+            foreach (var (ri, row) in alignedRows)
+            {
+                foreach (var cell in row)
+                {
+                    int col = IndexOfClosest(globalCenters, cell.X + cell.Width / 2f);
+                    if (col < 0) continue;
+
+                    cell.IsTableCell = true;
+                    cell.TableRow = ri;
+                    cell.TableCol = col;
+                    tableCells.Add(cell);
+                }
+            }
+
+            return tableCells;
+
+            // helpers
+            static bool OverlapY(InvoiceField f, List<InvoiceField> row)
+            {
+                float y1 = f.Y, y2 = f.Y + f.Height;
+                float ry1 = row.Min(x => x.Y);
+                float ry2 = row.Max(x => x.Y + x.Height);
+                return Math.Max(0, Math.Min(y2, ry2) - Math.Max(y1, ry1)) > 0;
+            }
+
+            static List<float> ClusterColumnCenters(List<List<float>> perRowCenters, float tol)
+            {
+                var all = perRowCenters.SelectMany(x => x).OrderBy(x => x).ToList();
+                if (all.Count == 0) return new List<float>();
+                var clusters = new List<List<float>> { new List<float> { all[0] } };
+                foreach (var v in all.Skip(1))
+                {
+                    var cur = clusters[^1];
+                    var mean = cur.Average();
+                    if (Math.Abs(v - mean) <= tol) cur.Add(v);
+                    else clusters.Add(new List<float> { v });
+                }
+                return clusters.Select(c => c.Average()).ToList();
+            }
+
+            static float Nearest(List<float> centers, float v)
+            {
+                float best = float.MaxValue;
+                foreach (var c in centers) best = Math.Min(best, Math.Abs(c - v));
+                return best;
+            }
+
+            static int IndexOfClosest(List<float> centers, float v)
+            {
+                int idx = -1;
+                float best = float.MaxValue;
+                for (int i = 0; i < centers.Count; i++)
+                {
+                    float d = Math.Abs(centers[i] - v);
+                    if (d < best) { best = d; idx = i; }
+                }
+                return idx;
+            }
+        }
+
     }
 }

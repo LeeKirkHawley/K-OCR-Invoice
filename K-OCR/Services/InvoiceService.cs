@@ -1,9 +1,6 @@
 ﻿using Azure;
 using Azure.AI.DocumentIntelligence;
-using System.Text.Json;
 using K_OCR.Models;
-using System;
-using System.Threading.Tasks;
 using System.IO;
 
 namespace K_OCR.Services
@@ -18,7 +15,6 @@ namespace K_OCR.Services
         {
             string endpoint = "https://parsedocimage.cognitiveservices.azure.com/";
             string key = "8DfAO78fFo48z5mMerbuJ6dLGvUFLS7CcF9qUvsrCVfWPGGno5O6JQQJ99CAACrJL3JXJ3w3AAALACOGJQx4";
-            List<InvoiceDto> invoices;
 
             var client = new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(key));
 
@@ -36,9 +32,16 @@ namespace K_OCR.Services
                 return new List<InvoiceDto>();
             }
 
-            var result = operation!.Value;
+            AnalyzeResult result = operation!.Value;
 
-            invoices = result.Documents.Select(doc =>
+            List<InvoiceDto> invoices = AnalyzeOCR(result);
+
+            return invoices;
+        }
+
+        private static List<InvoiceDto> AnalyzeOCR(AnalyzeResult result)
+        {
+            return result.Documents.Select(doc =>
             {
                 string GetString(string name)
                 {
@@ -121,9 +124,6 @@ namespace K_OCR.Services
                     Items = items
                 };
             }).ToList();
-
-            // invoices is now List<InvoiceDto>
-            return invoices;
         }
     }
 }

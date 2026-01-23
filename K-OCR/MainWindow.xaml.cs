@@ -4,23 +4,12 @@ using DocumentFormat.OpenXml.Wordprocessing;
 using K_OCR.Models;
 using K_OCR.Services;
 using Microsoft.Extensions.Configuration;
-using System.Diagnostics;
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-using Tesseract;
-using Azure;
-using Azure.AI.DocumentIntelligence;
-using System;
-using System.IO;
-using System.Threading.Tasks;
 
 
 namespace K_OCR
@@ -32,11 +21,14 @@ namespace K_OCR
         private readonly IConfiguration _config;
         private readonly IFileService _fileService;
         private readonly IInvoiceService _invoiceService;
+        private readonly IAzureService _azureService;
+        private readonly IAnalysisService _analysisService;
+        private readonly IOCRService _ocrService;
 
-        public MainWindow(IFileService fileService, IInvoiceService invoiceService)
+        public MainWindow(IFileService fileService, IInvoiceService invoiceService, IAzureService azureService, 
+            IAnalysisService analysisService, IOCRService ocrService)
         {
             InitializeComponent();
-
             var basePath = AppDomain.CurrentDomain.BaseDirectory;
             _config = new ConfigurationBuilder()
                 .SetBasePath(basePath)
@@ -44,6 +36,9 @@ namespace K_OCR
                 .Build();
             _fileService = fileService;
             _invoiceService = invoiceService;
+            _azureService = azureService;
+            _analysisService = analysisService;
+            _ocrService = ocrService;
         }
 
         private async void OnOpenClick(object sender, RoutedEventArgs e)
@@ -69,10 +64,10 @@ namespace K_OCR
                 string provider = _config["OCRProvider"];
                 if(provider == "Azure")
                 {
-                    await RunAzureOcrAsync(filesToProcess);
+                    await _azureService.RunAzureOcrAsync(filesToProcess);
                 }
                 else
-                    await RunOcrAsync(filesToProcess);
+                    await _ocrService.RunOcrAsync(filesToProcess);
 
 
                 OnProcessingCompleted(filesToProcess);
@@ -98,230 +93,6 @@ namespace K_OCR
             MessageBox.Show(this, "K-OCR\nVersion 1.0\nPowered by Tesseract OCR", "About", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        private async Task RunAzureOcrAsync(IEnumerable<OCRFile> items)
-        {
-            foreach (OCRFile ocrFile in items)
-            {
-
-                string endpoint = _config["AzureCognitiveServicesEndpoint"];
-                string apiKey = _config["AzureCognitiveServicesKey"];
-
-                string filePath = ocrFile.filePath;
-               
-
-                var client = new HttpClient();
-                client.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
-
-                var url = $"{endpoint}vision/v3.2/read/analyze";
-
-                byte[] fileBytes = File.ReadAllBytes(filePath);
-                using var content = new ByteArrayContent(fileBytes);
-                content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");  // WILL CHANGE PER IMAGE TYPE
-
-                // 1. Submit OCR job
-                var response = await client.PostAsync(url, content);
-                response.EnsureSuccessStatusCode();
-
-                // 2. Get operation URL
-                string operationUrl = response.Headers.GetValues("Operation-Location").First();
-
-                // 3. Poll until OCR completes
-                string resultJson = "";
-                while (true)
-                {
-                    await Task.Delay(1000);
-
-                    var resultResponse = await client.GetAsync(operationUrl);
-                    resultJson = await resultResponse.Content.ReadAsStringAsync();
-
-                    using var doc = JsonDocument.Parse(resultJson);
-                    string status = doc.RootElement.GetProperty("status").GetString();
-
-                    if (status == "succeeded" || status == "failed")
-                        break;
-                }
-
-                if(resultJson.Length > 0)
-                {
-                    _fileService.WriteJsonToDisk(filePath, resultJson);
-                }
-
-                Console.WriteLine(resultJson);
-            }
-        }
-
-
-        private async Task RunOcrAsync(IEnumerable<OCRFile> items)
-        {
-            var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1) };
-
-            await Parallel.ForEachAsync(items, options, async (ocrFile, ct) =>
-            {
-                try
-                {
-                    var engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default);
-
-                    var img = Pix.LoadFromFile(ocrFile.filePath);
-                    using (var page = engine.Process(img))
-                    {
-                        var text = page.GetText();
-                        Debug.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
-                        ocrFile.ocrText = text;
-
-                        // Compute layout artifacts
-                        List<OcrBlock> lineBlocks = GetLineBlocks(page);
-                        List<OcrBlock> tableBlocks = DetectTables(lineBlocks, page);
-
-                        // Store blocks for rendering
-                        ocrFile.LineBlocks = lineBlocks;
-                        ocrFile.TableBlocks = tableBlocks;
-
-                        await Dispatcher.InvokeAsync(() =>
-                        {
-                            // Build FlowDocument for export only
-                            var flowDocument = BuildFlowDocument(lineBlocks, tableBlocks);
-                            ocrFile.Document = flowDocument;
-
-                            if (currentIndex >= 0 && currentIndex < filesToProcess.Count)
-                            {
-                                var current = filesToProcess[currentIndex];
-                                if (ReferenceEquals(current, ocrFile))
-                                {
-                                    DrawOCROverlay(ocrFile);
-                                }
-                            }
-                        });
-
-                        Debug.WriteLine($"OCR'd {System.IO.Path.GetFileName(ocrFile.filePath)}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    await Dispatcher.BeginInvoke(() =>
-                        MessageBox.Show(this, $"OCR failed for {System.IO.Path.GetFileName(ocrFile.filePath)}: {ex.Message}",
-                            "Error", MessageBoxButton.OK, MessageBoxImage.Error));
-                }
-            });
-        }
-
-        private static List<OcrBlock> GetLineBlocks(Tesseract.Page page)
-        {
-            var blocks = new List<OcrBlock>();
-
-            using (var iter = page.GetIterator())
-            {
-                iter.Begin();
-                do
-                {
-                    if (iter.TryGetBoundingBox(PageIteratorLevel.TextLine, out var rect))
-                    {
-                        string text = iter.GetText(PageIteratorLevel.TextLine) ?? string.Empty;
-                        text = text.Trim();
-                        if (String.IsNullOrWhiteSpace(text))
-                            continue;
-
-                        float conf = iter.GetConfidence(PageIteratorLevel.TextLine);
-
-                        OcrBlock block = new OcrBlock
-                        {
-                            Type = OcrBlockType.Text,
-                            Text = text.Trim(),
-                            Confidence = conf,
-                            BoundingBox = rect
-                        };
-
-                        if (!String.IsNullOrWhiteSpace(block.Text))
-                            blocks.Add(block);
-                    }
-                } while (iter.Next(PageIteratorLevel.TextLine));
-            }
-
-            return blocks;
-        }
-
-        public List<OcrBlock> DetectTables(List<OcrBlock> textLineBlocks, Tesseract.Page page)
-        {
-            var tableRows = new List<OcrBlock>();
-            if (textLineBlocks == null || textLineBlocks.Count == 0)
-                return tableRows;
-
-            const int yTolerance = 8;
-            const int colGapMin = 20;
-
-            var groupedRows = textLineBlocks
-                .OrderBy(b => b.BoundingBox.Y1)
-                .GroupBy(b => b.BoundingBox.Y1 / yTolerance);
-
-            foreach (var rowGroup in groupedRows)
-            {
-                var lines = rowGroup.OrderBy(b => b.BoundingBox.X1).ToList();
-                var rowCells = new List<string>();
-
-                foreach (var line in lines)
-                {
-                    var words = new List<(string text, int x1, int x2)>();
-
-                    using (var iter = page.GetIterator())
-                    {
-                        iter.Begin();
-                        do
-                        {
-                            if (iter.TryGetBoundingBox(PageIteratorLevel.Word, out var wRect))
-                            {
-                                bool overlapsY = Math.Abs(wRect.Y1 - line.BoundingBox.Y1) < yTolerance * 2;
-                                if (overlapsY)
-                                {
-                                    var w = iter.GetText(PageIteratorLevel.Word);
-                                    if (!string.IsNullOrWhiteSpace(w))
-                                        words.Add((w.Trim(), wRect.X1, wRect.X2));
-                                }
-                            }
-                        } while (iter.Next(PageIteratorLevel.Word));
-                    }
-
-                    if (words.Count == 0)
-                        continue;
-
-                    words.Sort((a, b) => a.x1.CompareTo(b.x1));
-                    var clusters = new List<List<(string text, int x1, int x2)>>();
-                    var current = new List<(string text, int x1, int x2)> { words[0] };
-
-                    for (int i = 1; i < words.Count; i++)
-                    {
-                        var prev = words[i - 1];
-                        var cur = words[i];
-
-                        int gap = cur.x1 - prev.x2;
-                        if (gap >= colGapMin)
-                        {
-                            clusters.Add(current);
-                            current = new List<(string text, int x1, int x2)>();
-                        }
-                        current.Add(cur);
-                    }
-                    clusters.Add(current);
-
-                    foreach (var cl in clusters)
-                    {
-                        var cellText = string.Join(" ", cl.Select(w => w.text));
-                        if (!string.IsNullOrWhiteSpace(cellText))
-                            rowCells.Add(cellText);
-                    }
-                }
-
-                if (rowCells.Count >= 2)
-                {
-                    tableRows.Add(new OcrBlock
-                    {
-                        Type = OcrBlockType.Table,
-                        RowData = rowCells.ToArray(),
-                        BoundingBox = lines.First().BoundingBox
-                    });
-                }
-            }
-
-            return tableRows;
-        }
 
         // New method to draw OCR overlay with absolute positioning
         private void DrawOCROverlay(OCRFile ocrFile)

@@ -10,7 +10,8 @@ public class Program
         Program program = new Program();
         //program.ReadJsonTest();
         //await program.ParseInvoiceTest();
-        await program.ParseMultipleInvoicesTest();
+        //await program.ParseMultipleInvoicesTest();
+        await program.ParsePdfTest();
     }
 
     private bool ReadJsonTest()
@@ -44,8 +45,9 @@ public class Program
         var t1 = invoiceService.RunAzureInvoiceParse("C:/OCR/Invoices/Sample-Invoice-printable.png");
         var t2 = invoiceService.RunAzureInvoiceParse("C:/OCR/Invoices/invoice-template-us-neat-750px.png");
         var t3 = invoiceService.RunAzureInvoiceParse("C:/OCR/Invoices/batch1-0001.jpg");
+        var t4 = invoiceService.RunAzureInvoiceParse("C:/OCR/Invoices/IN52391329.pdf");
 
-        var results = await Task.WhenAll(t1, t2, t3);
+        var results = await Task.WhenAll(t1, t2, t3, t4);
 
         sw.Stop();
 
@@ -54,6 +56,25 @@ public class Program
         Console.WriteLine($"Parsed JSON 1: {results[0]}");
         Console.WriteLine($"Parsed JSON 2: {results[1]}");
         Console.WriteLine($"Parsed JSON 3: {results[2]}");
+        Console.WriteLine($"Parsed JSON 4: {results[3]}");
+
+        return true;
+    }
+
+    private async Task<bool> ParsePdfTest()
+    {
+        var invoiceService = new InvoiceService();
+
+        var sw = Stopwatch.StartNew();
+        var t1 = invoiceService.RunAzureInvoiceParse("C:/OCR/Invoices/IN52391329.pdf");
+
+        var results = await Task.WhenAll(t1);
+
+        sw.Stop();
+
+        Console.WriteLine($"RunAzureInvoiceParse completed in {sw.Elapsed.TotalMilliseconds:F0} ms ({sw.Elapsed}).");
+
+        Console.WriteLine($"Parsed JSON 4: {results[0]}");
 
         return true;
     }

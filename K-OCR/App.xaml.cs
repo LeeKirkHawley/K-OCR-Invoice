@@ -26,6 +26,9 @@ namespace K_OCR
             // Register services
             services.AddSingleton<IFileService, FileService>();
             services.AddSingleton<IInvoiceService, InvoiceService>();
+            services.AddSingleton<IAzureService, AzureService>();
+            services.AddSingleton<IAnalysisService, AnalysisService>();
+            services.AddSingleton<IOCRService, OCRService>();
 
             // Register MainWindow
             services.AddTransient<MainWindow>();
