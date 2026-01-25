@@ -1,10 +1,5 @@
 ﻿using Azure.AI.DocumentIntelligence;
 using K_OCR.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Tesseract;
 
 namespace K_OCR.Services
@@ -145,7 +140,11 @@ namespace K_OCR.Services
         {
             if (document.Fields?.TryGetValue(fieldKey, out DocumentField field) == true)
             {
-                string value = field.Content ?? field.ValueString ?? field.ValueDate ?? field.ValueCurrency?.Amount?.ToString("C") ?? "N/A";
+                string value = field.Content
+                    ?? field.ValueString
+                    ?? (field.ValueDate?.ToString() ?? null)
+                    ?? (field.ValueCurrency != null ? field.ValueCurrency.Amount.ToString("C") : null)
+                    ?? "N/A";
                 Console.WriteLine($"{fieldKey}: {value} (Confidence: {field.Confidence:F4})");
 
                 if (field.BoundingRegions != null && field.BoundingRegions.Count > 0)
