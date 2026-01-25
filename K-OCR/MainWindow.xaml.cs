@@ -55,27 +55,8 @@ namespace K_OCR
                 filesToProcess.Clear();
                 foreach (string fileName in dlg.FileNames)
                 {
-                    //filesToProcess.Add(new OCRFile { filePath = fileName });
                     await _invoiceService.RunAzureInvoiceParse(fileName);
-
                 }
-
-                //currentIndex = filesToProcess.Count > 0 ? 0 : -1;
-
-
-                //    string provider = _config["OCRProvider"];
-                //    if(provider == "Azure")
-                //    {
-                //        await _azureService.RunAzureOcrAsync(filesToProcess);
-                //    }
-                //    else
-                //        await _ocrService.RunOcrAsync(filesToProcess);
-
-
-                //    OnProcessingCompleted(filesToProcess);
-
-                //    ShowFileAt(currentIndex);
-                //}
             }
         }
 
