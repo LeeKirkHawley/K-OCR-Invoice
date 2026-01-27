@@ -2,6 +2,7 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using K_OCR.Models;
+using K_OCR.PipeLineSteps;
 using K_OCR.Services;
 using Microsoft.Extensions.Configuration;
 using System.Windows;
@@ -10,6 +11,7 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using static K_OCR.PipeLineSteps.PipeLineTextConfig;
 
 
 namespace K_OCR
@@ -43,6 +45,7 @@ namespace K_OCR
 
         private async void OnOpenClick(object sender, RoutedEventArgs e)
         {
+
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
                 Title = "Open Image",
@@ -55,17 +58,25 @@ namespace K_OCR
                 filesToProcess.Clear();
                 foreach (string fileName in dlg.FileNames)
                 {
-                    await _invoiceService.RunAzureInvoiceParse(fileName);
+                    PipeLineSteps.PipelineTextConfig config = PipelineConfigLoader.Load("PipelineSteps/DefaultPipeline.json");
+                    var executor = new PipelineExecutor();
+                    var context = new PipelineContext
+                    {
+                        InputPath = fileName
+                    };
+
+                    var result = await executor.RunAsync(config, context);
+                    //await _invoiceService.RunAzureInvoiceParse(fileName);
                 }
             }
         }
 
-        private async void OnParseInvoiceClick(object sender, RoutedEventArgs e)
-        {
-            string filePath = "C:/OCR/Invoices/invoice-template-us-mono-black-750px.png";
+        //private async void OnParseInvoiceClick(object sender, RoutedEventArgs e)
+        //{
+        //    string filePath = "C:/OCR/Invoices/invoice-template-us-mono-black-750px.png";
 
-            await _invoiceService.RunAzureInvoiceParse(filePath);
-        }
+        //    await _invoiceService.RunAzureInvoiceParse(filePath);
+        //}
 
         private void OnExitClick(object sender, RoutedEventArgs e)
         {

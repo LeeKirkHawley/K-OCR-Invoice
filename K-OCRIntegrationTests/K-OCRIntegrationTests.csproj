@@ -9,6 +9,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="Remote.Linq.Newtonsoft.Json" Version="7.3.1" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\K-OCR\K-OCR.csproj" />
     </ItemGroup>
 
