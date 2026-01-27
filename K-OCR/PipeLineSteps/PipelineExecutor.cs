@@ -1,9 +1,4 @@
-﻿using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using K_OCR.Services;
 
 namespace K_OCR.PipeLineSteps
 {
@@ -11,13 +6,14 @@ namespace K_OCR.PipeLineSteps
     {
         private readonly Dictionary<string, IPipelineStep> _registry;
 
-        public PipelineExecutor()
+        public PipelineExecutor(IInvoiceService invoiceService = null)
         {
             _registry = new Dictionary<string, IPipelineStep>
             {
-                ["ocr"] = new OcrStep(),
-                ["layout_detection"] = new LayoutDetectionStep(),
-                ["table_reconstruction"] = new TableReconstructionStep(),
+                ["azureinvoiceparse"] = new AzureInvoiceParseStep(invoiceService),
+                //["ocr"] = new OcrStep(),
+                //["layout_detection"] = new LayoutDetectionStep(),
+                //["table_reconstruction"] = new TableReconstructionStep(),
                 //["line_item_extraction"] = new LineItemExtractionStep(),
                 //["semantic_cleanup"] = new SemanticCleanupStep()
             };

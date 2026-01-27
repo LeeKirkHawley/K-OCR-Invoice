@@ -66,7 +66,6 @@ namespace K_OCR
                     };
 
                     var result = await executor.RunAsync(config, context);
-                    //await _invoiceService.RunAzureInvoiceParse(fileName);
                 }
             }
         }
