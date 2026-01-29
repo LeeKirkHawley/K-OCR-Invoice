@@ -34,18 +34,20 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // Commands that will be wired up from code-behind
     public ICommand? OpenFileCommand { get; set; }
+    public ICommand? ExportDocxCommand { get; set; }
     public ICommand? AboutCommand { get; set; }
 
     public MainWindowViewModel()
     {
     }
 
-    [RelayCommand]
-    private async Task ExportDocx()
-    {
-        // Export logic
-        await Task.CompletedTask;
-    }
+    // Removed - now wired up from code-behind
+    // [RelayCommand]
+    // private async Task ExportDocx()
+    // {
+    //     // Export logic handled in MainWindow.axaml.cs
+    //     await Task.CompletedTask;
+    // }
 
     [RelayCommand]
     private void Copy()

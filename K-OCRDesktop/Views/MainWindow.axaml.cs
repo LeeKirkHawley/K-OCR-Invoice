@@ -8,6 +8,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 using K_OCR.Models;
 using K_OCR.Services;
 using K_OCRDesktop.ViewModels;
@@ -58,6 +61,7 @@ public partial class MainWindow : Window
         {
             // Wire up commands that need window access
             viewModel.OpenFileCommand = new AsyncRelayCommand(OpenFileAsync);
+            viewModel.ExportDocxCommand = new AsyncRelayCommand(ExportDocxAsync);
             viewModel.AboutCommand = new RelayCommand(ShowAbout);
         }
     }
@@ -171,7 +175,7 @@ public partial class MainWindow : Window
                 Text = "K-OCR Desktop\nVersion 1.0\nPowered by Tesseract OCR\nCross-platform UI with Avalonia",
                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                TextAlignment = TextAlignment.Center
+                TextAlignment = Avalonia.Media.TextAlignment.Center
             }
         };
         aboutWindow.ShowDialog(this);
@@ -206,8 +210,8 @@ public partial class MainWindow : Window
                 {
                     Text = block.Text,
                     FontSize = 12,
-                    Foreground = new SolidColorBrush(Color.FromArgb(180, 255, 0, 0)), // Semi-transparent red
-                    Background = new SolidColorBrush(Color.FromArgb(100, 255, 255, 255)), // Semi-transparent white
+                    Foreground = new SolidColorBrush(Avalonia.Media.Color.FromArgb(180, 255, 0, 0)), // Semi-transparent red
+                    Background = new SolidColorBrush(Avalonia.Media.Color.FromArgb(100, 255, 255, 255)), // Semi-transparent white
                     Padding = new Thickness(2)
                 };
 
@@ -225,7 +229,7 @@ public partial class MainWindow : Window
             {
                 Width = table.BoundingBox.Width,
                 Height = table.BoundingBox.Height,
-                Fill = new SolidColorBrush(Color.FromArgb(50, 255, 255, 0)), // Semi-transparent yellow
+                Fill = new SolidColorBrush(Avalonia.Media.Color.FromArgb(50, 255, 255, 0)), // Semi-transparent yellow
                 Stroke = Brushes.Black,
                 StrokeThickness = 2
             };
@@ -234,6 +238,161 @@ public partial class MainWindow : Window
             Canvas.SetTop(rect, table.BoundingBox.Y1);
             _ocrCanvas.Children.Add(rect);
         }
+    }
+
+    public async Task ExportDocxAsync()
+    {
+        if (_currentIndex < 0 || _currentIndex >= _filesToProcess.Count)
+        {
+            await ShowMessageAsync("No Document", "No document to export.");
+            return;
+        }
+
+        var ocrFile = _filesToProcess[_currentIndex];
+        
+        var saveDialog = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save as Word (DOCX)",
+            DefaultExtension = "docx",
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("Word Document")
+                {
+                    Patterns = new[] { "*.docx" }
+                }
+            },
+            SuggestedFileName = System.IO.Path.GetFileNameWithoutExtension(ocrFile.filePath) + ".docx"
+        });
+
+        if (saveDialog != null)
+        {
+            try
+            {
+                ExportAsDocx(ocrFile, saveDialog.Path.LocalPath);
+                await ShowMessageAsync("Export Success", "DOCX saved successfully.");
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("Export Error", $"Failed to save DOCX: {ex.Message}");
+            }
+        }
+    }
+
+    private void ExportAsDocx(OCRFile ocrFile, string outputPath)
+    {
+        using var wordDoc = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document);
+        var mainPart = wordDoc.AddMainDocumentPart();
+        mainPart.Document = new Document(new Body());
+        var body = mainPart.Document.Body;
+
+        if (body == null)
+            return;
+
+        // Combine and sort all blocks by position
+        var allBlocks = new List<OcrBlock>();
+        if (ocrFile.LineBlocks != null)
+            allBlocks.AddRange(ocrFile.LineBlocks);
+        if (ocrFile.TableBlocks != null)
+            allBlocks.AddRange(ocrFile.TableBlocks);
+
+        // Filter out text blocks that overlap with tables (same logic as WPF version)
+        var tables = ocrFile.TableBlocks ?? new List<OcrBlock>();
+        var lines = ocrFile.LineBlocks ?? new List<OcrBlock>();
+        
+        var filteredLines = lines.Where(l => !tables.Any(t => Overlaps(l.BoundingBox, t.BoundingBox))).ToList();
+
+        var finalBlocks = new List<OcrBlock>();
+        finalBlocks.AddRange(filteredLines);
+        finalBlocks.AddRange(tables);
+
+        // Sort by Y position first, then X position
+        foreach (var block in finalBlocks.OrderBy(b => b.BoundingBox.Y1).ThenBy(b => b.BoundingBox.X1))
+        {
+            if (block.Type == OcrBlockType.Text && !string.IsNullOrWhiteSpace(block.Text))
+            {
+                // Add text paragraph
+                var paragraph = new Paragraph(
+                    new Run(
+                        new Text(block.Text)
+                        {
+                            Space = SpaceProcessingModeValues.Preserve
+                        }
+                    )
+                );
+                body.AppendChild(paragraph);
+            }
+            else if (block.Type == OcrBlockType.Table && block.RowData != null && block.RowData.Length > 0)
+            {
+                // Add table
+                var table = new Table();
+
+                // Add table borders
+                var tblProps = new TableProperties(
+                    new TableBorders(
+                        new TopBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                        new LeftBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                        new BottomBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                        new RightBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                        new InsideHorizontalBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                        new InsideVerticalBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
+                    )
+                );
+                table.AppendChild(tblProps);
+
+                // Add table row
+                var row = new TableRow();
+                foreach (var cellText in block.RowData)
+                {
+                    var cell = new TableCell(
+                        new Paragraph(
+                            new Run(
+                                new Text(cellText ?? string.Empty)
+                                {
+                                    Space = SpaceProcessingModeValues.Preserve
+                                }
+                            )
+                        )
+                    );
+                    row.AppendChild(cell);
+                }
+                table.AppendChild(row);
+                body.AppendChild(table);
+            }
+        }
+
+        mainPart.Document.Save();
+    }
+
+    private static bool Overlaps(Tesseract.Rect a, Tesseract.Rect b, int tol = 4)
+    {
+        var ax1 = a.X1 - tol;
+        var ay1 = a.Y1 - tol;
+        var ax2 = a.X2 + tol;
+        var ay2 = a.Y2 + tol;
+        var bx1 = b.X1 - tol;
+        var by1 = b.Y1 - tol;
+        var bx2 = b.X2 + tol;
+        var by2 = b.Y2 + tol;
+        return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+    }
+
+    private async Task ShowMessageAsync(string title, string message)
+    {
+        var messageWindow = new Window
+        {
+            Title = title,
+            Width = 400,
+            Height = 200,
+            Content = new TextBlock
+            {
+                Text = message,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                Padding = new Thickness(10)
+            }
+        };
+        await messageWindow.ShowDialog(this);
     }
 }
 
