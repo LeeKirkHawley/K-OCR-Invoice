@@ -2,13 +2,74 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build All C# Projects",
-            "type": "shell",
-            "command": "${workspaceFolder}/build.sh",
+            "label": "build",
+            "dependsOn": [
+                "Build K-OCRLib Only",
+                "Build K-OCRIntegrationTests Only",
+                "Build K-OCRDesktop Only"
+            ],
+            "dependsOrder": "sequence",
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build K-OCRLib Only",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/K-OCRLib/K-OCRLib.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Build K-OCRIntegrationTests Only",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/K-OCRIntegrationTests/K-OCRIntegrationTests.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Build K-OCRDesktop Only",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/K-OCRDesktop/K-OCRDesktop.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Build K-OCRDesktop",
+            "type": "shell",
+            "command": "dotnet",
+            "args": [
+                "build",
+                "${workspaceFolder}/K-OCRDesktop/K-OCRDesktop.csproj"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always"
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Build All C# Projects",
+            "type": "shell",
+            "command": "${workspaceFolder}/build.sh",
+            "group": "build",
             "presentation": {
                 "reveal": "always",
                 "panel": "new"
