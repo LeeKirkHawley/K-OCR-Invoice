@@ -21,7 +21,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private Bitmap? _originalImageSource;
 
     [ObservableProperty]
-    private Bitmap? _ocrImageSource;
+    private string _ocrJsonText = string.Empty;
 
     [ObservableProperty]
     private double _canvasWidth = 800;
@@ -71,7 +71,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (System.IO.File.Exists(filePath))
         {
             OriginalImageSource = new Bitmap(filePath);
-            OcrImageSource = new Bitmap(filePath);
+            OcrJsonText = string.Empty; // Clear JSON text when loading new image
             FileCaption = filePath;
 
             // Update canvas dimensions to match image
@@ -81,6 +81,11 @@ public partial class MainWindowViewModel : ViewModelBase
                 CanvasHeight = OriginalImageSource.PixelSize.Height;
             }
         }
+    }
+
+    public void SetOcrJson(string json)
+    {
+        OcrJsonText = json;
     }
 
     public void DrawOCROverlay(OCRFile ocrFile)

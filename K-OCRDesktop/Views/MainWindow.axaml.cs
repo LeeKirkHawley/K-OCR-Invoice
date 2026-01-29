@@ -112,25 +112,28 @@ public partial class MainWindow : Window
                         InputPath = filePath
                     };
 
-                    var result = await executor.RunAsync(config, context);
+                    PipelineContext pipelineContext = await executor.RunAsync(config, context);
+
+                    // Save PipelineContext to JSON file
+                    // THIS IS JUST TO GET DEBUG DATA
+                    var jsonOutputPath = System.IO.Path.ChangeExtension(filePath, ".json");
+                    var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                    await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
                     
+                    // Display JSON in right panel
+                    viewModel.SetOcrJson(json);
+
                     // TODO: Process result and add to filesToProcess
                     // For now, create an OCRFile for display
                     var ocrFile = new OCRFile
                     {
                         filePath = filePath,
-                        ocrText = result.Text ?? string.Empty,
+                        ocrText = pipelineContext.Text ?? string.Empty,
                         LineBlocks = new List<OcrBlock>(),
                         TableBlocks = new List<OcrBlock>()
                     };
                     
                     _filesToProcess.Add(ocrFile);
-                    
-                    // Display first processed file
-                    if (_filesToProcess.Count == 1)
-                    {
-                        OnProcessingCompleted(_filesToProcess);
-                    }
                 }
                 catch (Exception ex)
                 {
