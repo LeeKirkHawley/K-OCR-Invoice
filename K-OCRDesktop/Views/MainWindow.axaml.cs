@@ -104,7 +104,8 @@ public partial class MainWindow : Window
                 // Run OCR pipeline
                 try
                 {
-                    var config = PipelineConfigLoader.Load("PipelineSteps/DefaultPipeline.json");
+                    var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipeLineSteps", "DefaultPipeline.json");
+                    var config = PipelineConfigLoader.Load(configPath);
                     var executor = new PipelineExecutor(_invoiceService);
                     var context = new PipelineContext
                     {
