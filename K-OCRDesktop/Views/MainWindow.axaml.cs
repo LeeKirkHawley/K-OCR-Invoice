@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private Canvas? _ocrCanvas;
     private readonly List<OCRFile> _filesToProcess = new();
     private int _currentIndex = -1;
+    private string? _currentFolderPath;
     private readonly IConfiguration? _config;
     private readonly IFileService? _fileService;
     private readonly IInvoiceService? _invoiceService;
@@ -63,11 +64,21 @@ public partial class MainWindow : Window
         {
             // Wire up commands that need window access
             viewModel.OpenFileCommand = new AsyncRelayCommand(OpenFileAsync);
+            viewModel.SelectFolderCommand = new AsyncRelayCommand(SelectFolderAsync);
             viewModel.ExportDocxCommand = new AsyncRelayCommand(ExportDocxAsync);
             viewModel.ZoomInCommand = new RelayCommand(viewModel.ZoomIn);
             viewModel.ZoomOutCommand = new RelayCommand(viewModel.ZoomOut);
             viewModel.ZoomFitCommand = new RelayCommand(viewModel.ZoomFit);
             viewModel.AboutCommand = new RelayCommand(ShowAbout);
+            
+            // Handle file selection changes
+            viewModel.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(viewModel.SelectedImageFile) && viewModel.SelectedImageFile != null)
+                {
+                    _ = OnFileSelectedAsync(viewModel.SelectedImageFile);
+                }
+            };
         }
     }
 
@@ -253,6 +264,97 @@ public partial class MainWindow : Window
                     
                     _filesToProcess.Add(ocrFile);
                 }
+            }
+        }
+    }
+
+    private async Task SelectFolderAsync()
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Select Folder with Images",
+            AllowMultiple = false
+        });
+
+        if (folders.Count > 0 && DataContext is MainWindowViewModel viewModel)
+        {
+            _currentFolderPath = folders[0].Path.LocalPath;
+            viewModel.LoadImageFilesFromFolder(_currentFolderPath);
+        }
+    }
+
+    private async Task OnFileSelectedAsync(string fileName)
+    {
+        if (string.IsNullOrEmpty(_currentFolderPath) || string.IsNullOrEmpty(fileName))
+            return;
+
+        var filePath = System.IO.Path.Combine(_currentFolderPath, fileName);
+        
+        if (!System.IO.File.Exists(filePath) || DataContext is not MainWindowViewModel viewModel)
+            return;
+
+        // Get the ScrollViewer dimensions for initial zoom calculation
+        var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
+        double availableWidth = imageScrollViewer?.Bounds.Width ?? 0;
+        double availableHeight = imageScrollViewer?.Bounds.Height ?? 0;
+        
+        // Account for toolbar height (approximately 40px)
+        if (availableHeight > 40)
+            availableHeight -= 40;
+        
+        // Load and display the image
+        viewModel.LoadImage(filePath, availableWidth, availableHeight);
+
+        // Check if cached JSON exists
+        var jsonOutputPath = System.IO.Path.ChangeExtension(filePath, ".json");
+        PipelineContext? pipelineContext = null;
+        string json;
+
+        if (System.IO.File.Exists(jsonOutputPath))
+        {
+            // Load from cached JSON
+            try
+            {
+                json = await System.IO.File.ReadAllTextAsync(jsonOutputPath);
+                pipelineContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
+                
+                // Display cached JSON in right panel
+                viewModel.SetOcrJson(json);
+            }
+            catch (Exception ex)
+            {
+                // If cached JSON is invalid, we'll run the pipeline
+                Console.WriteLine($"Failed to load cached JSON: {ex.Message}");
+                pipelineContext = null;
+            }
+        }
+
+        // Run OCR pipeline only if no valid cache exists
+        if (pipelineContext == null)
+        {
+            try
+            {
+                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipeLineSteps", "DefaultPipeline.json");
+                var config = PipelineConfigLoader.Load(configPath);
+                var executor = new PipelineExecutor(_invoiceService);
+                var context = new PipelineContext
+                {
+                    InputPath = filePath
+                };
+
+                pipelineContext = await executor.RunAsync(config, context);
+
+                // Save PipelineContext to JSON file for future use
+                json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
+                
+                // Display JSON in right panel
+                viewModel.SetOcrJson(json);
+            }
+            catch (Exception ex)
+            {
+                // Handle error - show message to user
+                await ShowMessageAsync("Error", $"Error processing {filePath}:\n{ex.Message}");
             }
         }
     }

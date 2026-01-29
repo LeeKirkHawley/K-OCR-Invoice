@@ -32,11 +32,18 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private double _canvasHeight = 600;
 
+    [ObservableProperty]
+    private ObservableCollection<string> _imageFiles = new();
+
+    [ObservableProperty]
+    private string? _selectedImageFile;
+
     private readonly List<OCRFile> _filesToProcess = new();
     private int _currentIndex = -1;
 
     // Commands that will be wired up from code-behind
     public ICommand? OpenFileCommand { get; set; }
+    public ICommand? SelectFolderCommand { get; set; }
     public ICommand? ExportDocxCommand { get; set; }
     public ICommand? AboutCommand { get; set; }
     public ICommand? ZoomInCommand { get; set; }
@@ -121,6 +128,24 @@ public partial class MainWindowViewModel : ViewModelBase
     public void SetOcrJson(string json)
     {
         OcrJsonText = json;
+    }
+
+    public void LoadImageFilesFromFolder(string folderPath)
+    {
+        ImageFiles.Clear();
+        
+        var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff" };
+        var files = System.IO.Directory.GetFiles(folderPath)
+            .Where(f => extensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
+            .Select(System.IO.Path.GetFileName)
+            .Where(f => f != null)
+            .Cast<string>()
+            .OrderBy(f => f);
+        
+        foreach (var file in files)
+        {
+            ImageFiles.Add(file);
+        }
     }
 
     public void DrawOCROverlay(OCRFile ocrFile)

@@ -52,16 +52,59 @@
                        HorizontalAlignment="Center" 
                        VerticalAlignment="Center"/>
 
-            <!-- Bottom panel: two panes with a vertical splitter -->
+            <!-- Bottom panel: three panes with vertical splitters -->
             <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200" MinWidth="150"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Left panel: Original image with zoom controls -->
+                <!-- File browser panel (leftmost) -->
                 <Border Grid.Column="0" 
+                        BorderBrush="LightGray" 
+                        BorderThickness="1" 
+                        Padding="8">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Folder selection button -->
+                        <Button Grid.Row="0" 
+                                Content="📁 Select Folder" 
+                                Command="{Binding SelectFolderCommand}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,0,0,5"/>
+                        
+                        <!-- File list -->
+                        <ListBox Grid.Row="1"
+                                Name="FileListBox"
+                                ItemsSource="{Binding ImageFiles}"
+                                SelectedItem="{Binding SelectedImageFile}"
+                                Background="White">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" 
+                                              TextWrapping="NoWrap"
+                                              ToolTip.Tip="{Binding}"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <!-- Splitter between file list and image -->
+                <GridSplitter Grid.Column="1"
+                              Width="6"
+                              Background="#FFE0E0E0"
+                              ResizeDirection="Columns"/>
+
+                <!-- Center panel: Original image with zoom controls -->
+                <Border Grid.Column="2" 
                         BorderBrush="LightGray" 
                         BorderThickness="1" 
                         Padding="8">
@@ -107,14 +150,14 @@
                     </Grid>
                 </Border>
 
-                <!-- Splitter -->
-                <GridSplitter Grid.Column="1"
+                <!-- Splitter between image and JSON -->
+                <GridSplitter Grid.Column="3"
                               Width="6"
                               Background="#FFE0E0E0"
                               ResizeDirection="Columns"/>
 
                 <!-- Right panel: OCR JSON result -->
-                <Border Grid.Column="2" 
+                <Border Grid.Column="4" 
                         BorderBrush="LightGray" 
                         BorderThickness="1" 
                         Padding="8">
