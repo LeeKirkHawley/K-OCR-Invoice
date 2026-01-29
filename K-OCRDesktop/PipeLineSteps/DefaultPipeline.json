@@ -1,0 +1,20 @@
+{
+  "UserId": "",
+  "Pipeline": [
+    {
+      "step": "azureinvoiceparse",
+      "language": "eng",
+      "dpi": "300"
+    }
+    // {
+    //   "step": "layout_detection",
+    //   "model": "doclayout_yolo",
+    //   "confidence": "0.45"
+    // },
+    // {
+    //   "step": "table_reconstruction",
+    //   "strategy": "grid",
+    //   "merge_threshold": "12"
+    // }
+  ]
+}

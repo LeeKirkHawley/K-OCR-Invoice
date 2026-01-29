@@ -7,7 +7,7 @@ using System.Text.Json;
 
 namespace K_OCR.Services
 {
-    internal class AzureService : IAzureService
+    public class AzureService : IAzureService
     {
         private readonly IConfiguration _config;
         private readonly IFileService _fileService;

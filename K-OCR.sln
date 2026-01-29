@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "K-OCR", "K-OCR\K-OCR.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "K-OCRIntegrationTests", "K-OCRIntegrationTests\K-OCRIntegrationTests.csproj", "{A1616CB3-C982-4A81-84E7-4E8609EDDC44}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "K-OCRDesktop", "K-OCRDesktop\K-OCRDesktop.csproj", "{DA2E0507-D20B-4964-AA91-EC41839C4185}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{A1616CB3-C982-4A81-84E7-4E8609EDDC44}.Release|x64.Build.0 = Release|Any CPU
 		{A1616CB3-C982-4A81-84E7-4E8609EDDC44}.Release|x86.ActiveCfg = Release|Any CPU
 		{A1616CB3-C982-4A81-84E7-4E8609EDDC44}.Release|x86.Build.0 = Release|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Debug|x64.Build.0 = Debug|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Debug|x86.Build.0 = Debug|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Release|x64.ActiveCfg = Release|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Release|x64.Build.0 = Release|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Release|x86.ActiveCfg = Release|Any CPU
+		{DA2E0507-D20B-4964-AA91-EC41839C4185}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

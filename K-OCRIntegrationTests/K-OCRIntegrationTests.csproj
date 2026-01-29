@@ -2,11 +2,10 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net10.0-windows</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <RootNamespace>K_OCRIntegrationTests</RootNamespace>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <EnableWindowsTargeting>true</EnableWindowsTargeting>
     </PropertyGroup>
 
     <ItemGroup>
@@ -14,7 +13,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\K-OCR\K-OCR.csproj" />
+        <ProjectReference Include="..\K-OCRLib\K-OCRLib.csproj" />
     </ItemGroup>
 
 </Project>
