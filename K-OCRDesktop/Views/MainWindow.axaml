@@ -177,14 +177,27 @@
                         BorderBrush="LightGray" 
                         BorderThickness="1" 
                         Padding="8">
-                    <TabControl>
+                    <TabControl Name="ResultsTabControl" Focusable="True">
                         <!-- Validation Tab (default) -->
-                        <TabItem Header="Validation">
-                            <Grid>
+                        <TabItem Header="Validation" Name="ValidationTab">
+                            <Grid RowDefinitions="Auto,*">
+                                <!-- Save Button at top -->
+                                <Button Grid.Row="0" 
+                                       Content="💾 Save Validated Data" 
+                                       HorizontalAlignment="Center"
+                                       Margin="10,10,10,5"
+                                       Padding="20,8"
+                                       FontWeight="Bold"
+                                       Click="OnSaveValidatedData"
+                                       IsVisible="{Binding DocumentFields.Count}"/>
+                                
                                 <!-- Dynamic document fields display -->
-                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                <ScrollViewer Grid.Row="1"
+                                             VerticalScrollBarVisibility="Auto"
                                              HorizontalScrollBarVisibility="Auto"
-                                             IsVisible="{Binding DocumentFields.Count}">
+                                             IsVisible="{Binding DocumentFields.Count}"
+                                             Name="ValidationScrollViewer"
+                                             Focusable="True">
                                     <StackPanel Margin="10">
                                         <!-- Document Fields -->
                                         <ItemsControl ItemsSource="{Binding DocumentFields}">
@@ -197,17 +210,14 @@
                                                                   FontWeight="Bold" 
                                                                   VerticalAlignment="Center"/>
                                                         
-                                                        <!-- Field Value (Clickable) -->
-                                                        <Button Grid.Column="1" 
-                                                               HorizontalAlignment="Stretch" 
-                                                               HorizontalContentAlignment="Left"
-                                                               Background="Transparent" 
-                                                               BorderThickness="0" 
-                                                               Padding="10,5"
-                                                               Click="OnFieldClicked"
-                                                               Tag="{Binding Name}">
-                                                            <TextBlock Text="{Binding Value}" TextWrapping="Wrap"/>
-                                                        </Button>
+                                                        <!-- Field Value (Editable TextBox) -->
+                                                        <TextBox Grid.Column="1" 
+                                                                Text="{Binding Value, Mode=TwoWay}" 
+                                                                HorizontalAlignment="Stretch"
+                                                                Padding="8,5"
+                                                                Margin="5,0"
+                                                                GotFocus="OnFieldGotFocus"
+                                                                Tag="{Binding Name}"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -221,18 +231,45 @@
                                                 <ItemsControl ItemsSource="{Binding CurrentInvoice.Items}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                                                   Background="Transparent" BorderThickness="0" Padding="5"
-                                                                   Click="OnLineItemClicked">
-                                                                <Border BorderBrush="LightGray" BorderThickness="0,0,0,1">
-                                                                    <Grid ColumnDefinitions="*,100,100,100">
-                                                                        <TextBlock Grid.Column="0" Text="{Binding Description}" TextWrapping="Wrap"/>
-                                                                        <TextBlock Grid.Column="1" Text="{Binding Quantity}" TextAlignment="Right" Margin="5,0"/>
-                                                                        <TextBlock Grid.Column="2" Text="{Binding UnitPrice, StringFormat={}{0:C}}" TextAlignment="Right" Margin="5,0"/>
-                                                                        <TextBlock Grid.Column="3" Text="{Binding LineTotal, StringFormat={}{0:C}}" TextAlignment="Right" Margin="5,0" FontWeight="Bold"/>
-                                                                    </Grid>
-                                                                </Border>
-                                                            </Button>
+                                                            <Border BorderBrush="LightGray" BorderThickness="0,0,0,1" Padding="5,10" Margin="0,5">
+                                                                <Grid ColumnDefinitions="*,100,100,100" RowDefinitions="Auto,Auto,Auto,Auto">
+                                                                    <!-- Column Headers (only show for first item) - TODO: implement proper header -->
+                                                                    
+                                                                    <!-- Description -->
+                                                                    <StackPanel Grid.Column="0" Spacing="3">
+                                                                        <TextBlock Text="Description:" FontWeight="SemiBold" FontSize="11"/>
+                                                                        <TextBox Text="{Binding Description, Mode=TwoWay}" 
+                                                                                TextWrapping="Wrap"
+                                                                                GotFocus="OnLineItemGotFocus"/>
+                                                                    </StackPanel>
+                                                                    
+                                                                    <!-- Quantity -->
+                                                                    <StackPanel Grid.Column="1" Spacing="3" Margin="5,0">
+                                                                        <TextBlock Text="Quantity:" FontWeight="SemiBold" FontSize="11"/>
+                                                                        <TextBox Text="{Binding Quantity, Mode=TwoWay}" 
+                                                                                TextAlignment="Right"
+                                                                                GotFocus="OnLineItemGotFocus"/>
+                                                                    </StackPanel>
+                                                                    
+                                                                    <!-- Unit Price -->
+                                                                    <StackPanel Grid.Column="2" Spacing="3" Margin="5,0">
+                                                                        <TextBlock Text="Unit Price:" FontWeight="SemiBold" FontSize="11"/>
+                                                                        <TextBox Text="{Binding UnitPrice, Mode=TwoWay, StringFormat={}{0:F2}}" 
+                                                                                TextAlignment="Right"
+                                                                                GotFocus="OnLineItemGotFocus"/>
+                                                                    </StackPanel>
+                                                                    
+                                                                    <!-- Line Total (Read-only) -->
+                                                                    <StackPanel Grid.Column="3" Spacing="3" Margin="5,0">
+                                                                        <TextBlock Text="Line Total:" FontWeight="SemiBold" FontSize="11"/>
+                                                                        <TextBox Text="{Binding LineTotal, StringFormat={}{0:C}, Mode=OneWay}" 
+                                                                                TextAlignment="Right"
+                                                                                FontWeight="Bold"
+                                                                                IsReadOnly="True"
+                                                                                Background="#F0F0F0"/>
+                                                                    </StackPanel>
+                                                                </Grid>
+                                                            </Border>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>

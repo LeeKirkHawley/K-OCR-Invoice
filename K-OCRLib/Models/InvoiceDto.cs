@@ -8,10 +8,10 @@ namespace K_OCR.Models
 
     public sealed class InvoiceItemDto
     {
-        public string Description { get; init; } = string.Empty;
-        public decimal? Quantity { get; init; }
-        public decimal? UnitPrice { get; init; }
-        public decimal? LineTotal { get; init; }
+        public string Description { get; set; } = string.Empty;
+        public decimal? Quantity { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public decimal? LineTotal { get; set; }
         public List<BoundingBoxDto> BoundingBoxes { get; init; } = new();
     }
 

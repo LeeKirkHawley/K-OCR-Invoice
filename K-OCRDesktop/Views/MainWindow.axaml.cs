@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -75,9 +76,17 @@ public partial class MainWindow : Window
             // Handle file selection changes
             viewModel.PropertyChanged += (s, e) =>
             {
+                Console.WriteLine($"PropertyChanged: {e.PropertyName}");
+                
                 if (e.PropertyName == nameof(viewModel.SelectedImageFile) && viewModel.SelectedImageFile != null)
                 {
                     _ = OnFileSelectedAsync(viewModel.SelectedImageFile);
+                }
+                else if (e.PropertyName == nameof(viewModel.CurrentFieldIndex))
+                {
+                    Console.WriteLine($"CurrentFieldIndex changed to: {viewModel.CurrentFieldIndex}");
+                    // Highlight the current field when index changes
+                    HighlightCurrentField();
                 }
             };
         }
@@ -120,8 +129,28 @@ public partial class MainWindow : Window
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        Console.WriteLine($"OnKeyDown: Key={e.Key}, Modifiers={e.KeyModifiers}, Handled={e.Handled}");
+        
         if (DataContext is MainWindowViewModel viewModel)
         {
+            // Tab for next field, Shift+Tab for previous field
+            if (e.Key == Key.Tab && !e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            {
+                Console.WriteLine("Tab key detected!");
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                {
+                    Console.WriteLine("Calling NavigateToPreviousField");
+                    viewModel.NavigateToPreviousField();
+                }
+                else
+                {
+                    Console.WriteLine("Calling NavigateToNextField");
+                    viewModel.NavigateToNextField();
+                }
+                e.Handled = true;
+                return;
+            }
+            
             // Ctrl+ = or Ctrl++ for Zoom In
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && 
                 (e.Key == Key.OemPlus || e.Key == Key.Add))
@@ -664,7 +693,137 @@ public partial class MainWindow : Window
             {
                 AddField(viewModel, "Items", "Line Items", $"{invoiceDto.Items.Count} items", "List", invoiceDto.Items);
             }
+            
+            // Reset navigation and highlight first field
+            viewModel.ResetFieldNavigation();
+            
+            // Focus the first field button to trigger automatic highlighting
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+            {
+                FocusFirstFieldButton();
+            }, Avalonia.Threading.DispatcherPriority.Loaded);
         }
+        else
+        {
+            viewModel.CurrentFieldIndex = -1;
+        }
+    }
+
+    private void FocusFirstFieldButton()
+    {
+        Console.WriteLine("FocusFirstFieldButton called");
+        
+        // Find the ValidationScrollViewer and get the first button in the ItemsControl
+        var validationScrollViewer = this.FindControl<ScrollViewer>("ValidationScrollViewer");
+        if (validationScrollViewer != null && DataContext is MainWindowViewModel viewModel)
+        {
+            // If we have fields, try to find the first button
+            if (viewModel.DocumentFields.Count > 0)
+            {
+                Console.WriteLine($"Searching for buttons in visual tree (DocumentFields count: {viewModel.DocumentFields.Count})");
+                
+                // Use visual tree helper to find the first button
+                var firstButton = FindFirstDescendantOfType<Button>(validationScrollViewer);
+                if (firstButton != null)
+                {
+                    Console.WriteLine($"Found first field button, setting focus");
+                    var focusResult = firstButton.Focus();
+                    Console.WriteLine($"Focus result: {focusResult}");
+                }
+                else
+                {
+                    Console.WriteLine("Could not find first field button - UI might not be rendered yet, retrying...");
+                    // Retry with a longer delay
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+                    {
+                        var retryButton = FindFirstDescendantOfType<Button>(validationScrollViewer);
+                        if (retryButton != null)
+                        {
+                            Console.WriteLine("Retry: Found button, setting focus");
+                            retryButton.Focus();
+                        }
+                        else
+                        {
+                            Console.WriteLine("Retry: Still no button found");
+                        }
+                    }, Avalonia.Threading.DispatcherPriority.Background);
+                }
+            }
+            else
+            {
+                Console.WriteLine("No document fields available");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"ValidationScrollViewer null? {validationScrollViewer == null}, ViewModel null? {DataContext is not MainWindowViewModel}");
+        }
+    }
+
+    private T? FindFirstDescendantOfType<T>(Avalonia.Controls.Control parent) where T : class
+    {
+        var queue = new Queue<Avalonia.Controls.Control>();
+        var visited = new HashSet<Avalonia.Controls.Control>(); // Prevent revisiting controls
+        queue.Enqueue(parent);
+        visited.Add(parent);
+        int depth = 0;
+        int maxDepth = 100; // Prevent infinite loops
+
+        while (queue.Count > 0 && depth < maxDepth)
+        {
+            var current = queue.Dequeue();
+            depth++;
+            
+            if (current is T match && current != parent) // Don't match the parent itself
+            {
+                Console.WriteLine($"Found {typeof(T).Name} at depth {depth}");
+                return match;
+            }
+
+            // Handle Panel (StackPanel, Grid, etc.)
+            if (current is Avalonia.Controls.Panel panel)
+            {
+                foreach (var child in panel.Children)
+                {
+                    if (child is Avalonia.Controls.Control control && !visited.Contains(control))
+                    {
+                        queue.Enqueue(control);
+                        visited.Add(control);
+                    }
+                }
+            }
+            // Handle Decorator (Border, Viewbox, etc.)
+            else if (current is Avalonia.Controls.Decorator decorator && decorator.Child is Avalonia.Controls.Control decoratorChild)
+            {
+                if (!visited.Contains(decoratorChild))
+                {
+                    queue.Enqueue(decoratorChild);
+                    visited.Add(decoratorChild);
+                }
+            }
+            // Handle ContentControl (Button, ScrollViewer, etc.) - but skip if it's a Button (we want to find it, not search inside)
+            else if (current is Avalonia.Controls.ContentControl contentControl && 
+                     contentControl is not Button && 
+                     contentControl.Content is Avalonia.Controls.Control contentChild)
+            {
+                if (!visited.Contains(contentChild))
+                {
+                    queue.Enqueue(contentChild);
+                    visited.Add(contentChild);
+                }
+            }
+        }
+
+        if (depth >= maxDepth)
+        {
+            Console.WriteLine($"WARNING: Reached max depth searching for {typeof(T).Name}");
+        }
+        else
+        {
+            Console.WriteLine($"Searched {depth} controls, no {typeof(T).Name} found");
+        }
+        
+        return null;
     }
 
     private void AddField(MainWindowViewModel viewModel, string name, string displayName, string value, string fieldType = "Text", object? rawValue = null)
@@ -694,10 +853,17 @@ public partial class MainWindow : Window
 
     private void OnFieldClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (sender is Button button && button.DataContext is K_OCRDesktop.Models.DocumentField field)
+        if (sender is Button button && button.DataContext is K_OCRDesktop.Models.DocumentField field && DataContext is MainWindowViewModel viewModel)
         {
             Console.WriteLine($"Field clicked: {field.Name}, Display: {field.DisplayName}");
             Console.WriteLine($"  BoundingBoxes: {field.BoundingBoxes?.Count ?? 0}");
+            
+            // Update current field index to the clicked field
+            var index = viewModel.DocumentFields.IndexOf(field);
+            if (index >= 0)
+            {
+                viewModel.CurrentFieldIndex = index;
+            }
             
             // Highlight the field's bounding boxes
             if (field.BoundingBoxes != null && field.BoundingBoxes.Count > 0)
@@ -715,6 +881,37 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnFieldGotFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // Handle both TextBox (new editable fields) and Button (old clickable fields)
+        Avalonia.Controls.Control? control = sender as Avalonia.Controls.Control;
+        K_OCRDesktop.Models.DocumentField? field = control?.DataContext as K_OCRDesktop.Models.DocumentField;
+        
+        if (field != null && DataContext is MainWindowViewModel viewModel)
+        {
+            Console.WriteLine($"Field got focus: {field.Name}, Display: {field.DisplayName}");
+            
+            // Update current field index to the focused field
+            var index = viewModel.DocumentFields.IndexOf(field);
+            if (index >= 0)
+            {
+                viewModel.CurrentFieldIndex = index;
+            }
+            
+            // Highlight the field's bounding boxes
+            if (field.BoundingBoxes != null && field.BoundingBoxes.Count > 0)
+            {
+                Console.WriteLine($"  Highlighting {field.BoundingBoxes.Count} bounding boxes");
+                HighlightBoundingBoxes(field.BoundingBoxes);
+            }
+            else
+            {
+                Console.WriteLine("  No bounding boxes available - clearing highlights");
+                ClearHighlights();
+            }
+        }
+    }
+
     private void OnLineItemClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (sender is Button button && button.DataContext is InvoiceItemDto lineItem)
@@ -727,6 +924,232 @@ public partial class MainWindow : Window
                 HighlightBoundingBoxes(lineItem.BoundingBoxes);
             }
         }
+    }
+
+    private void OnLineItemGotFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // Handle both TextBox (editable) and Button (old clickable)
+        Avalonia.Controls.Control? control = sender as Avalonia.Controls.Control;
+        InvoiceItemDto? lineItem = null;
+        
+        // Try to get the line item from the control's DataContext directly
+        if (control?.DataContext is InvoiceItemDto item)
+        {
+            lineItem = item;
+        }
+        // Or navigate up to find the item in parent's DataContext
+        else if (control?.Parent is Avalonia.Controls.Control parentControl && 
+                 parentControl.DataContext is InvoiceItemDto parentItem)
+        {
+            lineItem = parentItem;
+        }
+        
+        if (lineItem != null)
+        {
+            Console.WriteLine($"Line item got focus: {lineItem.Description}");
+            
+            // Highlight the line item's bounding boxes
+            if (lineItem.BoundingBoxes != null && lineItem.BoundingBoxes.Count > 0)
+            {
+                Console.WriteLine($"  Highlighting {lineItem.BoundingBoxes.Count} bounding boxes for line item");
+                HighlightBoundingBoxes(lineItem.BoundingBoxes);
+            }
+            else
+            {
+                Console.WriteLine("  No bounding boxes available for line item - clearing highlights");
+                ClearHighlights();
+            }
+        }
+    }
+
+    private async void OnSaveValidatedData(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        Console.WriteLine("Save Validated Data button clicked");
+        
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            Console.WriteLine("  ViewModel is null - cannot save");
+            return;
+        }
+
+        if (viewModel.DocumentFields.Count == 0)
+        {
+            Console.WriteLine("  No document data to save");
+            await ShowMessageBox("Error", "No document data to save.");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(viewModel.SelectedImageFile))
+        {
+            Console.WriteLine("  No file selected");
+            await ShowMessageBox("Error", "No file selected.");
+            return;
+        }
+
+        try
+        {
+            // Get the full file path (combine folder + filename)
+            if (string.IsNullOrEmpty(_currentFolderPath) || string.IsNullOrEmpty(viewModel.SelectedImageFile))
+            {
+                Console.WriteLine("  ERROR: Missing folder path or filename");
+                await ShowMessageBox("Error", "Cannot determine file location.");
+                return;
+            }
+            
+            var imageFilePath = System.IO.Path.Combine(_currentFolderPath, viewModel.SelectedImageFile);
+            var jsonOutputPath = System.IO.Path.ChangeExtension(imageFilePath, ".json");
+            
+            Console.WriteLine($"=== SAVE OPERATION START ===");
+            Console.WriteLine($"  Current folder: {_currentFolderPath}");
+            Console.WriteLine($"  Image filename: {viewModel.SelectedImageFile}");
+            Console.WriteLine($"  Full image path: {imageFilePath}");
+            Console.WriteLine($"  JSON output path: {jsonOutputPath}");
+            Console.WriteLine($"  File exists before save: {System.IO.File.Exists(jsonOutputPath)}");
+
+            // Create/update PipelineContext with validated data
+            // This preserves the original format so it loads correctly next time
+            var updatedInvoice = viewModel.CurrentInvoice != null ? CreateUpdatedInvoice(viewModel) : null;
+            
+            if (updatedInvoice != null)
+            {
+                Console.WriteLine($"  Updated invoice created:");
+                Console.WriteLine($"    VendorName: {updatedInvoice.VendorName}");
+                Console.WriteLine($"    InvoiceId: {updatedInvoice.InvoiceId}");
+                Console.WriteLine($"    Total: {updatedInvoice.Total}");
+            }
+            
+            var pipelineContext = new PipelineContext
+            {
+                InputPath = imageFilePath,  // Use full path, not just filename
+                Text = string.Empty,
+                Layout = updatedInvoice != null ? new List<InvoiceDto> { updatedInvoice } : new List<InvoiceDto>(),
+                Table = new object(),
+                LineItems = new object()
+            };
+
+            // Serialize the PipelineContext with updated data
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(
+                pipelineContext, 
+                Newtonsoft.Json.Formatting.Indented);
+
+            Console.WriteLine($"  JSON length: {json.Length} characters");
+            Console.WriteLine($"  First 200 chars: {json.Substring(0, Math.Min(200, json.Length))}");
+
+            // Write to file
+            await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
+            
+            // Verify the write
+            var fileInfo = new System.IO.FileInfo(jsonOutputPath);
+            Console.WriteLine($"  File written successfully!");
+            Console.WriteLine($"  File size: {fileInfo.Length} bytes");
+            Console.WriteLine($"  Last write time: {fileInfo.LastWriteTime}");
+            
+            // Read it back to verify
+            var verifyContent = await System.IO.File.ReadAllTextAsync(jsonOutputPath);
+            Console.WriteLine($"  Verified read back: {verifyContent.Length} bytes");
+            Console.WriteLine($"=== SAVE OPERATION COMPLETE ===");
+            
+            // Update the OCR JSON text display
+            viewModel.SetOcrJson(json);
+
+            await ShowMessageBox("Success", $"Validated data saved successfully to:\n{jsonOutputPath}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  Error saving data: {ex.Message}");
+            Console.WriteLine($"  Stack trace: {ex.StackTrace}");
+            await ShowMessageBox("Error", $"Failed to save data: {ex.Message}");
+        }
+    }
+
+    private InvoiceDto CreateUpdatedInvoice(MainWindowViewModel viewModel)
+    {
+        Console.WriteLine("Creating updated invoice from edited fields...");
+        
+        if (viewModel.CurrentInvoice == null)
+            throw new InvalidOperationException("No current invoice to update");
+
+        var oldInvoice = viewModel.CurrentInvoice;
+        
+        // Create a dictionary to hold updated field values
+        var fieldValues = new Dictionary<string, string>();
+        foreach (var field in viewModel.DocumentFields)
+        {
+            Console.WriteLine($"  Collecting field: {field.Name} = {field.Value}");
+            fieldValues[field.Name] = field.Value ?? string.Empty;
+        }
+
+        // Create new invoice with updated values (using existing values as defaults)
+        var newInvoice = new InvoiceDto
+        {
+            VendorName = fieldValues.GetValueOrDefault("VendorName", oldInvoice.VendorName),
+            CustomerName = fieldValues.GetValueOrDefault("CustomerName", oldInvoice.CustomerName),
+            InvoiceId = fieldValues.GetValueOrDefault("InvoiceId", oldInvoice.InvoiceId),
+            InvoiceDate = fieldValues.GetValueOrDefault("InvoiceDate", oldInvoice.InvoiceDate),
+            DueDate = fieldValues.GetValueOrDefault("DueDate", oldInvoice.DueDate),
+            PurchaseOrder = fieldValues.GetValueOrDefault("PurchaseOrder", oldInvoice.PurchaseOrder),
+            Subtotal = ParseDecimalField(fieldValues.GetValueOrDefault("Subtotal")) ?? oldInvoice.Subtotal,
+            TotalTax = ParseDecimalField(fieldValues.GetValueOrDefault("TotalTax")) ?? oldInvoice.TotalTax,
+            Shipping = ParseDecimalField(fieldValues.GetValueOrDefault("Shipping")) ?? oldInvoice.Shipping,
+            Total = ParseDecimalField(fieldValues.GetValueOrDefault("Total")) ?? oldInvoice.Total,
+            Items = oldInvoice.Items, // Line items are already updated via TwoWay binding
+            FieldBoundingBoxes = oldInvoice.FieldBoundingBoxes // Preserve bounding boxes
+        };
+        
+        Console.WriteLine("  Invoice created with updated values");
+        return newInvoice;
+    }
+
+    private decimal? ParseDecimalField(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+            
+        // Remove currency symbols and commas
+        var cleanValue = value.Replace("$", "").Replace(",", "").Trim();
+        
+        if (decimal.TryParse(cleanValue, out var result))
+            return result;
+            
+        return null;
+    }
+
+    private async Task ShowMessageBox(string title, string message)
+    {
+        // Simple message box using Avalonia's built-in dialog
+        var messageWindow = new Window
+        {
+            Title = title,
+            Width = 400,
+            Height = 150,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false
+        };
+
+        var stackPanel = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(20),
+            Spacing = 20
+        };
+
+        stackPanel.Children.Add(new TextBlock
+        {
+            Text = message,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+        });
+
+        var okButton = new Button
+        {
+            Content = "OK",
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Padding = new Avalonia.Thickness(30, 5)
+        };
+
+        okButton.Click += (s, e) => messageWindow.Close();
+        stackPanel.Children.Add(okButton);
+
+        messageWindow.Content = stackPanel;
+        await messageWindow.ShowDialog(this);
     }
 
     private void HighlightBoundingBoxes(List<BoundingBoxDto> boundingBoxes)
@@ -791,6 +1214,34 @@ public partial class MainWindow : Window
         if (_highlightCanvas != null)
         {
             _highlightCanvas.Children.Clear();
+        }
+    }
+
+    private void HighlightCurrentField()
+    {
+        Console.WriteLine("HighlightCurrentField called");
+        
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            Console.WriteLine("  DataContext is not MainWindowViewModel");
+            return;
+        }
+
+        Console.WriteLine($"  CurrentFieldIndex: {viewModel.CurrentFieldIndex}");
+        var currentField = viewModel.GetCurrentField();
+        Console.WriteLine($"  CurrentField: {currentField?.DisplayName ?? "null"}");
+        Console.WriteLine($"  BoundingBoxes count: {currentField?.BoundingBoxes?.Count ?? 0}");
+        
+        if (currentField != null && currentField.BoundingBoxes != null && currentField.BoundingBoxes.Count > 0)
+        {
+            Console.WriteLine($"Auto-highlighting field {viewModel.CurrentFieldIndex}: {currentField.DisplayName}");
+            HighlightBoundingBoxes(currentField.BoundingBoxes);
+        }
+        else
+        {
+            // No bounding boxes for this field, clear highlights
+            Console.WriteLine("  No bounding boxes - clearing highlights");
+            ClearHighlights();
         }
     }
 

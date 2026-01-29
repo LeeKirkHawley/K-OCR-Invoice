@@ -45,6 +45,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private ObservableCollection<DocumentField> _documentFields = new();
 
+    [ObservableProperty]
+    private int _currentFieldIndex = -1;
+
     private readonly List<OCRFile> _filesToProcess = new();
     private int _currentIndex = -1;
 
@@ -168,5 +171,49 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
 
         LoadImage(ocrFile.filePath);
+    }
+
+    public void NavigateToNextField()
+    {
+        if (DocumentFields.Count == 0)
+        {
+            System.Console.WriteLine("NavigateToNextField: No fields available");
+            return;
+        }
+
+        var oldIndex = CurrentFieldIndex;
+        CurrentFieldIndex++;
+        if (CurrentFieldIndex >= DocumentFields.Count)
+            CurrentFieldIndex = 0; // Wrap around to first field
+        
+        System.Console.WriteLine($"NavigateToNextField: {oldIndex} -> {CurrentFieldIndex} (Field: {GetCurrentField()?.DisplayName})");
+    }
+
+    public void NavigateToPreviousField()
+    {
+        if (DocumentFields.Count == 0)
+        {
+            System.Console.WriteLine("NavigateToPreviousField: No fields available");
+            return;
+        }
+
+        var oldIndex = CurrentFieldIndex;
+        CurrentFieldIndex--;
+        if (CurrentFieldIndex < 0)
+            CurrentFieldIndex = DocumentFields.Count - 1; // Wrap around to last field
+        
+        System.Console.WriteLine($"NavigateToPreviousField: {oldIndex} -> {CurrentFieldIndex} (Field: {GetCurrentField()?.DisplayName})");
+    }
+
+    public void ResetFieldNavigation()
+    {
+        CurrentFieldIndex = DocumentFields.Count > 0 ? 0 : -1;
+    }
+
+    public DocumentField? GetCurrentField()
+    {
+        if (CurrentFieldIndex >= 0 && CurrentFieldIndex < DocumentFields.Count)
+            return DocumentFields[CurrentFieldIndex];
+        return null;
     }
 }
