@@ -60,18 +60,51 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Left panel: Original image -->
+                <!-- Left panel: Original image with zoom controls -->
                 <Border Grid.Column="0" 
                         BorderBrush="LightGray" 
                         BorderThickness="1" 
                         Padding="8">
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto" 
-                                  VerticalScrollBarVisibility="Auto">
-                        <Image Source="{Binding OriginalImageSource}"
-                               Stretch="Uniform"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
-                    </ScrollViewer>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Zoom controls toolbar -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,5">
+                            <Button Content="🔍+" Width="40" Height="30" Margin="2" 
+                                    Command="{Binding ZoomInCommand}"
+                                    ToolTip.Tip="Zoom In (Ctrl++)"/>
+                            <Button Content="🔍−" Width="40" Height="30" Margin="2" 
+                                    Command="{Binding ZoomOutCommand}"
+                                    ToolTip.Tip="Zoom Out (Ctrl+-)"/>
+                            <Button Content="⬜" Width="40" Height="30" Margin="2" 
+                                    Command="{Binding ZoomFitCommand}"
+                                    ToolTip.Tip="Fit to Window (Ctrl+0)"/>
+                            <TextBlock Text="{Binding ImageZoom, StringFormat={}{0:P0}}" 
+                                      VerticalAlignment="Center" 
+                                      Margin="10,0,0,0"
+                                      FontWeight="Bold"/>
+                        </StackPanel>
+                        
+                        <!-- Image display area -->
+                        <ScrollViewer Grid.Row="1"
+                                     HorizontalScrollBarVisibility="Auto" 
+                                     VerticalScrollBarVisibility="Auto"
+                                     Name="ImageScrollViewer">
+                            <Image Source="{Binding OriginalImageSource}"
+                                   Stretch="None"
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Top"
+                                   RenderTransformOrigin="0,0">
+                                <Image.RenderTransform>
+                                    <ScaleTransform ScaleX="{Binding ImageZoom}" 
+                                                   ScaleY="{Binding ImageZoom}"/>
+                                </Image.RenderTransform>
+                            </Image>
+                        </ScrollViewer>
+                    </Grid>
                 </Border>
 
                 <!-- Splitter -->

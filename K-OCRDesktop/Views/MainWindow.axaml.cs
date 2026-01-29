@@ -6,6 +6,7 @@ using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using DocumentFormat.OpenXml;
@@ -40,6 +41,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        KeyDown += OnKeyDown;
 
         _fileService = fileService;
         _analysisService = analysisService;
@@ -62,6 +64,9 @@ public partial class MainWindow : Window
             // Wire up commands that need window access
             viewModel.OpenFileCommand = new AsyncRelayCommand(OpenFileAsync);
             viewModel.ExportDocxCommand = new AsyncRelayCommand(ExportDocxAsync);
+            viewModel.ZoomInCommand = new RelayCommand(viewModel.ZoomIn);
+            viewModel.ZoomOutCommand = new RelayCommand(viewModel.ZoomOut);
+            viewModel.ZoomFitCommand = new RelayCommand(viewModel.ZoomFit);
             viewModel.AboutCommand = new RelayCommand(ShowAbout);
         }
     }
@@ -72,6 +77,58 @@ public partial class MainWindow : Window
         
         // Find the canvas in the visual tree - will need to be given a name in AXAML
         // _ocrCanvas = this.FindControl<Canvas>("OcrCanvas");
+        
+        // Add mouse wheel zoom support
+        var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
+        if (imageScrollViewer != null)
+        {
+            imageScrollViewer.PointerWheelChanged += OnImageMouseWheel;
+        }
+    }
+
+    private void OnImageMouseWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            // Ctrl + Mouse Wheel = Zoom
+            if (e.Delta.Y > 0)
+            {
+                viewModel.ZoomIn();
+            }
+            else if (e.Delta.Y < 0)
+            {
+                viewModel.ZoomOut();
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            // Ctrl+ = or Ctrl++ for Zoom In
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && 
+                (e.Key == Key.OemPlus || e.Key == Key.Add))
+            {
+                viewModel.ZoomIn();
+                e.Handled = true;
+            }
+            // Ctrl+- or Ctrl+_ for Zoom Out
+            else if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && 
+                     (e.Key == Key.OemMinus || e.Key == Key.Subtract))
+            {
+                viewModel.ZoomOut();
+                e.Handled = true;
+            }
+            // Ctrl+0 for Fit to Window
+            else if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && 
+                     (e.Key == Key.D0 || e.Key == Key.NumPad0))
+            {
+                viewModel.ZoomFit();
+                e.Handled = true;
+            }
+        }
     }
 
     private async Task OpenFileAsync()
@@ -94,6 +151,15 @@ public partial class MainWindow : Window
         {
             _filesToProcess.Clear();
             
+            // Get the ScrollViewer dimensions for initial zoom calculation
+            var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
+            double availableWidth = imageScrollViewer?.Bounds.Width ?? 0;
+            double availableHeight = imageScrollViewer?.Bounds.Height ?? 0;
+            
+            // Account for toolbar height (approximately 40px)
+            if (availableHeight > 40)
+                availableHeight -= 40;
+            
             foreach (var file in files)
             {
                 var filePath = file.Path.LocalPath;
@@ -101,34 +167,82 @@ public partial class MainWindow : Window
                 // Load and display the first image
                 if (_currentIndex == -1)
                 {
-                    viewModel.LoadImage(filePath);
+                    viewModel.LoadImage(filePath, availableWidth, availableHeight);
                     _currentIndex = 0;
                 }
 
-                // Run OCR pipeline
-                try
+                // Check if cached JSON exists
+                var jsonOutputPath = System.IO.Path.ChangeExtension(filePath, ".json");
+                PipelineContext? pipelineContext = null;
+                string json;
+
+                if (System.IO.File.Exists(jsonOutputPath))
                 {
-                    var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipeLineSteps", "DefaultPipeline.json");
-                    var config = PipelineConfigLoader.Load(configPath);
-                    var executor = new PipelineExecutor(_invoiceService);
-                    var context = new PipelineContext
+                    // Load from cached JSON
+                    try
                     {
-                        InputPath = filePath
-                    };
+                        json = await System.IO.File.ReadAllTextAsync(jsonOutputPath);
+                        pipelineContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
+                        
+                        // Display cached JSON in right panel
+                        viewModel.SetOcrJson(json);
+                    }
+                    catch (Exception ex)
+                    {
+                        // If cached JSON is invalid, we'll run the pipeline
+                        Console.WriteLine($"Failed to load cached JSON: {ex.Message}");
+                        pipelineContext = null;
+                    }
+                }
 
-                    PipelineContext pipelineContext = await executor.RunAsync(config, context);
+                // Run OCR pipeline only if no valid cache exists
+                if (pipelineContext == null)
+                {
+                    try
+                    {
+                        var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipeLineSteps", "DefaultPipeline.json");
+                        var config = PipelineConfigLoader.Load(configPath);
+                        var executor = new PipelineExecutor(_invoiceService);
+                        var context = new PipelineContext
+                        {
+                            InputPath = filePath
+                        };
 
-                    // Save PipelineContext to JSON file
-                    // THIS IS JUST TO GET DEBUG DATA
-                    var jsonOutputPath = System.IO.Path.ChangeExtension(filePath, ".json");
-                    var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
-                    await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
-                    
-                    // Display JSON in right panel
-                    viewModel.SetOcrJson(json);
+                        pipelineContext = await executor.RunAsync(config, context);
 
-                    // TODO: Process result and add to filesToProcess
-                    // For now, create an OCRFile for display
+                        // Save PipelineContext to JSON file for future use
+                        json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                        await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
+                        
+                        // Display JSON in right panel
+                        viewModel.SetOcrJson(json);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Handle error - show message to user
+                        var errorWindow = new Window
+                        {
+                            Title = "Error",
+                            Width = 400,
+                            Height = 200,
+                            Content = new TextBlock
+                            {
+                                Text = $"Error processing {filePath}:\n{ex.Message}\n\nStack: {ex.StackTrace}",
+                                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                TextWrapping = TextWrapping.Wrap,
+                                Padding = new Thickness(10)
+                            }
+                        };
+                        await errorWindow.ShowDialog(this);
+                        continue; // Skip to next file
+                    }
+                }
+
+                // Process the PipelineContext (whether from cache or fresh)
+                if (pipelineContext != null)
+                {
+                    // Create an OCRFile for display
                     var ocrFile = new OCRFile
                     {
                         filePath = filePath,
@@ -138,25 +252,6 @@ public partial class MainWindow : Window
                     };
                     
                     _filesToProcess.Add(ocrFile);
-                }
-                catch (Exception ex)
-                {
-                    // Handle error - show message to user
-                    var errorWindow = new Window
-                    {
-                        Title = "Error",
-                        Width = 400,
-                        Height = 200,
-                        Content = new TextBlock
-                        {
-                            Text = $"Error processing {filePath}:\n{ex.Message}",
-                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-                            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                            TextWrapping = TextWrapping.Wrap,
-                            Padding = new Thickness(10)
-                        }
-                    };
-                    await errorWindow.ShowDialog(this);
                 }
             }
         }
@@ -186,7 +281,16 @@ public partial class MainWindow : Window
         var first = completed.FirstOrDefault();
         if (first != null && System.IO.File.Exists(first.filePath) && DataContext is MainWindowViewModel viewModel)
         {
-            viewModel.LoadImage(first.filePath);
+            // Get the ScrollViewer dimensions for initial zoom calculation
+            var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
+            double availableWidth = imageScrollViewer?.Bounds.Width ?? 0;
+            double availableHeight = imageScrollViewer?.Bounds.Height ?? 0;
+            
+            // Account for toolbar height
+            if (availableHeight > 40)
+                availableHeight -= 40;
+            
+            viewModel.LoadImage(first.filePath, availableWidth, availableHeight);
             DrawOCROverlay(first);
         }
     }

@@ -24,6 +24,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _ocrJsonText = string.Empty;
 
     [ObservableProperty]
+    private double _imageZoom = 1.0;
+
+    [ObservableProperty]
     private double _canvasWidth = 800;
 
     [ObservableProperty]
@@ -36,6 +39,9 @@ public partial class MainWindowViewModel : ViewModelBase
     public ICommand? OpenFileCommand { get; set; }
     public ICommand? ExportDocxCommand { get; set; }
     public ICommand? AboutCommand { get; set; }
+    public ICommand? ZoomInCommand { get; set; }
+    public ICommand? ZoomOutCommand { get; set; }
+    public ICommand? ZoomFitCommand { get; set; }
 
     public MainWindowViewModel()
     {
@@ -68,7 +74,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Environment.Exit(0);
     }
 
-    public void LoadImage(string filePath)
+    public void LoadImage(string filePath, double availableWidth = 0, double availableHeight = 0)
     {
         if (System.IO.File.Exists(filePath))
         {
@@ -81,8 +87,35 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 CanvasWidth = OriginalImageSource.PixelSize.Width;
                 CanvasHeight = OriginalImageSource.PixelSize.Height;
+
+                // Calculate initial zoom to fit image in panel while maintaining aspect ratio
+                if (availableWidth > 0 && availableHeight > 0)
+                {
+                    double scaleX = availableWidth / OriginalImageSource.PixelSize.Width;
+                    double scaleY = availableHeight / OriginalImageSource.PixelSize.Height;
+                    ImageZoom = Math.Min(scaleX, scaleY); // Use the smaller scale to fit both dimensions
+                }
+                else
+                {
+                    ImageZoom = 1.0; // Default if no panel size provided
+                }
             }
         }
+    }
+
+    public void ZoomIn()
+    {
+        ImageZoom = Math.Min(ImageZoom * 1.25, 10.0); // Max 10x zoom
+    }
+
+    public void ZoomOut()
+    {
+        ImageZoom = Math.Max(ImageZoom / 1.25, 0.1); // Min 0.1x zoom
+    }
+
+    public void ZoomFit()
+    {
+        ImageZoom = 1.0; // Reset to fit
     }
 
     public void SetOcrJson(string json)
