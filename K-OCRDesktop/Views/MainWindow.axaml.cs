@@ -23,6 +23,7 @@ namespace K_OCRDesktop.Views;
 public partial class MainWindow : Window
 {
     private Canvas? _ocrCanvas;
+    private Canvas? _highlightCanvas;
     private readonly List<OCRFile> _filesToProcess = new();
     private int _currentIndex = -1;
     private string? _currentFolderPath;
@@ -88,6 +89,9 @@ public partial class MainWindow : Window
         
         // Find the canvas in the visual tree - will need to be given a name in AXAML
         // _ocrCanvas = this.FindControl<Canvas>("OcrCanvas");
+        
+        // Find the highlight canvas
+        _highlightCanvas = this.FindControl<Canvas>("HighlightCanvas");
         
         // Add mouse wheel zoom support
         var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
@@ -293,6 +297,9 @@ public partial class MainWindow : Window
         if (!System.IO.File.Exists(filePath) || DataContext is not MainWindowViewModel viewModel)
             return;
 
+        // Clear any existing highlights
+        ClearHighlights();
+
         // Get the ScrollViewer dimensions for initial zoom calculation
         var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
         double availableWidth = imageScrollViewer?.Bounds.Width ?? 0;
@@ -320,6 +327,9 @@ public partial class MainWindow : Window
                 
                 // Display cached JSON in right panel
                 viewModel.SetOcrJson(json);
+                
+                // Extract and display invoice data in validation tab
+                ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
             }
             catch (Exception ex)
             {
@@ -350,6 +360,9 @@ public partial class MainWindow : Window
                 
                 // Display JSON in right panel
                 viewModel.SetOcrJson(json);
+                
+                // Extract and display invoice data in validation tab
+                ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
             }
             catch (Exception ex)
             {
@@ -580,6 +593,205 @@ public partial class MainWindow : Window
         var bx2 = b.X2 + tol;
         var by2 = b.Y2 + tol;
         return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+    }
+
+    private void ExtractAndDisplayInvoiceData(PipelineContext? context, MainWindowViewModel viewModel)
+    {
+        if (context == null)
+        {
+            viewModel.SetInvoiceData(null);
+            viewModel.DocumentFields.Clear();
+            return;
+        }
+
+        // Try to extract invoice data from Layout property
+        InvoiceDto? invoiceDto = null;
+        
+        Console.WriteLine($"ExtractAndDisplayInvoiceData: Layout type = {context.Layout?.GetType().Name}");
+        
+        if (context.Layout is Newtonsoft.Json.Linq.JArray layoutArray && layoutArray.Count > 0)
+        {
+            try
+            {
+                invoiceDto = layoutArray[0].ToObject<InvoiceDto>();
+                Console.WriteLine($"Parsed InvoiceDto from JArray. FieldBoundingBoxes count: {invoiceDto?.FieldBoundingBoxes.Count ?? -1}");
+                viewModel.SetInvoiceData(invoiceDto);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to parse invoice data: {ex.Message}");
+                viewModel.SetInvoiceData(null);
+            }
+        }
+        else if (context.Layout is List<InvoiceDto> invoiceList && invoiceList.Count > 0)
+        {
+            invoiceDto = invoiceList[0];
+            Console.WriteLine($"Got InvoiceDto from List. FieldBoundingBoxes count: {invoiceDto?.FieldBoundingBoxes.Count ?? -1}");
+            viewModel.SetInvoiceData(invoiceDto);
+        }
+        else
+        {
+            viewModel.SetInvoiceData(null);
+        }
+
+        // Populate DocumentFields dynamically from InvoiceDto
+        viewModel.DocumentFields.Clear();
+        
+        if (invoiceDto != null)
+        {
+            // Add header fields
+            AddField(viewModel, "VendorName", "Vendor Name", invoiceDto.VendorName);
+            AddField(viewModel, "CustomerName", "Customer Name", invoiceDto.CustomerName);
+            AddField(viewModel, "InvoiceId", "Invoice ID", invoiceDto.InvoiceId);
+            AddField(viewModel, "InvoiceDate", "Invoice Date", invoiceDto.InvoiceDate, "Date");
+            AddField(viewModel, "DueDate", "Due Date", invoiceDto.DueDate, "Date");
+            AddField(viewModel, "PurchaseOrder", "Purchase Order", invoiceDto.PurchaseOrder);
+            
+            if (invoiceDto.Subtotal.HasValue)
+                AddField(viewModel, "Subtotal", "Subtotal", invoiceDto.Subtotal.Value.ToString("C"), "Currency", invoiceDto.Subtotal);
+            
+            if (invoiceDto.TotalTax.HasValue)
+                AddField(viewModel, "TotalTax", "Total Tax", invoiceDto.TotalTax.Value.ToString("C"), "Currency", invoiceDto.TotalTax);
+            
+            if (invoiceDto.Shipping.HasValue)
+                AddField(viewModel, "Shipping", "Shipping", invoiceDto.Shipping.Value.ToString("C"), "Currency", invoiceDto.Shipping);
+            
+            if (invoiceDto.Total.HasValue)
+                AddField(viewModel, "Total", "Total", invoiceDto.Total.Value.ToString("C"), "Currency", invoiceDto.Total);
+            
+            // Add line items as a list field
+            if (invoiceDto.Items != null && invoiceDto.Items.Count > 0)
+            {
+                AddField(viewModel, "Items", "Line Items", $"{invoiceDto.Items.Count} items", "List", invoiceDto.Items);
+            }
+        }
+    }
+
+    private void AddField(MainWindowViewModel viewModel, string name, string displayName, string value, string fieldType = "Text", object? rawValue = null)
+    {
+        // Get bounding boxes from the invoice if available
+        List<BoundingBoxDto>? boundingBoxes = null;
+        if (viewModel.CurrentInvoice?.FieldBoundingBoxes.TryGetValue(name, out var boxes) == true)
+        {
+            boundingBoxes = boxes;
+            Console.WriteLine($"AddField: {name} has {boxes.Count} bounding boxes");
+        }
+        else
+        {
+            Console.WriteLine($"AddField: {name} has NO bounding boxes (Invoice null? {viewModel.CurrentInvoice == null}, Dict count: {viewModel.CurrentInvoice?.FieldBoundingBoxes.Count ?? -1})");
+        }
+        
+        viewModel.DocumentFields.Add(new K_OCRDesktop.Models.DocumentField
+        {
+            Name = name,
+            DisplayName = displayName,
+            Value = value ?? string.Empty,
+            FieldType = fieldType,
+            RawValue = rawValue,
+            BoundingBoxes = boundingBoxes
+        });
+    }
+
+    private void OnFieldClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is K_OCRDesktop.Models.DocumentField field)
+        {
+            Console.WriteLine($"Field clicked: {field.Name}, Display: {field.DisplayName}");
+            Console.WriteLine($"  BoundingBoxes: {field.BoundingBoxes?.Count ?? 0}");
+            
+            // Highlight the field's bounding boxes
+            if (field.BoundingBoxes != null && field.BoundingBoxes.Count > 0)
+            {
+                HighlightBoundingBoxes(field.BoundingBoxes);
+            }
+            else
+            {
+                Console.WriteLine("  No bounding boxes available for this field");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"OnFieldClicked: sender type = {sender?.GetType().Name}, DataContext type = {(sender as Button)?.DataContext?.GetType().Name}");
+        }
+    }
+
+    private void OnLineItemClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is InvoiceItemDto lineItem)
+        {
+            Console.WriteLine($"Line item clicked: {lineItem.Description}");
+            
+            // Highlight the line item's bounding boxes
+            if (lineItem.BoundingBoxes != null && lineItem.BoundingBoxes.Count > 0)
+            {
+                HighlightBoundingBoxes(lineItem.BoundingBoxes);
+            }
+        }
+    }
+
+    private void HighlightBoundingBoxes(List<BoundingBoxDto> boundingBoxes)
+    {
+        Console.WriteLine($"HighlightBoundingBoxes called. Canvas null? {_highlightCanvas == null}, BBoxes: {boundingBoxes?.Count ?? 0}");
+        
+        if (_highlightCanvas == null)
+        {
+            Console.WriteLine("ERROR: _highlightCanvas is null!");
+            return;
+        }
+        
+        if (boundingBoxes == null || boundingBoxes.Count == 0)
+        {
+            Console.WriteLine("No bounding boxes to highlight");
+            return;
+        }
+
+        // Clear existing highlights
+        _highlightCanvas.Children.Clear();
+        Console.WriteLine("Cleared existing highlights");
+
+        // Draw each bounding box
+        foreach (var box in boundingBoxes)
+        {
+            Console.WriteLine($"Processing box: PageNumber={box.PageNumber}, Points count={box.Points?.Count ?? 0}");
+            
+            if (box.Points == null || box.Points.Count < 8) // Need at least 4 points (8 coordinates)
+            {
+                Console.WriteLine($"Skipping box - insufficient points");
+                continue;
+            }
+
+            // Create a polygon from the points
+            var polygon = new Avalonia.Controls.Shapes.Polygon
+            {
+                Fill = new SolidColorBrush(Avalonia.Media.Color.FromArgb(80, 255, 255, 0)), // Semi-transparent yellow
+                Stroke = new SolidColorBrush(Avalonia.Media.Color.FromArgb(255, 255, 165, 0)), // Orange border
+                StrokeThickness = 2
+            };
+
+            // Convert points to Avalonia Points
+            var points = new List<Avalonia.Point>();
+            for (int i = 0; i < box.Points.Count; i += 2)
+            {
+                if (i + 1 < box.Points.Count)
+                {
+                    var pt = new Avalonia.Point(box.Points[i], box.Points[i + 1]);
+                    points.Add(pt);
+                    Console.WriteLine($"  Point {i/2}: ({box.Points[i]}, {box.Points[i + 1]})");
+                }
+            }
+            polygon.Points = points;
+
+            _highlightCanvas.Children.Add(polygon);
+            Console.WriteLine($"Added polygon to canvas. Canvas children count: {_highlightCanvas.Children.Count}");
+        }
+    }
+
+    private void ClearHighlights()
+    {
+        if (_highlightCanvas != null)
+        {
+            _highlightCanvas.Children.Clear();
+        }
     }
 
     private async Task ShowMessageAsync(string title, string message)

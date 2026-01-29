@@ -1,11 +1,18 @@
 namespace K_OCR.Models
 {
+    public sealed class BoundingBoxDto
+    {
+        public List<float> Points { get; init; } = new(); // Polygon points [x1, y1, x2, y2, x3, y3, x4, y4]
+        public int PageNumber { get; init; } = 1;
+    }
+
     public sealed class InvoiceItemDto
     {
         public string Description { get; init; } = string.Empty;
         public decimal? Quantity { get; init; }
         public decimal? UnitPrice { get; init; }
         public decimal? LineTotal { get; init; }
+        public List<BoundingBoxDto> BoundingBoxes { get; init; } = new();
     }
 
     public sealed class InvoiceDto
@@ -21,5 +28,8 @@ namespace K_OCR.Models
         public decimal? Shipping { get; init; }
         public decimal? Total { get; init; }
         public List<InvoiceItemDto> Items { get; init; } = new();
+        
+        // Bounding boxes for each field
+        public Dictionary<string, List<BoundingBoxDto>> FieldBoundingBoxes { get; init; } = new();
     }
 }

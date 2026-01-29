@@ -21,8 +21,6 @@
         <!-- Menu bar at top -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
-                <MenuItem Header="_Open..." Command="{Binding OpenFileCommand}"/>
-                <Separator/>
                 <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
             </MenuItem>
             <MenuItem Header="_Export">
@@ -136,16 +134,34 @@
                                      HorizontalScrollBarVisibility="Auto" 
                                      VerticalScrollBarVisibility="Auto"
                                      Name="ImageScrollViewer">
-                            <Image Source="{Binding OriginalImageSource}"
-                                   Stretch="None"
-                                   HorizontalAlignment="Left"
-                                   VerticalAlignment="Top"
-                                   RenderTransformOrigin="0,0">
-                                <Image.RenderTransform>
-                                    <ScaleTransform ScaleX="{Binding ImageZoom}" 
-                                                   ScaleY="{Binding ImageZoom}"/>
-                                </Image.RenderTransform>
-                            </Image>
+                            <Grid>
+                                <!-- Image -->
+                                <Image Source="{Binding OriginalImageSource}"
+                                       Stretch="None"
+                                       HorizontalAlignment="Left"
+                                       VerticalAlignment="Top"
+                                       RenderTransformOrigin="0,0"
+                                       Name="DisplayImage">
+                                    <Image.RenderTransform>
+                                        <ScaleTransform ScaleX="{Binding ImageZoom}" 
+                                                       ScaleY="{Binding ImageZoom}"/>
+                                    </Image.RenderTransform>
+                                </Image>
+                                
+                                <!-- Overlay Canvas for highlighting bounding boxes -->
+                                <Canvas Name="HighlightCanvas"
+                                       HorizontalAlignment="Left"
+                                       VerticalAlignment="Top"
+                                       Width="{Binding CanvasWidth}"
+                                       Height="{Binding CanvasHeight}"
+                                       RenderTransformOrigin="0,0"
+                                       IsHitTestVisible="False">
+                                    <Canvas.RenderTransform>
+                                        <ScaleTransform ScaleX="{Binding ImageZoom}" 
+                                                       ScaleY="{Binding ImageZoom}"/>
+                                    </Canvas.RenderTransform>
+                                </Canvas>
+                            </Grid>
                         </ScrollViewer>
                     </Grid>
                 </Border>
@@ -156,21 +172,104 @@
                               Background="#FFE0E0E0"
                               ResizeDirection="Columns"/>
 
-                <!-- Right panel: OCR JSON result -->
+                <!-- Right panel: Tabbed view with Validation and OCR tabs -->
                 <Border Grid.Column="4" 
                         BorderBrush="LightGray" 
                         BorderThickness="1" 
                         Padding="8">
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto" 
-                                  VerticalScrollBarVisibility="Auto">
-                        <TextBox Text="{Binding OcrJsonText}"
-                                 IsReadOnly="True"
-                                 FontFamily="Courier New"
-                                 FontSize="12"
-                                 TextWrapping="NoWrap"
-                                 AcceptsReturn="True"
-                                 Background="#F5F5F5"/>
-                    </ScrollViewer>
+                    <TabControl>
+                        <!-- Validation Tab (default) -->
+                        <TabItem Header="Validation">
+                            <Grid>
+                                <!-- Dynamic document fields display -->
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                             HorizontalScrollBarVisibility="Auto"
+                                             IsVisible="{Binding DocumentFields.Count}">
+                                    <StackPanel Margin="10">
+                                        <!-- Document Fields -->
+                                        <ItemsControl ItemsSource="{Binding DocumentFields}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnDefinitions="150,*" Margin="0,5">
+                                                        <!-- Field Name -->
+                                                        <TextBlock Grid.Column="0" 
+                                                                  Text="{Binding DisplayName, StringFormat={}{0}:}" 
+                                                                  FontWeight="Bold" 
+                                                                  VerticalAlignment="Center"/>
+                                                        
+                                                        <!-- Field Value (Clickable) -->
+                                                        <Button Grid.Column="1" 
+                                                               HorizontalAlignment="Stretch" 
+                                                               HorizontalContentAlignment="Left"
+                                                               Background="Transparent" 
+                                                               BorderThickness="0" 
+                                                               Padding="10,5"
+                                                               Click="OnFieldClicked"
+                                                               Tag="{Binding Name}">
+                                                            <TextBlock Text="{Binding Value}" TextWrapping="Wrap"/>
+                                                        </Button>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        
+                                        <!-- Line Items (if present) -->
+                                        <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,10,0,0" Margin="0,20,0,0"
+                                               IsVisible="{Binding CurrentInvoice.Items.Count}">
+                                            <StackPanel>
+                                                <TextBlock Text="Line Items:" FontWeight="Bold" FontSize="14" Margin="0,0,0,10"/>
+                                                <ItemsControl ItemsSource="{Binding CurrentInvoice.Items}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                                                   Background="Transparent" BorderThickness="0" Padding="5"
+                                                                   Click="OnLineItemClicked">
+                                                                <Border BorderBrush="LightGray" BorderThickness="0,0,0,1">
+                                                                    <Grid ColumnDefinitions="*,100,100,100">
+                                                                        <TextBlock Grid.Column="0" Text="{Binding Description}" TextWrapping="Wrap"/>
+                                                                        <TextBlock Grid.Column="1" Text="{Binding Quantity}" TextAlignment="Right" Margin="5,0"/>
+                                                                        <TextBlock Grid.Column="2" Text="{Binding UnitPrice, StringFormat={}{0:C}}" TextAlignment="Right" Margin="5,0"/>
+                                                                        <TextBlock Grid.Column="3" Text="{Binding LineTotal, StringFormat={}{0:C}}" TextAlignment="Right" Margin="5,0" FontWeight="Bold"/>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+                                
+                                <!-- Show message when no document data -->
+                                <TextBlock Text="No document data available"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Foreground="Gray"
+                                          FontSize="14">
+                                    <TextBlock.IsVisible>
+                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                            <Binding Path="DocumentFields.Count" Converter="{x:Static ObjectConverters.Equal}" ConverterParameter="0"/>
+                                        </MultiBinding>
+                                    </TextBlock.IsVisible>
+                                </TextBlock>
+                            </Grid>
+                        </TabItem>
+                        
+                        <!-- OCR Tab (JSON output) -->
+                        <TabItem Header="OCR">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" 
+                                         VerticalScrollBarVisibility="Auto">
+                                <TextBox Text="{Binding OcrJsonText}"
+                                        IsReadOnly="True"
+                                        FontFamily="Courier New"
+                                        FontSize="12"
+                                        TextWrapping="NoWrap"
+                                        AcceptsReturn="True"
+                                        Background="#F5F5F5"/>
+                            </ScrollViewer>
+                        </TabItem>
+                    </TabControl>
                 </Border>
             </Grid>
         </Grid>

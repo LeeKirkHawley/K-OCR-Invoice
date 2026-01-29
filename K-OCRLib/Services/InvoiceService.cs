@@ -43,10 +43,39 @@ namespace K_OCR.Services
         {
             return result.Documents.Select(doc =>
             {
+                var fieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>();
+                
+                // Helper to extract bounding boxes from a field
+                List<BoundingBoxDto> GetBoundingBoxes(string fieldName)
+                {
+                    var boxes = new List<BoundingBoxDto>();
+                    if (doc.Fields.TryGetValue(fieldName, out var field) && 
+                        field.BoundingRegions != null)
+                    {
+                        foreach (var region in field.BoundingRegions)
+                        {
+                            if (region.Polygon != null && region.Polygon.Count > 0)
+                            {
+                                boxes.Add(new BoundingBoxDto
+                                {
+                                    Points = region.Polygon.ToList(),
+                                    PageNumber = region.PageNumber
+                                });
+                            }
+                        }
+                    }
+                    return boxes;
+                }
+                
                 string GetString(string name)
                 {
                     if (doc.Fields.TryGetValue(name, out var f))
                     {
+                        // Store bounding boxes for this field
+                        var boxes = GetBoundingBoxes(name);
+                        if (boxes.Count > 0)
+                            fieldBoundingBoxes[name] = boxes;
+                        
                         if (!string.IsNullOrEmpty(f.ValueString)) return f.ValueString!;
                         if (!string.IsNullOrEmpty(f.Content)) return f.Content!;
                     }
@@ -57,6 +86,11 @@ namespace K_OCR.Services
                 {
                     if (doc.Fields.TryGetValue(name, out var field))
                     {
+                        // Store bounding boxes for this field
+                        var boxes = GetBoundingBoxes(name);
+                        if (boxes.Count > 0)
+                            fieldBoundingBoxes[name] = boxes;
+                        
                         if (field.ValueCurrency?.Amount is double a) return (decimal)a;
                         if (field.ValueDouble is double d) return (decimal)d;
                         if (field.ValueInt64 is long l) return l;
@@ -99,12 +133,30 @@ namespace K_OCR.Services
                             else if (vAmt.ValueInt64 is long nl2) lineTotal = nl2;
                         }
 
+                        // Get bounding boxes for the entire line item
+                        var itemBoxes = new List<BoundingBoxDto>();
+                        if (item.BoundingRegions != null)
+                        {
+                            foreach (var region in item.BoundingRegions)
+                            {
+                                if (region.Polygon != null && region.Polygon.Count > 0)
+                                {
+                                    itemBoxes.Add(new BoundingBoxDto
+                                    {
+                                        Points = region.Polygon.ToList(),
+                                        PageNumber = region.PageNumber
+                                    });
+                                }
+                            }
+                        }
+
                         items.Add(new InvoiceItemDto
                         {
                             Description = desc,
                             Quantity = qty,
                             UnitPrice = unitPrice,
-                            LineTotal = lineTotal
+                            LineTotal = lineTotal,
+                            BoundingBoxes = itemBoxes
                         });
                     }
                 }
@@ -121,7 +173,8 @@ namespace K_OCR.Services
                     TotalTax = GetDecimal("TotalTax"),
                     Shipping = GetDecimal("Shipping"),
                     Total = GetDecimal("Total"),
-                    Items = items
+                    Items = items,
+                    FieldBoundingBoxes = fieldBoundingBoxes
                 };
             }).ToList();
         }

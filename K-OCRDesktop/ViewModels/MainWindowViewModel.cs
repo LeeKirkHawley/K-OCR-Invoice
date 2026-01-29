@@ -9,6 +9,7 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using K_OCR.Models;
+using K_OCRDesktop.Models;
 
 namespace K_OCRDesktop.ViewModels;
 
@@ -37,6 +38,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private string? _selectedImageFile;
+
+    [ObservableProperty]
+    private InvoiceDto? _currentInvoice;
+
+    [ObservableProperty]
+    private ObservableCollection<DocumentField> _documentFields = new();
 
     private readonly List<OCRFile> _filesToProcess = new();
     private int _currentIndex = -1;
@@ -95,16 +102,17 @@ public partial class MainWindowViewModel : ViewModelBase
                 CanvasWidth = OriginalImageSource.PixelSize.Width;
                 CanvasHeight = OriginalImageSource.PixelSize.Height;
 
-                // Calculate initial zoom to fit image in panel while maintaining aspect ratio
-                if (availableWidth > 0 && availableHeight > 0)
+                // Only calculate initial fit-to-panel zoom if still at default zoom (1.0)
+                // This preserves user's zoom level when loading similar images
+                if (Math.Abs(ImageZoom - 1.0) < 0.01) // Check if zoom is still at default
                 {
-                    double scaleX = availableWidth / OriginalImageSource.PixelSize.Width;
-                    double scaleY = availableHeight / OriginalImageSource.PixelSize.Height;
-                    ImageZoom = Math.Min(scaleX, scaleY); // Use the smaller scale to fit both dimensions
-                }
-                else
-                {
-                    ImageZoom = 1.0; // Default if no panel size provided
+                    if (availableWidth > 0 && availableHeight > 0)
+                    {
+                        double scaleX = availableWidth / OriginalImageSource.PixelSize.Width;
+                        double scaleY = availableHeight / OriginalImageSource.PixelSize.Height;
+                        ImageZoom = Math.Min(scaleX, scaleY); // Use the smaller scale to fit both dimensions
+                    }
+                    // If zoom has been adjusted, keep the current zoom level
                 }
             }
         }
@@ -128,6 +136,11 @@ public partial class MainWindowViewModel : ViewModelBase
     public void SetOcrJson(string json)
     {
         OcrJsonText = json;
+    }
+
+    public void SetInvoiceData(InvoiceDto? invoice)
+    {
+        CurrentInvoice = invoice;
     }
 
     public void LoadImageFilesFromFolder(string folderPath)
