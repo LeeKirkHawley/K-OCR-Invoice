@@ -10,6 +10,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.VisualTree;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -147,6 +148,205 @@ public partial class MainWindow : Window
                 viewModel.ZoomOut();
             }
             e.Handled = true;
+        }
+    }
+
+    private void OnImageClick(object? sender, PointerPressedEventArgs e)
+    {
+        System.Console.WriteLine("=== IMAGE CLICKED ===");
+        
+        if (DataContext is not MainWindowViewModel viewModel || viewModel.DocumentFields.Count == 0)
+        {
+            System.Console.WriteLine($"  Early return: viewModel null? {DataContext is not MainWindowViewModel}, Fields count: {(DataContext as MainWindowViewModel)?.DocumentFields.Count ?? 0}");
+            return;
+        }
+
+        // Get the DisplayImage control to get position relative to the actual image
+        var displayImage = this.FindControl<Image>("DisplayImage");
+        if (displayImage == null)
+        {
+            System.Console.WriteLine("  DisplayImage not found");
+            return;
+        }
+
+        // Get the click position relative to the actual image (not the scrollviewer)
+        // Because the Image has Stretch="None" and uses RenderTransform for zoom,
+        // the position we get is already in the original image coordinate space!
+        var position = e.GetPosition(displayImage);
+        
+        double zoom = viewModel.ImageZoom;
+        
+        System.Console.WriteLine($"  Click position in original image space: ({position.X}, {position.Y}), Zoom: {zoom}");
+        System.Console.WriteLine($"  Total fields: {viewModel.DocumentFields.Count}");
+
+        // Debug: show all fields with their bounding boxes
+        foreach (var field in viewModel.DocumentFields)
+        {
+            var hasBoxes = field.BoundingBoxes != null && field.BoundingBoxes.Any();
+            System.Console.WriteLine($"    Field: {field.DisplayName}, HasBoxes: {hasBoxes}, Count: {field.BoundingBoxes?.Count ?? 0}");
+            if (hasBoxes)
+            {
+                foreach (var box in field.BoundingBoxes!)
+                {
+                    System.Console.WriteLine($"      Box Points count: {box.Points?.Count ?? 0}");
+                    if (box.Points != null && box.Points.Count >= 8)
+                    {
+                        System.Console.WriteLine($"      Box bounds in original space: ({box.Points[0]}, {box.Points[1]}) to ({box.Points[4]}, {box.Points[5]})");
+                        var isInside = IsPointInPolygon((float)position.X, (float)position.Y, box.Points);
+                        System.Console.WriteLine($"      Point ({position.X}, {position.Y}) inside? {isInside}");
+                    }
+                }
+            }
+        }
+
+        // Find the field whose bounding box contains this point (using LINQ - no explicit loops)
+        // Both click position and bounding boxes are in original image space, so compare directly
+        var clickedField = viewModel.DocumentFields
+            .Where(field => field.BoundingBoxes != null && field.BoundingBoxes.Any())
+            .FirstOrDefault(field => field.BoundingBoxes!.Any(box => 
+                box.Points != null && 
+                box.Points.Count >= 8 && 
+                IsPointInPolygon((float)position.X, (float)position.Y, box.Points)));
+
+        if (clickedField != null)
+        {
+            System.Console.WriteLine($"  FOUND FIELD: {clickedField.DisplayName}");
+            // Select the field
+            var fieldIndex = viewModel.DocumentFields.IndexOf(clickedField);
+            if (fieldIndex >= 0)
+            {
+                System.Console.WriteLine($"  Setting CurrentFieldIndex to {fieldIndex}");
+                viewModel.CurrentFieldIndex = fieldIndex;
+                
+                // Explicitly highlight the bounding boxes for this field
+                if (clickedField.BoundingBoxes != null && clickedField.BoundingBoxes.Count > 0)
+                {
+                    HighlightBoundingBoxes(clickedField.BoundingBoxes);
+                }
+                
+                // Scroll the validation panel to make the field visible
+                ScrollValidationToField(fieldIndex);
+                
+                // Focus the TextBox for this field to trigger the yellow highlight
+                FocusFieldTextBox(clickedField);
+            }
+        }
+        else
+        {
+            // Not a regular field, check if it's a line item
+            System.Console.WriteLine($"  No field found, checking line items...");
+            var clickedLineItem = viewModel.CurrentInvoice?.Items
+                .Where(item => item.BoundingBoxes != null && item.BoundingBoxes.Any())
+                .FirstOrDefault(item => item.BoundingBoxes!.Any(box =>
+                    box.Points != null &&
+                    box.Points.Count >= 8 &&
+                    IsPointInPolygon((float)position.X, (float)position.Y, box.Points)));
+
+            if (clickedLineItem != null)
+            {
+                System.Console.WriteLine($"  FOUND LINE ITEM: {clickedLineItem.Description}");
+                
+                // Highlight the bounding boxes for this line item
+                if (clickedLineItem.BoundingBoxes != null && clickedLineItem.BoundingBoxes.Count > 0)
+                {
+                    HighlightBoundingBoxes(clickedLineItem.BoundingBoxes);
+                }
+                
+                // Focus the first TextBox for this line item
+                FocusLineItemTextBox(clickedLineItem);
+            }
+            else
+            {
+                System.Console.WriteLine($"  No field or line item found at click position");
+            }
+        }
+    }
+
+    private bool IsPointInPolygon(float x, float y, List<float> points)
+    {
+        // Ray casting algorithm - count intersections with polygon edges
+        // Using LINQ aggregate to avoid explicit loop
+        var intersectionCount = Enumerable.Range(0, points.Count / 2)
+            .Select(i => (x1: points[i * 2], y1: points[i * 2 + 1], 
+                         x2: points[((i + 1) % (points.Count / 2)) * 2], 
+                         y2: points[((i + 1) % (points.Count / 2)) * 2 + 1]))
+            .Count(edge => 
+            {
+                // Check if horizontal ray from point intersects this edge
+                if ((edge.y1 > y) != (edge.y2 > y))
+                {
+                    float xIntersect = (edge.x2 - edge.x1) * (y - edge.y1) / (edge.y2 - edge.y1) + edge.x1;
+                    return x < xIntersect;
+                }
+                return false;
+            });
+
+        return (intersectionCount % 2) == 1;
+    }
+
+    private void ScrollValidationToField(int fieldIndex)
+    {
+        var validationScrollViewer = this.FindControl<ScrollViewer>("ValidationScrollViewer");
+        if (validationScrollViewer == null || DataContext is not MainWindowViewModel viewModel)
+            return;
+
+        // Estimate the vertical position of the field (approximately 40 pixels per field)
+        double estimatedFieldHeight = 40;
+        double targetOffset = fieldIndex * estimatedFieldHeight;
+
+        // Scroll to show the field with some padding above
+        validationScrollViewer.Offset = new Vector(0, Math.Max(0, targetOffset - 50));
+    }
+
+    private void FocusFieldTextBox(K_OCRDesktop.Models.DocumentField field)
+    {
+        // Find the validation scroll viewer
+        var validationScrollViewer = this.FindControl<ScrollViewer>("ValidationScrollViewer");
+        if (validationScrollViewer == null)
+            return;
+
+        // Find all TextBoxes in the validation panel using LINQ
+        var textBoxes = validationScrollViewer.GetVisualDescendants()
+            .OfType<TextBox>()
+            .Where(tb => tb.Tag != null && tb.Tag.ToString() == field.Name)
+            .ToList();
+
+        // Focus the first matching TextBox
+        var targetTextBox = textBoxes.FirstOrDefault();
+        if (targetTextBox != null)
+        {
+            targetTextBox.Focus();
+            System.Console.WriteLine($"  Focused TextBox for field {field.Name}");
+        }
+        else
+        {
+            System.Console.WriteLine($"  Could not find TextBox for field {field.Name}");
+        }
+    }
+
+    private void FocusLineItemTextBox(InvoiceItemDto lineItem)
+    {
+        // Find the validation scroll viewer
+        var validationScrollViewer = this.FindControl<ScrollViewer>("ValidationScrollViewer");
+        if (validationScrollViewer == null)
+            return;
+
+        // Find all TextBoxes whose DataContext is the clicked line item
+        var textBoxes = validationScrollViewer.GetVisualDescendants()
+            .OfType<TextBox>()
+            .Where(tb => tb.DataContext == lineItem)
+            .ToList();
+
+        // Focus the first TextBox (Description field)
+        var targetTextBox = textBoxes.FirstOrDefault();
+        if (targetTextBox != null)
+        {
+            targetTextBox.Focus();
+            System.Console.WriteLine($"  Focused TextBox for line item: {lineItem.Description}");
+        }
+        else
+        {
+            System.Console.WriteLine($"  Could not find TextBox for line item");
         }
     }
 

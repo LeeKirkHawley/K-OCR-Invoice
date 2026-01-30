@@ -158,7 +158,8 @@
                                        HorizontalAlignment="Left"
                                        VerticalAlignment="Top"
                                        RenderTransformOrigin="0,0"
-                                       Name="DisplayImage">
+                                       Name="DisplayImage"
+                                       PointerPressed="OnImageClick">
                                     <Image.RenderTransform>
                                         <ScaleTransform ScaleX="{Binding ImageZoom}" 
                                                        ScaleY="{Binding ImageZoom}"/>
@@ -172,7 +173,8 @@
                                        Width="{Binding CanvasWidth}"
                                        Height="{Binding CanvasHeight}"
                                        RenderTransformOrigin="0,0"
-                                       IsHitTestVisible="False">
+                                       IsHitTestVisible="False"
+                                       PointerPressed="OnImageClick">
                                     <Canvas.RenderTransform>
                                         <ScaleTransform ScaleX="{Binding ImageZoom}" 
                                                        ScaleY="{Binding ImageZoom}"/>
