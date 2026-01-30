@@ -25,6 +25,7 @@ public partial class MainWindow : Window
 {
     private Canvas? _ocrCanvas;
     private Canvas? _highlightCanvas;
+    private ScrollViewer? _imageScrollViewer;
     private readonly List<OCRFile> _filesToProcess = new();
     private int _currentIndex = -1;
     private string? _currentFolderPath;
@@ -120,6 +121,9 @@ public partial class MainWindow : Window
         
         // Find the highlight canvas
         _highlightCanvas = this.FindControl<Canvas>("HighlightCanvas");
+        
+        // Find the image scroll viewer
+        _imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
         
         // Add mouse wheel zoom support
         var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
@@ -1117,6 +1121,10 @@ public partial class MainWindow : Window
 
         _highlightCanvas.Children.Clear();
 
+        // Track the bounds of all highlights to calculate the center
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+
         foreach (var box in boundingBoxes)
         {
             if (box.Points == null || box.Points.Count < 8)
@@ -1134,13 +1142,54 @@ public partial class MainWindow : Window
             {
                 if (i + 1 < box.Points.Count)
                 {
-                    points.Add(new Avalonia.Point(box.Points[i], box.Points[i + 1]));
+                    double x = box.Points[i];
+                    double y = box.Points[i + 1];
+                    points.Add(new Avalonia.Point(x, y));
+                    
+                    // Track bounds
+                    minX = Math.Min(minX, x);
+                    minY = Math.Min(minY, y);
+                    maxX = Math.Max(maxX, x);
+                    maxY = Math.Max(maxY, y);
                 }
             }
             polygon.Points = points;
 
             _highlightCanvas.Children.Add(polygon);
         }
+
+        // Scroll to make the highlighted area visible
+        ScrollToHighlight(minX, minY, maxX, maxY);
+    }
+
+    private void ScrollToHighlight(double minX, double minY, double maxX, double maxY)
+    {
+        if (_imageScrollViewer == null || DataContext is not MainWindowViewModel viewModel)
+            return;
+
+        // Calculate the center of the highlighted area
+        double centerX = (minX + maxX) / 2;
+        double centerY = (minY + maxY) / 2;
+
+        // Apply zoom scale
+        double zoom = viewModel.ImageZoom;
+        double scaledCenterX = centerX * zoom;
+        double scaledCenterY = centerY * zoom;
+
+        // Get the viewport size
+        double viewportWidth = _imageScrollViewer.Viewport.Width;
+        double viewportHeight = _imageScrollViewer.Viewport.Height;
+
+        // Calculate the scroll offset to center the highlight
+        double targetOffsetX = scaledCenterX - (viewportWidth / 2);
+        double targetOffsetY = scaledCenterY - (viewportHeight / 2);
+
+        // Clamp to valid scroll range
+        targetOffsetX = Math.Max(0, Math.Min(targetOffsetX, _imageScrollViewer.Extent.Width - viewportWidth));
+        targetOffsetY = Math.Max(0, Math.Min(targetOffsetY, _imageScrollViewer.Extent.Height - viewportHeight));
+
+        // Perform the scroll
+        _imageScrollViewer.Offset = new Vector(targetOffsetX, targetOffsetY);
     }
 
     private void ClearHighlights()
