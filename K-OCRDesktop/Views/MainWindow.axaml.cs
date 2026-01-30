@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -153,11 +154,8 @@ public partial class MainWindow : Window
 
     private void OnImageClick(object? sender, PointerPressedEventArgs e)
     {
-        System.Console.WriteLine("=== IMAGE CLICKED ===");
-        
         if (DataContext is not MainWindowViewModel viewModel || viewModel.DocumentFields.Count == 0)
         {
-            System.Console.WriteLine($"  Early return: viewModel null? {DataContext is not MainWindowViewModel}, Fields count: {(DataContext as MainWindowViewModel)?.DocumentFields.Count ?? 0}");
             return;
         }
 
@@ -165,7 +163,6 @@ public partial class MainWindow : Window
         var displayImage = this.FindControl<Image>("DisplayImage");
         if (displayImage == null)
         {
-            System.Console.WriteLine("  DisplayImage not found");
             return;
         }
 
@@ -173,31 +170,6 @@ public partial class MainWindow : Window
         // Because the Image has Stretch="None" and uses RenderTransform for zoom,
         // the position we get is already in the original image coordinate space!
         var position = e.GetPosition(displayImage);
-        
-        double zoom = viewModel.ImageZoom;
-        
-        System.Console.WriteLine($"  Click position in original image space: ({position.X}, {position.Y}), Zoom: {zoom}");
-        System.Console.WriteLine($"  Total fields: {viewModel.DocumentFields.Count}");
-
-        // Debug: show all fields with their bounding boxes
-        foreach (var field in viewModel.DocumentFields)
-        {
-            var hasBoxes = field.BoundingBoxes != null && field.BoundingBoxes.Any();
-            System.Console.WriteLine($"    Field: {field.DisplayName}, HasBoxes: {hasBoxes}, Count: {field.BoundingBoxes?.Count ?? 0}");
-            if (hasBoxes)
-            {
-                foreach (var box in field.BoundingBoxes!)
-                {
-                    System.Console.WriteLine($"      Box Points count: {box.Points?.Count ?? 0}");
-                    if (box.Points != null && box.Points.Count >= 8)
-                    {
-                        System.Console.WriteLine($"      Box bounds in original space: ({box.Points[0]}, {box.Points[1]}) to ({box.Points[4]}, {box.Points[5]})");
-                        var isInside = IsPointInPolygon((float)position.X, (float)position.Y, box.Points);
-                        System.Console.WriteLine($"      Point ({position.X}, {position.Y}) inside? {isInside}");
-                    }
-                }
-            }
-        }
 
         // Find the field whose bounding box contains this point (using LINQ - no explicit loops)
         // Both click position and bounding boxes are in original image space, so compare directly
@@ -210,12 +182,10 @@ public partial class MainWindow : Window
 
         if (clickedField != null)
         {
-            System.Console.WriteLine($"  FOUND FIELD: {clickedField.DisplayName}");
             // Select the field
             var fieldIndex = viewModel.DocumentFields.IndexOf(clickedField);
             if (fieldIndex >= 0)
             {
-                System.Console.WriteLine($"  Setting CurrentFieldIndex to {fieldIndex}");
                 viewModel.CurrentFieldIndex = fieldIndex;
                 
                 // Explicitly highlight the bounding boxes for this field
@@ -234,7 +204,6 @@ public partial class MainWindow : Window
         else
         {
             // Not a regular field, check if it's a line item
-            System.Console.WriteLine($"  No field found, checking line items...");
             var clickedLineItem = viewModel.CurrentInvoice?.Items
                 .Where(item => item.BoundingBoxes != null && item.BoundingBoxes.Any())
                 .FirstOrDefault(item => item.BoundingBoxes!.Any(box =>
@@ -244,8 +213,6 @@ public partial class MainWindow : Window
 
             if (clickedLineItem != null)
             {
-                System.Console.WriteLine($"  FOUND LINE ITEM: {clickedLineItem.Description}");
-                
                 // Highlight the bounding boxes for this line item
                 if (clickedLineItem.BoundingBoxes != null && clickedLineItem.BoundingBoxes.Count > 0)
                 {
@@ -254,10 +221,6 @@ public partial class MainWindow : Window
                 
                 // Focus the first TextBox for this line item
                 FocusLineItemTextBox(clickedLineItem);
-            }
-            else
-            {
-                System.Console.WriteLine($"  No field or line item found at click position");
             }
         }
     }
@@ -312,16 +275,7 @@ public partial class MainWindow : Window
             .ToList();
 
         // Focus the first matching TextBox
-        var targetTextBox = textBoxes.FirstOrDefault();
-        if (targetTextBox != null)
-        {
-            targetTextBox.Focus();
-            System.Console.WriteLine($"  Focused TextBox for field {field.Name}");
-        }
-        else
-        {
-            System.Console.WriteLine($"  Could not find TextBox for field {field.Name}");
-        }
+        textBoxes.FirstOrDefault()?.Focus();
     }
 
     private void FocusLineItemTextBox(InvoiceItemDto lineItem)
@@ -338,16 +292,7 @@ public partial class MainWindow : Window
             .ToList();
 
         // Focus the first TextBox (Description field)
-        var targetTextBox = textBoxes.FirstOrDefault();
-        if (targetTextBox != null)
-        {
-            targetTextBox.Focus();
-            System.Console.WriteLine($"  Focused TextBox for line item: {lineItem.Description}");
-        }
-        else
-        {
-            System.Console.WriteLine($"  Could not find TextBox for line item");
-        }
+        textBoxes.FirstOrDefault()?.Focus();
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
@@ -532,11 +477,36 @@ public partial class MainWindow : Window
 
     private async Task SelectFolderAsync()
     {
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        var options = new FolderPickerOpenOptions
         {
             Title = "Select Folder with Images",
             AllowMultiple = false
-        });
+        };
+
+        // Set suggested start location from default directory in settings
+        try
+        {
+            var config = new ConfigurationBuilder()
+                .SetBasePath(AppContext.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+                .Build();
+
+            var defaultDir = config["DefaultStartDirectory"];
+            if (!string.IsNullOrEmpty(defaultDir) && Directory.Exists(defaultDir))
+            {
+                var folder = await StorageProvider.TryGetFolderFromPathAsync(defaultDir);
+                if (folder != null)
+                {
+                    options.SuggestedStartLocation = folder;
+                }
+            }
+        }
+        catch
+        {
+            // If loading settings fails, just don't set a suggested location
+        }
+
+        var folders = await StorageProvider.OpenFolderPickerAsync(options);
 
         if (folders.Count > 0 && DataContext is MainWindowViewModel viewModel)
         {
