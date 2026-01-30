@@ -17,6 +17,20 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
+    <Window.Styles>
+        <!-- Custom TextBox style for Validation tab - yellow background like image highlight -->
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#50FFFF00"/>
+            <Setter Property="BorderBrush" Value="#FFFFA500"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+        <!-- Light selection highlight so text is readable -->
+        <Style Selector="TextBox">
+            <Setter Property="SelectionBrush" Value="#60ADD8E6"/>
+            <Setter Property="SelectionForegroundBrush" Value="Black"/>
+        </Style>
+    </Window.Styles>
+
     <DockPanel>
         <!-- Menu bar at top -->
         <Menu DockPanel.Dock="Top">
@@ -29,6 +43,9 @@
             <MenuItem Header="_Edit">
                 <MenuItem Header="_Copy" Command="{Binding CopyCommand}"/>
                 <MenuItem Header="_Paste" Command="{Binding PasteCommand}"/>
+            </MenuItem>
+            <MenuItem Header="_Tools">
+                <MenuItem Header="_Settings" Click="OnSettings"/>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_About" Command="{Binding AboutCommand}"/>

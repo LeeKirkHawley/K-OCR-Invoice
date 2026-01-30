@@ -177,7 +177,6 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (DocumentFields.Count == 0)
         {
-            System.Console.WriteLine("NavigateToNextField: No fields available");
             return;
         }
 
@@ -185,15 +184,12 @@ public partial class MainWindowViewModel : ViewModelBase
         CurrentFieldIndex++;
         if (CurrentFieldIndex >= DocumentFields.Count)
             CurrentFieldIndex = 0; // Wrap around to first field
-        
-        System.Console.WriteLine($"NavigateToNextField: {oldIndex} -> {CurrentFieldIndex} (Field: {GetCurrentField()?.DisplayName})");
     }
 
     public void NavigateToPreviousField()
     {
         if (DocumentFields.Count == 0)
         {
-            System.Console.WriteLine("NavigateToPreviousField: No fields available");
             return;
         }
 
@@ -201,8 +197,6 @@ public partial class MainWindowViewModel : ViewModelBase
         CurrentFieldIndex--;
         if (CurrentFieldIndex < 0)
             CurrentFieldIndex = DocumentFields.Count - 1; // Wrap around to last field
-        
-        System.Console.WriteLine($"NavigateToPreviousField: {oldIndex} -> {CurrentFieldIndex} (Field: {GetCurrentField()?.DisplayName})");
     }
 
     public void ResetFieldNavigation()
