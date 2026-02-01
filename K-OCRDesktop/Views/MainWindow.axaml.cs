@@ -33,7 +33,6 @@ public partial class MainWindow : Window
     private ScrollViewer? _imageScrollViewer;
     private readonly List<OCRFile> _filesToProcess = new();
     private int _currentIndex = -1;
-    private string? _currentFolderPath;
     private readonly IConfiguration? _config;
     private readonly IFileService? _fileService;
     private readonly IInvoiceService? _invoiceService;
@@ -82,7 +81,6 @@ public partial class MainWindow : Window
                 System.IO.Directory.Exists(defaultDirectory) &&
                 DataContext is MainWindowViewModel viewModel)
             {
-                _currentFolderPath = defaultDirectory;
                 viewModel.LoadImageFilesFromFolder(defaultDirectory);
             }
         }
@@ -112,7 +110,7 @@ public partial class MainWindow : Window
             {
                 if (e.PropertyName == nameof(viewModel.SelectedImageFile) && viewModel.SelectedImageFile != null)
                 {
-                    _ = OnFileSelectedAsync(viewModel.SelectedImageFile);
+                    _ = OnFileSelectedAsync(viewModel.SelectedImageFile.FileName);
                 }
                 else if (e.PropertyName == nameof(viewModel.CurrentFieldIndex))
                 {
@@ -493,16 +491,23 @@ public partial class MainWindow : Window
 
     private async void OnBatchProcess(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var batchDialog = new BatchProcessDialog(_invoiceService, _config);
+        if (DataContext is not MainWindowViewModel viewModel)
+            return;
+            
+        // Check if a directory is set
+        if (string.IsNullOrEmpty(viewModel.CurrentDirectory))
+        {
+            await ShowMessageAsync("No Directory Set", "Please select a folder before using batch processing.");
+            return;
+        }
+        
+        var batchDialog = new BatchProcessDialog(_invoiceService, _config, viewModel.CurrentDirectory);
         await batchDialog.ShowDialog(this);
         
         // If processing completed, reload the current folder to show new results
-        if (batchDialog.ProcessingCompleted && DataContext is MainWindowViewModel viewModel)
+        if (batchDialog.ProcessingCompleted)
         {
-            if (!string.IsNullOrEmpty(_currentFolderPath))
-            {
-                viewModel.LoadImageFilesFromFolder(_currentFolderPath);
-            }
+            viewModel.LoadImageFilesFromFolder(viewModel.CurrentDirectory);
         }
     }
 
@@ -541,8 +546,7 @@ public partial class MainWindow : Window
 
         if (folders.Count > 0 && DataContext is MainWindowViewModel viewModel)
         {
-            _currentFolderPath = folders[0].Path.LocalPath;
-            viewModel.LoadImageFilesFromFolder(_currentFolderPath);
+            viewModel.LoadImageFilesFromFolder(folders[0].Path.LocalPath);
         }
     }
 
@@ -700,12 +704,15 @@ public partial class MainWindow : Window
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     private async Task OnFileSelectedAsync(string fileName)
     {
-        if (string.IsNullOrEmpty(_currentFolderPath) || string.IsNullOrEmpty(fileName))
+        if (DataContext is not MainWindowViewModel viewModel)
+            return;
+            
+        if (string.IsNullOrEmpty(viewModel.CurrentDirectory) || string.IsNullOrEmpty(fileName))
             return;
 
-        var filePath = System.IO.Path.Combine(_currentFolderPath, fileName);
+        var filePath = System.IO.Path.Combine(viewModel.CurrentDirectory, fileName);
         
-        if (!System.IO.File.Exists(filePath) || DataContext is not MainWindowViewModel viewModel)
+        if (!System.IO.File.Exists(filePath))
             return;
 
         // Clear any existing highlights
@@ -1343,7 +1350,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (string.IsNullOrEmpty(viewModel.SelectedImageFile))
+        if (viewModel.SelectedImageFile == null)
         {
             await ShowMessageBox("Error", "No file selected.");
             return;
@@ -1352,13 +1359,13 @@ public partial class MainWindow : Window
         try
         {
             // Get the full file path (combine folder + filename)
-            if (string.IsNullOrEmpty(_currentFolderPath) || string.IsNullOrEmpty(viewModel.SelectedImageFile))
+            if (string.IsNullOrEmpty(viewModel.CurrentDirectory) || viewModel.SelectedImageFile == null)
             {
                 await ShowMessageBox("Error", "Cannot determine file location.");
                 return;
             }
             
-            var imageFilePath = System.IO.Path.Combine(_currentFolderPath, viewModel.SelectedImageFile);
+            var imageFilePath = System.IO.Path.Combine(viewModel.CurrentDirectory, viewModel.SelectedImageFile.FileName);
             var jsonOutputPath = System.IO.Path.ChangeExtension(imageFilePath, ".json");
 
             // Create/update PipelineContext with validated data

@@ -34,10 +34,13 @@ public partial class MainWindowViewModel : ViewModelBase
     private double _canvasHeight = 600;
 
     [ObservableProperty]
-    private ObservableCollection<string> _imageFiles = new();
+    private ObservableCollection<FileListItem> _imageFiles = new();
 
     [ObservableProperty]
-    private string? _selectedImageFile;
+    private FileListItem? _selectedImageFile;
+
+    [ObservableProperty]
+    private string? _currentDirectory;
 
     [ObservableProperty]
     private InvoiceDto? _currentInvoice;
@@ -149,18 +152,27 @@ public partial class MainWindowViewModel : ViewModelBase
     public void LoadImageFilesFromFolder(string folderPath)
     {
         ImageFiles.Clear();
+        CurrentDirectory = folderPath;
         
         var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
         var files = System.IO.Directory.GetFiles(folderPath)
             .Where(f => extensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
-            .Select(System.IO.Path.GetFileName)
-            .Where(f => f != null)
-            .Cast<string>()
             .OrderBy(f => f);
         
-        foreach (var file in files)
+        foreach (var filePath in files)
         {
-            ImageFiles.Add(file);
+            var fileName = System.IO.Path.GetFileName(filePath);
+            if (fileName != null)
+            {
+                var jsonPath = System.IO.Path.ChangeExtension(filePath, ".json");
+                var isProcessed = System.IO.File.Exists(jsonPath);
+                
+                ImageFiles.Add(new FileListItem
+                {
+                    FileName = fileName,
+                    IsProcessed = isProcessed
+                });
+            }
         }
     }
 

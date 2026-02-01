@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using K_OCR.Services;
+using K_OCRDesktop.Models;
 using K_OCRDesktop.PipeLineSteps;
 using Microsoft.Extensions.Configuration;
 
@@ -18,69 +19,47 @@ public partial class BatchProcessDialog : Window
     private readonly List<string> _filePaths = new();
     private readonly IInvoiceService? _invoiceService;
     private readonly IConfiguration? _config;
+    private readonly string _currentDirectory;
 
     public bool ProcessingCompleted { get; private set; }
     public int FilesProcessed { get; private set; }
 
-    public BatchProcessDialog() : this(null, null)
+    public BatchProcessDialog() : this(null, null, string.Empty)
     {
     }
 
-    public BatchProcessDialog(IInvoiceService? invoiceService, IConfiguration? config)
+    public BatchProcessDialog(IInvoiceService? invoiceService, IConfiguration? config, string currentDirectory)
     {
         InitializeComponent();
         _invoiceService = invoiceService;
         _config = config;
+        _currentDirectory = currentDirectory;
+        
+        // Set current directory text in UI
+        var currentDirText = this.FindControl<TextBlock>("CurrentDirectoryText");
+        if (currentDirText != null)
+        {
+            currentDirText.Text = _currentDirectory;
+        }
+        
+        // Load files from current directory on initialization
+        LoadFilesFromCurrentDirectory();
     }
-
-    private async void OnSelectFolder(object? sender, RoutedEventArgs e)
+    
+    private void LoadFilesFromCurrentDirectory()
     {
-        var options = new FolderPickerOpenOptions
-        {
-            Title = "Select Folder with Invoices",
-            AllowMultiple = false
-        };
+        if (string.IsNullOrEmpty(_currentDirectory) || !Directory.Exists(_currentDirectory))
+            return;
+            
+        var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
+        var files = Directory.GetFiles(_currentDirectory)
+            .Where(f => extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+            .OrderBy(f => f)
+            .ToList();
 
-        // Set suggested start location from default directory in settings
-        try
-        {
-            var defaultDir = _config?["DefaultStartDirectory"];
-            if (!string.IsNullOrEmpty(defaultDir) && Directory.Exists(defaultDir))
-            {
-                var folder = await StorageProvider.TryGetFolderFromPathAsync(defaultDir);
-                if (folder != null)
-                {
-                    options.SuggestedStartLocation = folder;
-                }
-            }
-        }
-        catch
-        {
-            // If loading settings fails, just don't set a suggested location
-        }
-
-        var folders = await StorageProvider.OpenFolderPickerAsync(options);
-
-        if (folders.Count > 0)
-        {
-            var folderPath = folders[0].Path.LocalPath;
-            var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
-            var files = Directory.GetFiles(folderPath)
-                .Where(f => extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                .OrderBy(f => f)
-                .ToList();
-
-            // Add unique files
-            foreach (var file in files)
-            {
-                if (!_filePaths.Contains(file))
-                {
-                    _filePaths.Add(file);
-                }
-            }
-
-            UpdateFileList();
-        }
+        _filePaths.Clear();
+        _filePaths.AddRange(files);
+        UpdateFileList();
     }
 
     private async void OnSelectFiles(object? sender, RoutedEventArgs e)
@@ -126,21 +105,25 @@ public partial class BatchProcessDialog : Window
 
         if (listBox != null)
         {
-            listBox.ItemsSource = _filePaths.Select(Path.GetFileName).ToList();
-            // Select all by default
-            listBox.SelectAll();
+            // Create FileListItem objects with status
+            var items = _filePaths.Select(path => new FileListItem
+            {
+                FileName = Path.GetFileName(path),
+                IsProcessed = File.Exists(Path.ChangeExtension(path, ".json"))
+            }).ToList();
+            
+            listBox.ItemsSource = items;
+            // Don't select anything by default
         }
 
         if (fileCountText != null)
         {
-            fileCountText.Text = _filePaths.Count == 1 
-                ? "1 file selected" 
-                : $"{_filePaths.Count} files selected";
+            fileCountText.Text = "0 files selected";
         }
 
         if (runButton != null)
         {
-            runButton.IsEnabled = _filePaths.Count > 0;
+            runButton.IsEnabled = false;
         }
     }
 
@@ -174,7 +157,7 @@ public partial class BatchProcessDialog : Window
         }
 
         // Get selected indices and map back to file paths
-        var selectedFileNames = listBox.SelectedItems.Cast<string>().ToList();
+        var selectedFileNames = listBox.SelectedItems.Cast<FileListItem>().Select(item => item.FileName).ToList();
         var selectedFiles = _filePaths
             .Where(path => selectedFileNames.Contains(Path.GetFileName(path)))
             .ToList();

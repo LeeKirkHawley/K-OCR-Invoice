@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:K_OCRDesktop.ViewModels"
+        xmlns:converters="using:K_OCRDesktop.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1800" d:DesignHeight="800"
@@ -16,6 +17,10 @@
     <Design.DataContext>
         <vm:MainWindowViewModel/>
     </Design.DataContext>
+
+    <Window.Resources>
+        <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
+    </Window.Resources>
 
     <Window.Styles>
         <!-- Custom TextBox style for Validation tab - yellow background like image highlight -->
@@ -59,6 +64,8 @@
             <Grid.RowDefinitions>
                 <!-- Top content row fixed at 20px -->
                 <RowDefinition Height="20"/>
+                <!-- Current directory row -->
+                <RowDefinition Height="Auto"/>
                 <!-- Bottom panel fills remaining space -->
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
@@ -68,9 +75,21 @@
                        Text="{Binding FileCaption}"
                        HorizontalAlignment="Center" 
                        VerticalAlignment="Center"/>
+            
+            <!-- Current Directory Display -->
+            <Border Grid.Row="1"
+                    BorderBrush="LightGray"
+                    BorderThickness="0,0,0,1"
+                    Padding="10,5"
+                    Background="#F9F9F9">
+                <TextBlock FontSize="11">
+                    <Run Text="Current Directory: " FontWeight="SemiBold"/>
+                    <Run Text="{Binding CurrentDirectory}" />
+                </TextBlock>
+            </Border>
 
             <!-- Bottom panel: three panes with vertical splitters -->
-            <Grid Grid.Row="1">
+            <Grid Grid.Row="2">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200" MinWidth="150"/>
                     <ColumnDefinition Width="Auto"/>
@@ -105,9 +124,17 @@
                                 Background="White">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding}" 
-                                              TextWrapping="NoWrap"
-                                              ToolTip.Tip="{Binding}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <!-- Status indicator circle -->
+                                        <Ellipse Width="10" Height="10" 
+                                                VerticalAlignment="Center"
+                                                Fill="{Binding IsProcessed, Converter={StaticResource BoolToColorConverter}}"/>
+                                        <!-- File name -->
+                                        <TextBlock Text="{Binding FileName}" 
+                                                  TextWrapping="NoWrap"
+                                                  ToolTip.Tip="{Binding FileName}"
+                                                  VerticalAlignment="Center"/>
+                                    </StackPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
