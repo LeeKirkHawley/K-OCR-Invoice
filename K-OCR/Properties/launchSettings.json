@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "K-OCR": {
-      "commandName": "Project",
-      "nativeDebugging": false
-    }
-  }
-}
