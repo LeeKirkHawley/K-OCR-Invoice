@@ -727,13 +727,27 @@ public partial class MainWindow : Window
         if (availableHeight > 40)
             availableHeight -= 40;
         
-        // If the file is a PDF, convert it to PNG first
+        // If the file is a PDF, check if it has already been converted to PNG
+        // Do not automatically convert PDFs - user must use Batch Process
         if (System.IO.Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
-            filePath = await ConvertPdfToPngAsync(filePath);
-            if (string.IsNullOrEmpty(filePath))
+            var directory = System.IO.Path.GetDirectoryName(filePath);
+            var fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
+            var pngPath = System.IO.Path.Combine(directory!, $"{fileNameWithoutExt}.png");
+            
+            if (System.IO.File.Exists(pngPath))
             {
-                await ShowMessageAsync("Error", "Failed to convert PDF to image.");
+                // Use the already converted PNG
+                filePath = pngPath;
+            }
+            else
+            {
+                // PDF hasn't been processed yet - clear panels and show message
+                viewModel.OriginalImageSource = null;
+                viewModel.FileCaption = "This PDF has not been processed yet. Please use Batch Process to run OCR on this file.";
+                viewModel.SetOcrJson(string.Empty);
+                viewModel.DocumentFields.Clear();
+                viewModel.CurrentInvoice = null;
                 return;
             }
         }
@@ -767,36 +781,15 @@ public partial class MainWindow : Window
             }
         }
 
-        // Run OCR pipeline only if no valid cache exists
+        // Do not run OCR automatically - only load cached results if they exist
+        // User must use Batch Process to run OCR on files
         if (pipelineContext == null)
         {
-            try
-            {
-                var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipeLineSteps", "DefaultPipeline.json");
-                var config = PipelineConfigLoader.Load(configPath);
-                var executor = new PipelineExecutor(_invoiceService);
-                var context = new PipelineContext
-                {
-                    InputPath = filePath
-                };
-
-                pipelineContext = await executor.RunAsync(config, context);
-
-                // Save PipelineContext to JSON file for future use
-                json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
-                await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
-                
-                // Display JSON in right panel
-                viewModel.SetOcrJson(json);
-                
-                // Extract and display invoice data in validation tab
-                ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
-            }
-            catch (Exception ex)
-            {
-                // Handle error - show message to user
-                await ShowMessageAsync("Error", $"Error processing {filePath}:\n{ex.Message}");
-            }
+            // No cached results - clear the panels and show message
+            viewModel.FileCaption = "This file has not been processed yet. Please use Batch Process to run OCR on this file.";
+            viewModel.SetOcrJson(string.Empty);
+            viewModel.DocumentFields.Clear();
+            viewModel.CurrentInvoice = null;
         }
     }
 
