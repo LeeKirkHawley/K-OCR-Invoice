@@ -10,8 +10,11 @@ using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
+using Docnet.Core;
+using Docnet.Core.Models;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -38,10 +41,14 @@ public partial class MainWindow : Window
     private readonly IAnalysisService? _analysisService;
     private readonly IOCRService? _ocrService;
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     public MainWindow() : this(null, null, null, null, null)
     {
     }
     
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     public MainWindow(IFileService? fileService, IAnalysisService? analysisService, 
         IOCRService? ocrService, IAzureService? azureService, IInvoiceService? invoiceService)
     {
@@ -85,6 +92,8 @@ public partial class MainWindow : Window
         }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
         if (DataContext is MainWindowViewModel viewModel)
@@ -515,6 +524,158 @@ public partial class MainWindow : Window
         }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
+    private async Task<string?> ConvertPdfToPngAsync(string pdfPath)
+    {
+        try
+        {
+            // Validate the file exists and is readable
+            if (!System.IO.File.Exists(pdfPath))
+            {
+                await ShowMessageAsync("Error", "PDF file not found.");
+                return null;
+            }
+
+            // Check if it's actually a PDF by reading the header
+            using (var fs = System.IO.File.OpenRead(pdfPath))
+            {
+                var header = new byte[4];
+                if (fs.Read(header, 0, 4) < 4 || 
+                    header[0] != 0x25 || header[1] != 0x50 || header[2] != 0x44 || header[3] != 0x46) // %PDF
+                {
+                    await ShowMessageAsync("Error", "The selected file is not a valid PDF.");
+                    return null;
+                }
+            }
+
+            var directory = System.IO.Path.GetDirectoryName(pdfPath);
+            var fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(pdfPath);
+            
+            // Convert PDF pages to images using Docnet.Core
+            int pageCount;
+            try
+            {
+                using var docReader = DocLib.Instance.GetDocReader(pdfPath, new PageDimensions(1920, 1920));
+                pageCount = docReader.GetPageCount();
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("PDF Error", $"Unable to read PDF: {ex.Message}\n\nFile: {pdfPath}");
+                return null;
+            }
+            
+            if (pageCount == 0)
+                return null;
+            
+            // For single-page PDFs, create one PNG
+            if (pageCount == 1)
+            {
+                var outputPath = System.IO.Path.Combine(directory!, $"{fileNameWithoutExt}.png");
+                
+                // Check if PNG already exists
+                if (System.IO.File.Exists(outputPath))
+                    return outputPath;
+                
+                // Convert the page using Docnet.Core
+                try
+                {
+                    using var docReader = DocLib.Instance.GetDocReader(pdfPath, new PageDimensions(1920, 1920));
+                    using var pageReader = docReader.GetPageReader(0);
+                    var rawBytes = pageReader.GetImage();
+                    var width = pageReader.GetPageWidth();
+                    var height = pageReader.GetPageHeight();
+                    
+                    // Create Avalonia bitmap from raw bytes
+                    using var bitmap = new WriteableBitmap(
+                        new PixelSize(width, height), 
+                        new Vector(96, 96), 
+                        Avalonia.Platform.PixelFormat.Bgra8888, 
+                        Avalonia.Platform.AlphaFormat.Unpremul);
+                    
+                    using var lockedBitmap = bitmap.Lock();
+                    unsafe
+                    {
+                        var dest = (byte*)lockedBitmap.Address.ToPointer();
+                        fixed (byte* src = rawBytes)
+                        {
+                            Buffer.MemoryCopy(src, dest, lockedBitmap.RowBytes * height, rawBytes.Length);
+                        }
+                    }
+                    
+                    bitmap.Save(outputPath);
+                    return outputPath;
+                }
+                catch (Exception ex)
+                {
+                    await ShowMessageAsync("Conversion Error", $"Failed to convert page 1: {ex.Message}");
+                    return null;
+                }
+            }
+            else
+            {
+                // For multi-page PDFs, create multiple PNGs with page numbers
+                var outputPaths = new List<string>();
+                
+                using var docReader = DocLib.Instance.GetDocReader(pdfPath, new PageDimensions(1920, 1920));
+                
+                for (int page = 0; page < pageCount; page++)
+                {
+                    var outputPath = System.IO.Path.Combine(directory!, $"{fileNameWithoutExt}_page{page + 1}.png");
+                    
+                    // Skip if already exists
+                    if (!System.IO.File.Exists(outputPath))
+                    {
+                        try
+                        {
+                            using var pageReader = docReader.GetPageReader(page);
+                            var rawBytes = pageReader.GetImage();
+                            var width = pageReader.GetPageWidth();
+                            var height = pageReader.GetPageHeight();
+                            
+                            // Create Avalonia bitmap from raw bytes
+                            using var bitmap = new WriteableBitmap(
+                                new PixelSize(width, height), 
+                                new Vector(96, 96), 
+                                Avalonia.Platform.PixelFormat.Bgra8888, 
+                                Avalonia.Platform.AlphaFormat.Unpremul);
+                            
+                            using var lockedBitmap = bitmap.Lock();
+                            unsafe
+                            {
+                                var dest = (byte*)lockedBitmap.Address.ToPointer();
+                                fixed (byte* src = rawBytes)
+                                {
+                                    Buffer.MemoryCopy(src, dest, lockedBitmap.RowBytes * height, rawBytes.Length);
+                                }
+                            }
+                            
+                            bitmap.Save(outputPath);
+                        }
+                        catch (Exception ex)
+                        {
+                            await ShowMessageAsync("Conversion Error", $"Failed to convert page {page + 1}: {ex.Message}");
+                            // Continue with other pages
+                        }
+                    }
+                    
+                    if (System.IO.File.Exists(outputPath))
+                        outputPaths.Add(outputPath);
+                }
+                
+                // Return the first page
+                return outputPaths.FirstOrDefault();
+            }
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync("PDF Conversion Error", $"Failed to convert PDF: {ex.Message}");
+            return null;
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     private async Task OnFileSelectedAsync(string fileName)
     {
         if (string.IsNullOrEmpty(_currentFolderPath) || string.IsNullOrEmpty(fileName))
@@ -536,6 +697,17 @@ public partial class MainWindow : Window
         // Account for toolbar height (approximately 40px)
         if (availableHeight > 40)
             availableHeight -= 40;
+        
+        // If the file is a PDF, convert it to PNG first
+        if (System.IO.Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            filePath = await ConvertPdfToPngAsync(filePath);
+            if (string.IsNullOrEmpty(filePath))
+            {
+                await ShowMessageAsync("Error", "Failed to convert PDF to image.");
+                return;
+            }
+        }
         
         // Load and display the image
         viewModel.LoadImage(filePath, availableWidth, availableHeight);

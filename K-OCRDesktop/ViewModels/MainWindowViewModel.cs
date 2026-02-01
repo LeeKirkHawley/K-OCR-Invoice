@@ -150,7 +150,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         ImageFiles.Clear();
         
-        var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff" };
+        var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
         var files = System.IO.Directory.GetFiles(folderPath)
             .Where(f => extensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
             .Select(System.IO.Path.GetFileName)
