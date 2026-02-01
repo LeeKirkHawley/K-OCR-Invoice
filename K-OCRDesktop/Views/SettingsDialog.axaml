@@ -37,6 +37,9 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="10"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <TextBlock Grid.Row="0" Grid.Column="0"
@@ -53,6 +56,20 @@
                     Content="Browse..."
                     Click="OnBrowseDirectory"
                     Width="100"/>
+
+            <TextBlock Grid.Row="3" Grid.Column="0"
+                       Text="Max Concurrent Azure Requests:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,5"/>
+
+            <NumericUpDown Grid.Row="4" Grid.Column="0"
+                           Name="MaxConcurrentTextBox"
+                           Minimum="1"
+                           Maximum="10"
+                           Value="3"
+                           Increment="1"
+                           Width="200"
+                           HorizontalAlignment="Left"/>
         </Grid>
 
         <!-- Spacer -->

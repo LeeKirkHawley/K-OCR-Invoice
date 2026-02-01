@@ -110,11 +110,8 @@ public partial class MainWindow : Window
             // Handle file selection changes
             viewModel.PropertyChanged += (s, e) =>
             {
-                if (e.PropertyName == nameof(viewModel.SelectedImageFile) && viewModel.SelectedImageFile != null)
-                {
-                    _ = OnFileSelectedAsync(viewModel.SelectedImageFile);
-                }
-                else if (e.PropertyName == nameof(viewModel.CurrentFieldIndex))
+                // Removed automatic processing on file selection
+                if (e.PropertyName == nameof(viewModel.CurrentFieldIndex))
                 {
                     // Highlight the current field when index changes
                     HighlightCurrentField();
@@ -351,7 +348,7 @@ public partial class MainWindow : Window
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Open Image",
+            Title = "Open Image(s)",
             AllowMultiple = true,
             FileTypeFilter = new[]
             {
@@ -365,6 +362,13 @@ public partial class MainWindow : Window
 
         if (files.Count > 0 && DataContext is MainWindowViewModel viewModel)
         {
+            // If multiple files selected, process them as a batch
+            if (files.Count > 1)
+            {
+                await ProcessMultipleFilesAsync(files.Select(f => f.Path.LocalPath).ToList());
+                return;
+            }
+            
             _filesToProcess.Clear();
             
             // Get the ScrollViewer dimensions for initial zoom calculation
@@ -1579,6 +1583,156 @@ public partial class MainWindow : Window
             }
         };
         await messageWindow.ShowDialog(this);
+    }
+
+    private void OnFileListSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        var listBox = sender as ListBox;
+        var runButton = this.FindControl<Button>("RunButton");
+        
+        if (runButton != null && listBox != null)
+        {
+            // Enable Run button only if files are selected
+            runButton.IsEnabled = listBox.SelectedItems?.Count > 0;
+        }
+    }
+
+    private async void OnRunSelectedFiles(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_currentFolderPath))
+        {
+            await ShowMessageAsync("Error", "Please select a folder first.");
+            return;
+        }
+
+        var listBox = this.FindControl<ListBox>("FileListBox");
+        if (listBox == null || listBox.SelectedItems == null || listBox.SelectedItems.Count == 0)
+        {
+            await ShowMessageAsync("Error", "Please select one or more files to process.");
+            return;
+        }
+
+        // Get selected file names and build full paths
+        var selectedFiles = listBox.SelectedItems
+            .Cast<string>()
+            .Select(fileName => System.IO.Path.Combine(_currentFolderPath, fileName))
+            .ToList();
+
+        // Process the selected files
+        await ProcessMultipleFilesAsync(selectedFiles);
+    }
+
+    private async Task ProcessMultipleFilesAsync(List<string> filePaths)
+    {
+        if (_invoiceService == null || DataContext is not MainWindowViewModel viewModel)
+        {
+            await ShowMessageAsync("Error", "Invoice service not available.");
+            return;
+        }
+
+        // Get max concurrent requests from config
+        var maxConcurrent = 3;
+        if (_config != null && int.TryParse(_config["MaxConcurrentRequests"], out var parsedValue))
+        {
+            maxConcurrent = parsedValue;
+        }
+
+        // Create a progress window
+        var progressWindow = new Window
+        {
+            Title = "Processing Invoices",
+            Width = 500,
+            Height = 150,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+
+        var progressText = new TextBlock
+        {
+            Text = "Processing 0 of " + filePaths.Count,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Margin = new Thickness(20, 20, 20, 10)
+        };
+
+        var currentFileText = new TextBlock
+        {
+            Text = "",
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Margin = new Thickness(20, 10, 20, 20),
+            TextWrapping = TextWrapping.Wrap
+        };
+
+        progressWindow.Content = new StackPanel
+        {
+            Children = { progressText, currentFileText }
+        };
+
+        // Show progress window non-blocking
+        _ = progressWindow.ShowDialog(this);
+
+        try
+        {
+            // Create new invoice service with configured concurrency
+            var invoiceService = new InvoiceService(maxConcurrent);
+
+            // Process all files with progress updates
+            var progress = new Progress<(int completed, int total, string currentFile)>(p =>
+            {
+                progressText.Text = $"Processing {p.completed} of {p.total}";
+                currentFileText.Text = $"Current: {p.currentFile}";
+            });
+
+            var results = await invoiceService.ProcessInvoiceBatchAsync(filePaths, progress);
+
+            // Save results to JSON files
+            foreach (var (filePath, invoices) in results)
+            {
+                var jsonOutputPath = System.IO.Path.ChangeExtension(filePath, ".json");
+                var pipelineContext = new PipelineContext
+                {
+                    InputPath = filePath,
+                    Layout = invoices
+                };
+
+                var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
+            }
+
+            progressWindow.Close();
+
+            // Show completion message
+            await ShowMessageAsync("Success", $"Successfully processed {results.Count} invoice(s).");
+
+            // Load the first file
+            if (results.Count > 0 && filePaths.Count > 0)
+            {
+                var firstFile = filePaths[0];
+                var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
+                double availableWidth = imageScrollViewer?.Bounds.Width ?? 0;
+                double availableHeight = imageScrollViewer?.Bounds.Height ?? 0;
+                
+                if (availableHeight > 40)
+                    availableHeight -= 40;
+
+                viewModel.LoadImage(firstFile, availableWidth, availableHeight);
+
+                // Load the JSON
+                var jsonPath = System.IO.Path.ChangeExtension(firstFile, ".json");
+                if (System.IO.File.Exists(jsonPath))
+                {
+                    var json = await System.IO.File.ReadAllTextAsync(jsonPath);
+                    viewModel.SetOcrJson(json);
+
+                    var context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
+                    ExtractAndDisplayInvoiceData(context, viewModel);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            progressWindow.Close();
+            await ShowMessageAsync("Error", $"Error processing batch: {ex.Message}");
+        }
     }
 }
 

@@ -7,8 +7,11 @@ namespace K_OCR.Services
 {
     public class InvoiceService : IInvoiceService
     {
-        public InvoiceService()
+        private readonly SemaphoreSlim _semaphore;
+
+        public InvoiceService(int maxConcurrentRequests = 3)
         {
+            _semaphore = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
         }
 
         public async Task<List<InvoiceDto>> RunAzureInvoiceParse(string imagePath)
@@ -178,5 +181,39 @@ namespace K_OCR.Services
                 };
             }).ToList();
         }
-    }
+        public async Task<Dictionary<string, List<InvoiceDto>>> ProcessInvoiceBatchAsync(
+            IEnumerable<string> imagePaths,
+            IProgress<(int completed, int total, string currentFile)>? progress = null)
+        {
+            var results = new Dictionary<string, List<InvoiceDto>>();
+            var imagePathsList = imagePaths.ToList();
+            var total = imagePathsList.Count;
+            var completed = 0;
+
+            // Process files with concurrency control
+            var tasks = imagePathsList.Select(async imagePath =>
+            {
+                await _semaphore.WaitAsync();
+                try
+                {
+                    progress?.Report((completed, total, Path.GetFileName(imagePath)));
+                    var invoices = await RunAzureInvoiceParse(imagePath);
+                    
+                    lock (results)
+                    {
+                        results[imagePath] = invoices;
+                    }
+                    
+                    Interlocked.Increment(ref completed);
+                    progress?.Report((completed, total, Path.GetFileName(imagePath)));
+                }
+                finally
+                {
+                    _semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+            return results;
+        }    }
 }

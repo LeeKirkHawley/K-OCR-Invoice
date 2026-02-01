@@ -15,6 +15,7 @@ public partial class SettingsDialog : Window
     private readonly string _settingsPath;
     
     public string? DefaultStartDirectory { get; private set; }
+    public int MaxConcurrentRequests { get; private set; } = 3;
     public bool SettingsSaved { get; private set; }
 
     public SettingsDialog()
@@ -33,11 +34,18 @@ public partial class SettingsDialog : Window
                 var json = File.ReadAllText(_settingsPath);
                 var settings = JObject.Parse(json);
                 DefaultStartDirectory = settings["DefaultStartDirectory"]?.ToString() ?? string.Empty;
+                MaxConcurrentRequests = settings["MaxConcurrentRequests"]?.ToObject<int>() ?? 3;
                 
                 var directoryTextBox = this.FindControl<TextBox>("DirectoryTextBox");
                 if (directoryTextBox != null)
                 {
                     directoryTextBox.Text = DefaultStartDirectory;
+                }
+                
+                var maxConcurrentTextBox = this.FindControl<NumericUpDown>("MaxConcurrentTextBox");
+                if (maxConcurrentTextBox != null)
+                {
+                    maxConcurrentTextBox.Value = MaxConcurrentRequests;
                 }
             }
         }
@@ -94,6 +102,9 @@ public partial class SettingsDialog : Window
         {
             var directoryTextBox = this.FindControl<TextBox>("DirectoryTextBox");
             var newDirectory = directoryTextBox?.Text ?? string.Empty;
+            
+            var maxConcurrentTextBox = this.FindControl<NumericUpDown>("MaxConcurrentTextBox");
+            var maxConcurrent = maxConcurrentTextBox?.Value ?? 3;
 
             // Validate directory if not empty
             if (!string.IsNullOrEmpty(newDirectory) && !Directory.Exists(newDirectory))
@@ -116,11 +127,13 @@ public partial class SettingsDialog : Window
 
             // Update the default directory setting
             settings["DefaultStartDirectory"] = newDirectory;
+            settings["MaxConcurrentRequests"] = (int)maxConcurrent;
 
             // Write back to file with formatting
             File.WriteAllText(_settingsPath, settings.ToString(Formatting.Indented));
 
             DefaultStartDirectory = newDirectory;
+            MaxConcurrentRequests = (int)maxConcurrent;
             SettingsSaved = true;
             Close();
         }
