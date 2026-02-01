@@ -35,6 +35,8 @@
         <!-- Menu bar at top -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
+                <MenuItem Header="_Batch Process..." Click="OnBatchProcess"/>
+                <Separator/>
                 <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
             </MenuItem>
             <MenuItem Header="_Export">
@@ -85,7 +87,6 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         
@@ -96,21 +97,11 @@
                                 HorizontalAlignment="Stretch"
                                 Margin="0,0,0,5"/>
                         
-                        <!-- Run button -->
-                        <Button Grid.Row="1"
-                                Name="RunButton"
-                                Content="▶ RUN Selected"
-                                Click="OnRunSelectedFiles"
-                                HorizontalAlignment="Stretch"
-                                Margin="0,0,0,5"
-                                IsEnabled="False"/>
-                        
-                        <!-- File list with multi-select -->
-                        <ListBox Grid.Row="2"
+                        <!-- File list -->
+                        <ListBox Grid.Row="1"
                                 Name="FileListBox"
                                 ItemsSource="{Binding ImageFiles}"
-                                SelectionMode="Multiple"
-                                SelectionChanged="OnFileListSelectionChanged"
+                                SelectedItem="{Binding SelectedImageFile}"
                                 Background="White">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>

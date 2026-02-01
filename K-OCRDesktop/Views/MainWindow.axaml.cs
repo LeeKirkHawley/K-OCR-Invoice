@@ -110,8 +110,11 @@ public partial class MainWindow : Window
             // Handle file selection changes
             viewModel.PropertyChanged += (s, e) =>
             {
-                // Removed automatic processing on file selection
-                if (e.PropertyName == nameof(viewModel.CurrentFieldIndex))
+                if (e.PropertyName == nameof(viewModel.SelectedImageFile) && viewModel.SelectedImageFile != null)
+                {
+                    _ = OnFileSelectedAsync(viewModel.SelectedImageFile);
+                }
+                else if (e.PropertyName == nameof(viewModel.CurrentFieldIndex))
                 {
                     // Highlight the current field when index changes
                     HighlightCurrentField();
@@ -485,6 +488,21 @@ public partial class MainWindow : Window
         if (settingsDialog.SettingsSaved && DataContext is MainWindowViewModel viewModel)
         {
             LoadDefaultStartDirectory();
+        }
+    }
+
+    private async void OnBatchProcess(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var batchDialog = new BatchProcessDialog(_invoiceService, _config);
+        await batchDialog.ShowDialog(this);
+        
+        // If processing completed, reload the current folder to show new results
+        if (batchDialog.ProcessingCompleted && DataContext is MainWindowViewModel viewModel)
+        {
+            if (!string.IsNullOrEmpty(_currentFolderPath))
+            {
+                viewModel.LoadImageFilesFromFolder(_currentFolderPath);
+            }
         }
     }
 
@@ -1583,43 +1601,6 @@ public partial class MainWindow : Window
             }
         };
         await messageWindow.ShowDialog(this);
-    }
-
-    private void OnFileListSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        var listBox = sender as ListBox;
-        var runButton = this.FindControl<Button>("RunButton");
-        
-        if (runButton != null && listBox != null)
-        {
-            // Enable Run button only if files are selected
-            runButton.IsEnabled = listBox.SelectedItems?.Count > 0;
-        }
-    }
-
-    private async void OnRunSelectedFiles(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (string.IsNullOrEmpty(_currentFolderPath))
-        {
-            await ShowMessageAsync("Error", "Please select a folder first.");
-            return;
-        }
-
-        var listBox = this.FindControl<ListBox>("FileListBox");
-        if (listBox == null || listBox.SelectedItems == null || listBox.SelectedItems.Count == 0)
-        {
-            await ShowMessageAsync("Error", "Please select one or more files to process.");
-            return;
-        }
-
-        // Get selected file names and build full paths
-        var selectedFiles = listBox.SelectedItems
-            .Cast<string>()
-            .Select(fileName => System.IO.Path.Combine(_currentFolderPath, fileName))
-            .ToList();
-
-        // Process the selected files
-        await ProcessMultipleFilesAsync(selectedFiles);
     }
 
     private async Task ProcessMultipleFilesAsync(List<string> filePaths)

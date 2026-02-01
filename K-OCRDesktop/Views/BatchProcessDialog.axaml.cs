@@ -1,0 +1,318 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
+using K_OCR.Services;
+using K_OCRDesktop.PipeLineSteps;
+using Microsoft.Extensions.Configuration;
+
+namespace K_OCRDesktop.Views;
+
+public partial class BatchProcessDialog : Window
+{
+    private readonly List<string> _filePaths = new();
+    private readonly IInvoiceService? _invoiceService;
+    private readonly IConfiguration? _config;
+
+    public bool ProcessingCompleted { get; private set; }
+    public int FilesProcessed { get; private set; }
+
+    public BatchProcessDialog() : this(null, null)
+    {
+    }
+
+    public BatchProcessDialog(IInvoiceService? invoiceService, IConfiguration? config)
+    {
+        InitializeComponent();
+        _invoiceService = invoiceService;
+        _config = config;
+    }
+
+    private async void OnSelectFolder(object? sender, RoutedEventArgs e)
+    {
+        var options = new FolderPickerOpenOptions
+        {
+            Title = "Select Folder with Invoices",
+            AllowMultiple = false
+        };
+
+        // Set suggested start location from default directory in settings
+        try
+        {
+            var defaultDir = _config?["DefaultStartDirectory"];
+            if (!string.IsNullOrEmpty(defaultDir) && Directory.Exists(defaultDir))
+            {
+                var folder = await StorageProvider.TryGetFolderFromPathAsync(defaultDir);
+                if (folder != null)
+                {
+                    options.SuggestedStartLocation = folder;
+                }
+            }
+        }
+        catch
+        {
+            // If loading settings fails, just don't set a suggested location
+        }
+
+        var folders = await StorageProvider.OpenFolderPickerAsync(options);
+
+        if (folders.Count > 0)
+        {
+            var folderPath = folders[0].Path.LocalPath;
+            var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
+            var files = Directory.GetFiles(folderPath)
+                .Where(f => extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .OrderBy(f => f)
+                .ToList();
+
+            // Add unique files
+            foreach (var file in files)
+            {
+                if (!_filePaths.Contains(file))
+                {
+                    _filePaths.Add(file);
+                }
+            }
+
+            UpdateFileList();
+        }
+    }
+
+    private async void OnSelectFiles(object? sender, RoutedEventArgs e)
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select Invoice Images",
+            AllowMultiple = true,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Images")
+                {
+                    Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tif", "*.tiff", "*.pdf" }
+                },
+                FilePickerFileTypes.All
+            }
+        });
+
+        // Add unique files
+        foreach (var file in files)
+        {
+            var filePath = file.Path.LocalPath;
+            if (!_filePaths.Contains(filePath))
+            {
+                _filePaths.Add(filePath);
+            }
+        }
+
+        UpdateFileList();
+    }
+
+    private void OnClearAll(object? sender, RoutedEventArgs e)
+    {
+        _filePaths.Clear();
+        UpdateFileList();
+    }
+
+    private void UpdateFileList()
+    {
+        var listBox = this.FindControl<ListBox>("FileListBox");
+        var fileCountText = this.FindControl<TextBlock>("FileCountText");
+        var runButton = this.FindControl<Button>("RunButton");
+
+        if (listBox != null)
+        {
+            listBox.ItemsSource = _filePaths.Select(Path.GetFileName).ToList();
+            // Select all by default
+            listBox.SelectAll();
+        }
+
+        if (fileCountText != null)
+        {
+            fileCountText.Text = _filePaths.Count == 1 
+                ? "1 file selected" 
+                : $"{_filePaths.Count} files selected";
+        }
+
+        if (runButton != null)
+        {
+            runButton.IsEnabled = _filePaths.Count > 0;
+        }
+    }
+
+    private void OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        var listBox = sender as ListBox;
+        var fileCountText = this.FindControl<TextBlock>("FileCountText");
+        var runButton = this.FindControl<Button>("RunButton");
+
+        if (listBox != null && fileCountText != null)
+        {
+            var selectedCount = listBox.SelectedItems?.Count ?? 0;
+            fileCountText.Text = selectedCount == 1 
+                ? "1 file selected" 
+                : $"{selectedCount} files selected";
+        }
+
+        if (runButton != null && listBox != null)
+        {
+            runButton.IsEnabled = (listBox.SelectedItems?.Count ?? 0) > 0;
+        }
+    }
+
+    private async void OnRun(object? sender, RoutedEventArgs e)
+    {
+        var listBox = this.FindControl<ListBox>("FileListBox");
+        if (listBox == null || listBox.SelectedItems == null || listBox.SelectedItems.Count == 0)
+        {
+            await ShowMessageAsync("Error", "Please select one or more files to process.");
+            return;
+        }
+
+        // Get selected indices and map back to file paths
+        var selectedFileNames = listBox.SelectedItems.Cast<string>().ToList();
+        var selectedFiles = _filePaths
+            .Where(path => selectedFileNames.Contains(Path.GetFileName(path)))
+            .ToList();
+
+        if (selectedFiles.Count == 0)
+        {
+            await ShowMessageAsync("Error", "No files selected for processing.");
+            return;
+        }
+
+        // Process the files
+        await ProcessFilesAsync(selectedFiles);
+    }
+
+    private async Task ProcessFilesAsync(List<string> filePaths)
+    {
+        if (_invoiceService == null)
+        {
+            await ShowMessageAsync("Error", "Invoice service not available.");
+            return;
+        }
+
+        // Get max concurrent requests from config
+        var maxConcurrent = 3;
+        if (_config != null && int.TryParse(_config["MaxConcurrentRequests"], out var parsedValue))
+        {
+            maxConcurrent = parsedValue;
+        }
+
+        // Disable buttons during processing
+        var runButton = this.FindControl<Button>("RunButton");
+        if (runButton != null) runButton.IsEnabled = false;
+
+        // Create a progress window
+        var progressWindow = new Window
+        {
+            Title = "Processing Invoices",
+            Width = 500,
+            Height = 150,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+
+        var progressText = new TextBlock
+        {
+            Text = "Processing 0 of " + filePaths.Count,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Margin = new Thickness(20, 20, 20, 10)
+        };
+
+        var currentFileText = new TextBlock
+        {
+            Text = "",
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Margin = new Thickness(20, 10, 20, 20),
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap
+        };
+
+        progressWindow.Content = new StackPanel
+        {
+            Children = { progressText, currentFileText }
+        };
+
+        // Show progress window non-blocking
+        _ = progressWindow.ShowDialog(this);
+
+        try
+        {
+            // Create new invoice service with configured concurrency
+            var invoiceService = new InvoiceService(maxConcurrent);
+
+            // Process all files with progress updates
+            var progress = new Progress<(int completed, int total, string currentFile)>(p =>
+            {
+                progressText.Text = $"Processing {p.completed} of {p.total}";
+                currentFileText.Text = $"Current: {p.currentFile}";
+            });
+
+            var results = await invoiceService.ProcessInvoiceBatchAsync(filePaths, progress);
+
+            // Save results to JSON files
+            foreach (var (filePath, invoices) in results)
+            {
+                var jsonOutputPath = Path.ChangeExtension(filePath, ".json");
+                var pipelineContext = new PipelineContext
+                {
+                    InputPath = filePath,
+                    Layout = invoices
+                };
+
+                var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                await File.WriteAllTextAsync(jsonOutputPath, json);
+            }
+
+            progressWindow.Close();
+
+            // Update status
+            FilesProcessed = results.Count;
+            ProcessingCompleted = true;
+
+            // Show completion message
+            await ShowMessageAsync("Success", $"Successfully processed {results.Count} invoice(s).\n\nYou can now use the main window to validate the results.");
+
+            // Close this dialog
+            Close();
+        }
+        catch (Exception ex)
+        {
+            progressWindow.Close();
+            await ShowMessageAsync("Error", $"Error processing batch: {ex.Message}");
+            
+            // Re-enable button
+            if (runButton != null) runButton.IsEnabled = true;
+        }
+    }
+
+    private void OnCancel(object? sender, RoutedEventArgs e)
+    {
+        ProcessingCompleted = false;
+        Close();
+    }
+
+    private async Task ShowMessageAsync(string title, string message)
+    {
+        var messageWindow = new Window
+        {
+            Title = title,
+            Width = 400,
+            Height = 200,
+            Content = new TextBlock
+            {
+                Text = message,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                Padding = new Thickness(10)
+            }
+        };
+        await messageWindow.ShowDialog(this);
+    }
+}
