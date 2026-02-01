@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace K_OCRDesktop.PipeLineSteps
+namespace K_OCR.PipelineService
 {
     public class LayoutDetectionStep : IPipelineStep
     {

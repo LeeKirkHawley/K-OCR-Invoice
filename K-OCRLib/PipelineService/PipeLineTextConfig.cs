@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace K_OCRDesktop.PipeLineSteps
+namespace K_OCR.PipelineService
 {
     internal class PipeLineTextConfig
     {

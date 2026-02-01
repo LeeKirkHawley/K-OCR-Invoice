@@ -2,12 +2,56 @@
 using Azure.AI.DocumentIntelligence;
 using K_OCR.Models;
 using System.IO;
+using System.Text.Json;
 
 namespace K_OCR.Services
 {
     public class InvoiceService : IInvoiceService
     {
         private readonly SemaphoreSlim _semaphore;
+
+        // Field synonym mappings - add alternative names for standard fields
+        private static Dictionary<string, string[]>? _fieldSynonyms;
+        
+        private static Dictionary<string, string[]> FieldSynonyms
+        {
+            get
+            {
+                if (_fieldSynonyms == null)
+                {
+                    // Try to load from config file first
+                    try
+                    {
+                        var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipelineService", "FieldSynonyms.json");
+                        if (File.Exists(configPath))
+                        {
+                            var json = File.ReadAllText(configPath);
+                            _fieldSynonyms = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
+                        }
+                    }
+                    catch
+                    {
+                        // Fall back to hardcoded defaults
+                    }
+                    
+                    // If loading failed, use hardcoded defaults
+                    _fieldSynonyms ??= new Dictionary<string, string[]>
+                    {
+                        { "Total", new[] { "TotalDue", "TOTAL Due", "AmountDue", "Amount Due", "Total Amount", "Balance Due", "Grand Total" } },
+                        { "Subtotal", new[] { "SubTotal", "Sub-Total", "Sub Total", "Net Amount", "Amount Before Tax" } },
+                        { "TotalTax", new[] { "Tax", "Tax Amount", "Sales Tax", "VAT", "GST", "Total Tax Amount" } },
+                        { "InvoiceId", new[] { "Invoice Number", "Invoice #", "Invoice No", "Invoice No.", "Bill No", "Reference" } },
+                        { "InvoiceDate", new[] { "Date", "Invoice Date", "Bill Date", "Date Issued" } },
+                        { "DueDate", new[] { "Due Date", "Payment Due", "Date Due", "Payable By" } },
+                        { "VendorName", new[] { "Vendor", "Seller", "From", "Bill From", "Company Name", "Billed By" } },
+                        { "CustomerName", new[] { "Customer", "Buyer", "To", "Bill To", "Billed To", "Client" } },
+                        { "PurchaseOrder", new[] { "PO", "PO Number", "P.O.", "Purchase Order Number", "Order #" } },
+                        { "Shipping", new[] { "Shipping Cost", "Delivery Fee", "Freight", "Shipping & Handling" } }
+                    };
+                }
+                return _fieldSynonyms;
+            }
+        }
 
         public InvoiceService(int maxConcurrentRequests = 3)
         {
@@ -48,6 +92,30 @@ namespace K_OCR.Services
             {
                 var fieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>();
                 
+                // Helper to search for a field by standard name or synonyms
+                string? TryGetFieldName(string standardName)
+                {
+                    // First try the standard name
+                    if (doc.Fields.ContainsKey(standardName))
+                        return standardName;
+                    
+                    // Try synonyms
+                    if (FieldSynonyms.TryGetValue(standardName, out var synonyms))
+                    {
+                        foreach (var synonym in synonyms)
+                        {
+                            // Try exact match (case-insensitive)
+                            var matchingKey = doc.Fields.Keys.FirstOrDefault(k => 
+                                string.Equals(k, synonym, StringComparison.OrdinalIgnoreCase));
+                            
+                            if (matchingKey != null)
+                                return matchingKey;
+                        }
+                    }
+                    
+                    return null;
+                }
+                
                 // Helper to extract bounding boxes from a field
                 List<BoundingBoxDto> GetBoundingBoxes(string fieldName)
                 {
@@ -72,10 +140,11 @@ namespace K_OCR.Services
                 
                 string GetString(string name)
                 {
-                    if (doc.Fields.TryGetValue(name, out var f))
+                    var actualFieldName = TryGetFieldName(name);
+                    if (actualFieldName != null && doc.Fields.TryGetValue(actualFieldName, out var f))
                     {
-                        // Store bounding boxes for this field
-                        var boxes = GetBoundingBoxes(name);
+                        // Store bounding boxes for this field using the standard name
+                        var boxes = GetBoundingBoxes(actualFieldName);
                         if (boxes.Count > 0)
                             fieldBoundingBoxes[name] = boxes;
                         
@@ -87,10 +156,11 @@ namespace K_OCR.Services
 
                 decimal? GetDecimal(string name)
                 {
-                    if (doc.Fields.TryGetValue(name, out var field))
+                    var actualFieldName = TryGetFieldName(name);
+                    if (actualFieldName != null && doc.Fields.TryGetValue(actualFieldName, out var field))
                     {
-                        // Store bounding boxes for this field
-                        var boxes = GetBoundingBoxes(name);
+                        // Store bounding boxes for this field using the standard name
+                        var boxes = GetBoundingBoxes(actualFieldName);
                         if (boxes.Count > 0)
                             fieldBoundingBoxes[name] = boxes;
                         

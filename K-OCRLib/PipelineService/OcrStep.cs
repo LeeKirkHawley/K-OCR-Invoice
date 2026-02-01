@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace K_OCRDesktop.PipeLineSteps
+namespace K_OCR.PipelineService
 {
     public class OcrStep : IPipelineStep
     {

@@ -8,8 +8,8 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using K_OCR.Services;
+using K_OCR.PipelineService;
 using K_OCRDesktop.Models;
-using K_OCRDesktop.PipeLineSteps;
 using Microsoft.Extensions.Configuration;
 
 namespace K_OCRDesktop.Views;

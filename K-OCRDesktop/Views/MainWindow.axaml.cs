@@ -20,8 +20,8 @@ using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using K_OCR.Models;
 using K_OCR.Services;
+using K_OCR.PipelineService;
 using K_OCRDesktop.ViewModels;
-using K_OCRDesktop.PipeLineSteps;
 using Microsoft.Extensions.Configuration;
 
 namespace K_OCRDesktop.Views;
@@ -420,7 +420,7 @@ public partial class MainWindow : Window
                 {
                     try
                     {
-                        var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipeLineSteps", "DefaultPipeline.json");
+                        var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipelineService", "DefaultPipeline.json");
                         var config = PipelineConfigLoader.Load(configPath);
                         var executor = new PipelineExecutor(_invoiceService);
                         var context = new PipelineContext

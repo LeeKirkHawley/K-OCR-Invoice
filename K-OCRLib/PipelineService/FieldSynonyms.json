@@ -1,0 +1,76 @@
+{
+  "Total": [
+    "InvoiceTotal",
+    "TotalDue",
+    "TOTAL Due",
+    "AmountDue",
+    "Amount Due",
+    "Total Amount",
+    "Balance Due",
+    "Grand Total"
+  ],
+  "Subtotal": [
+    "SubTotal",
+    "Sub-Total",
+    "Sub Total",
+    "Net Amount",
+    "Amount Before Tax"
+  ],
+  "TotalTax": [
+    "Tax",
+    "Tax Amount",
+    "Sales Tax",
+    "VAT",
+    "GST",
+    "Total Tax Amount"
+  ],
+  "InvoiceId": [
+    "Invoice Number",
+    "Invoice #",
+    "Invoice No",
+    "Invoice No.",
+    "Bill No",
+    "Reference"
+  ],
+  "InvoiceDate": [
+    "Date",
+    "Invoice Date",
+    "Bill Date",
+    "Date Issued"
+  ],
+  "DueDate": [
+    "Due Date",
+    "Payment Due",
+    "Date Due",
+    "Payable By"
+  ],
+  "VendorName": [
+    "Vendor",
+    "Seller",
+    "From",
+    "Bill From",
+    "Company Name",
+    "Billed By"
+  ],
+  "CustomerName": [
+    "Customer",
+    "Buyer",
+    "To",
+    "Bill To",
+    "Billed To",
+    "Client"
+  ],
+  "PurchaseOrder": [
+    "PO",
+    "PO Number",
+    "P.O.",
+    "Purchase Order Number",
+    "Order #"
+  ],
+  "Shipping": [
+    "Shipping Cost",
+    "Delivery Fee",
+    "Freight",
+    "Shipping & Handling"
+  ]
+}

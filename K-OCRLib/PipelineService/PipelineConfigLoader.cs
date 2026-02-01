@@ -6,9 +6,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static K_OCRDesktop.PipeLineSteps.PipeLineTextConfig;
+using static K_OCR.PipelineService.PipeLineTextConfig;
 
-namespace K_OCRDesktop.PipeLineSteps
+namespace K_OCR.PipelineService
 {
     public class UserPipelineConfig
     {
