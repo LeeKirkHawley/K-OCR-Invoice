@@ -88,7 +88,9 @@ public partial class MainWindow : Window
                     System.IO.Directory.Exists(settings.DefaultStartDirectory) &&
                     DataContext is MainWindowViewModel viewModel)
                 {
-                    viewModel.LoadImageFilesFromFolder(settings.DefaultStartDirectory);
+                    // Set the current directory but don't load files
+                    // User must click "Select Folder" to see files
+                    viewModel.CurrentDirectory = settings.DefaultStartDirectory;
                 }
             }
         }
@@ -148,6 +150,12 @@ public partial class MainWindow : Window
         {
             imageScrollViewer.PointerWheelChanged += OnImageMouseWheel;
         }
+        
+        // Auto-show folder picker dialog on startup
+        Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+        {
+            await SelectFolderAsync();
+        }, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     private void OnImageMouseWheel(object? sender, PointerWheelEventArgs e)
