@@ -1075,12 +1075,6 @@ public partial class MainWindow : Window
             if (invoiceDto.Total.HasValue)
                 AddField(viewModel, "Total", "Total", invoiceDto.Total.Value.ToString("C"), "Currency", invoiceDto.Total);
             
-            // Add line items as a list field
-            if (invoiceDto.Items != null && invoiceDto.Items.Count > 0)
-            {
-                AddField(viewModel, "Items", "Line Items", $"{invoiceDto.Items.Count} items", "List", invoiceDto.Items);
-            }
-            
             // Reset navigation and highlight first field
             viewModel.ResetFieldNavigation();
             

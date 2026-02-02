@@ -58,6 +58,109 @@ namespace K_OCR.Services
             _semaphore = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
         }
 
+        // Helper method to find Total value in raw OCR when Azure doesn't extract it
+        private static (decimal? value, List<BoundingBoxDto> boxes) FindTotalInRawOcr(
+            List<(string text, List<float> polygon, int pageNumber)> allWords)
+        {
+            // Total-related keywords to search for
+            var totalKeywords = new[] { "total", "amount", "due", "balance", "payable", "owing" };
+            
+            // Find all words that might be Total labels
+            var labelIndices = new List<int>();
+            for (int i = 0; i < allWords.Count; i++)
+            {
+                var wordLower = allWords[i].text.ToLowerInvariant().Trim();
+                // Remove common punctuation
+                wordLower = wordLower.TrimEnd(':', '.', ',');
+                
+                if (totalKeywords.Contains(wordLower))
+                {
+                    labelIndices.Add(i);
+                }
+            }
+            
+            // For each potential Total label, search for the nearest currency value to the right
+            foreach (var labelIdx in labelIndices)
+            {
+                var label = allWords[labelIdx];
+                var labelY = GetCenterY(label.polygon);
+                var labelX = GetRightX(label.polygon);
+                
+                // Search for currency values within reasonable distance
+                // Horizontal: up to 500 pixels to the right
+                // Vertical: within 50 pixels (same line or very close)
+                decimal? bestValue = null;
+                List<float>? bestPolygon = null;
+                int? bestPageNumber = null;
+                double bestDistance = double.MaxValue;
+                
+                for (int i = 0; i < allWords.Count; i++)
+                {
+                    if (i == labelIdx) continue;
+                    
+                    var word = allWords[i];
+                    var wordY = GetCenterY(word.polygon);
+                    var wordX = GetLeftX(word.polygon);
+                    
+                    // Check if word is on same horizontal line (within tolerance)
+                    if (Math.Abs(wordY - labelY) > 50) continue;
+                    
+                    // Check if word is to the right of label
+                    var horizontalDist = wordX - labelX;
+                    if (horizontalDist < 0 || horizontalDist > 500) continue;
+                    
+                    // Try to parse as currency
+                    var cleaned = word.text.Replace("$", "").Replace(",", "").Replace(" ", "").Trim();
+                    if (decimal.TryParse(cleaned, out var value))
+                    {
+                        // Prefer the closest value
+                        var distance = Math.Sqrt(horizontalDist * horizontalDist + Math.Pow(wordY - labelY, 2));
+                        if (distance < bestDistance)
+                        {
+                            bestDistance = distance;
+                            bestValue = value;
+                            bestPolygon = word.polygon;
+                            bestPageNumber = word.pageNumber;
+                        }
+                    }
+                }
+                
+                // If we found a value for this label, return it
+                if (bestValue.HasValue && bestPolygon != null && bestPageNumber.HasValue)
+                {
+                    var boxes = new List<BoundingBoxDto>
+                    {
+                        new BoundingBoxDto
+                        {
+                            Points = bestPolygon,
+                            PageNumber = bestPageNumber.Value
+                        }
+                    };
+                    return (bestValue, boxes);
+                }
+            }
+            
+            return (null, new List<BoundingBoxDto>());
+        }
+        
+        private static float GetCenterY(List<float> polygon)
+        {
+            if (polygon.Count < 2) return 0;
+            return (polygon[1] + polygon[3] + polygon[5] + polygon[7]) / 4;
+        }
+        
+        private static float GetLeftX(List<float> polygon)
+        {
+            if (polygon.Count < 2) return 0;
+            return Math.Min(Math.Min(polygon[0], polygon[2]), Math.Min(polygon[4], polygon[6]));
+        }
+        
+        private static float GetRightX(List<float> polygon)
+        {
+            if (polygon.Count < 2) return 0;
+            return Math.Max(Math.Max(polygon[0], polygon[2]), Math.Max(polygon[4], polygon[6]));
+        }
+
         public async Task<List<InvoiceDto>> RunAzureInvoiceParse(string imagePath)
         {
             string endpoint = "https://parsedocimage.cognitiveservices.azure.com/";
@@ -91,6 +194,25 @@ namespace K_OCR.Services
             return result.Documents.Select(doc =>
             {
                 var fieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>();
+                
+                // Extract all words with their positions for fallback total search
+                var allWords = new List<(string text, List<float> polygon, int pageNumber)>();
+                if (result.Pages != null)
+                {
+                    foreach (var page in result.Pages)
+                    {
+                        if (page.Words != null)
+                        {
+                            foreach (var word in page.Words)
+                            {
+                                if (word.Polygon != null && word.Polygon.Count > 0)
+                                {
+                                    allWords.Add((word.Content, word.Polygon.ToList(), page.PageNumber));
+                                }
+                            }
+                        }
+                    }
+                }
                 
                 // Helper to search for a field by standard name or synonyms
                 string? TryGetFieldName(string standardName)
@@ -168,6 +290,19 @@ namespace K_OCR.Services
                         if (field.ValueDouble is double d) return (decimal)d;
                         if (field.ValueInt64 is long l) return l;
                     }
+                    
+                    // Fallback for Total field if not found by Azure
+                    if (name == "Total" && allWords.Count > 0)
+                    {
+                        var (totalValue, totalBoxes) = FindTotalInRawOcr(allWords);
+                        if (totalValue.HasValue)
+                        {
+                            if (totalBoxes.Count > 0)
+                                fieldBoundingBoxes["Total"] = totalBoxes;
+                            return totalValue;
+                        }
+                    }
+                    
                     return null;
                 }
 
