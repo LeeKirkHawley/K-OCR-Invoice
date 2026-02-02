@@ -9,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using K_OCR.Services;
 using K_OCR.PipelineService;
+using K_OCR.Models;
 using K_OCRDesktop.Models;
 using Microsoft.Extensions.Configuration;
 

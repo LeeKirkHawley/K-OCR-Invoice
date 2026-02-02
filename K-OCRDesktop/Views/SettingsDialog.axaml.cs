@@ -5,14 +5,15 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using K_OCR.Configuration;
+using K_OCR.Services;
 
 namespace K_OCRDesktop.Views;
 
 public partial class SettingsDialog : Window
 {
-    private readonly string _settingsPath;
+    private readonly IConfigurationService _configService;
+    private AppSettings _currentSettings;
     
     public string? DefaultStartDirectory { get; private set; }
     public int MaxConcurrentRequests { get; private set; } = 3;
@@ -21,32 +22,29 @@ public partial class SettingsDialog : Window
     public SettingsDialog()
     {
         InitializeComponent();
-        _settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
-        LoadSettings();
+        _configService = new ConfigurationService();
+        _currentSettings = new AppSettings();
+        _ = LoadSettingsAsync(); // Fire and forget
     }
 
-    private void LoadSettings()
+    private async Task LoadSettingsAsync()
     {
         try
         {
-            if (File.Exists(_settingsPath))
+            _currentSettings = await _configService.LoadSettingsAsync();
+            DefaultStartDirectory = _currentSettings.DefaultStartDirectory ?? string.Empty;
+            MaxConcurrentRequests = _currentSettings.MaxConcurrentRequests;
+            
+            var directoryTextBox = this.FindControl<TextBox>("DirectoryTextBox");
+            if (directoryTextBox != null)
             {
-                var json = File.ReadAllText(_settingsPath);
-                var settings = JObject.Parse(json);
-                DefaultStartDirectory = settings["DefaultStartDirectory"]?.ToString() ?? string.Empty;
-                MaxConcurrentRequests = settings["MaxConcurrentRequests"]?.ToObject<int>() ?? 3;
-                
-                var directoryTextBox = this.FindControl<TextBox>("DirectoryTextBox");
-                if (directoryTextBox != null)
-                {
-                    directoryTextBox.Text = DefaultStartDirectory;
-                }
-                
-                var maxConcurrentTextBox = this.FindControl<NumericUpDown>("MaxConcurrentTextBox");
-                if (maxConcurrentTextBox != null)
-                {
-                    maxConcurrentTextBox.Value = MaxConcurrentRequests;
-                }
+                directoryTextBox.Text = DefaultStartDirectory;
+            }
+            
+            var maxConcurrentTextBox = this.FindControl<NumericUpDown>("MaxConcurrentTextBox");
+            if (maxConcurrentTextBox != null)
+            {
+                maxConcurrentTextBox.Value = MaxConcurrentRequests;
             }
         }
         catch (Exception ex)
@@ -96,7 +94,7 @@ public partial class SettingsDialog : Window
         }
     }
 
-    private void OnSave(object? sender, RoutedEventArgs e)
+    private async void OnSave(object? sender, RoutedEventArgs e)
     {
         try
         {
@@ -113,24 +111,12 @@ public partial class SettingsDialog : Window
                 return;
             }
 
-            // Read existing settings
-            JObject settings;
-            if (File.Exists(_settingsPath))
-            {
-                var json = File.ReadAllText(_settingsPath);
-                settings = JObject.Parse(json);
-            }
-            else
-            {
-                settings = new JObject();
-            }
+            // Update settings
+            _currentSettings.DefaultStartDirectory = newDirectory;
+            _currentSettings.MaxConcurrentRequests = (int)maxConcurrent;
 
-            // Update the default directory setting
-            settings["DefaultStartDirectory"] = newDirectory;
-            settings["MaxConcurrentRequests"] = (int)maxConcurrent;
-
-            // Write back to file with formatting
-            File.WriteAllText(_settingsPath, settings.ToString(Formatting.Indented));
+            // Save settings using service
+            await _configService.SaveSettingsAsync(_currentSettings);
 
             DefaultStartDirectory = newDirectory;
             MaxConcurrentRequests = (int)maxConcurrent;

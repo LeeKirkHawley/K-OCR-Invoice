@@ -195,6 +195,16 @@ namespace K_OCR.Services
             {
                 var fieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>();
                 
+                // Get page dimensions from the first page (Azure provides dimensions in inches)
+                double pageWidth = 8.5;  // Default letter size
+                double pageHeight = 11.0;
+                if (result.Pages != null && result.Pages.Count > 0)
+                {
+                    var firstPage = result.Pages[0];
+                    if (firstPage.Width.HasValue) pageWidth = firstPage.Width.Value;
+                    if (firstPage.Height.HasValue) pageHeight = firstPage.Height.Value;
+                }
+                
                 // Extract all words with their positions for fallback total search
                 var allWords = new List<(string text, List<float> polygon, int pageNumber)>();
                 if (result.Pages != null)
@@ -382,7 +392,9 @@ namespace K_OCR.Services
                     Shipping = GetDecimal("Shipping"),
                     Total = GetDecimal("Total"),
                     Items = items,
-                    FieldBoundingBoxes = fieldBoundingBoxes
+                    FieldBoundingBoxes = fieldBoundingBoxes,
+                    OriginalPageWidth = pageWidth,
+                    OriginalPageHeight = pageHeight
                 };
             }).ToList();
         }

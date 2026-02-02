@@ -138,7 +138,7 @@ namespace K_OCR.Services
 
         private static void ExtractFieldWithPolygon(AnalyzedDocument document, string fieldKey)
         {
-            if (document.Fields?.TryGetValue(fieldKey, out DocumentField field) == true)
+            if (document.Fields?.TryGetValue(fieldKey, out Azure.AI.DocumentIntelligence.DocumentField field) == true)
             {
                 string value = field.Content
                     ?? field.ValueString

@@ -36,30 +36,35 @@ public partial class MainWindow : Window
     private readonly IConfiguration? _config;
     private readonly IFileService? _fileService;
     private readonly IInvoiceService? _invoiceService;
+    private readonly IInvoiceProcessingService? _invoiceProcessingService;
+    private readonly IConfigurationService? _configurationService;
     private readonly IAzureService? _azureService;
     private readonly IAnalysisService? _analysisService;
     private readonly IOCRService? _ocrService;
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    public MainWindow() : this(null, null, null, null, null)
+    public MainWindow() : this(null, null, null, null, null, null, null)
     {
     }
     
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     public MainWindow(IFileService? fileService, IAnalysisService? analysisService, 
-        IOCRService? ocrService, IAzureService? azureService, IInvoiceService? invoiceService)
+        IOCRService? ocrService, IAzureService? azureService, IInvoiceService? invoiceService,
+        IInvoiceProcessingService? invoiceProcessingService, IConfigurationService? configurationService)
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
         KeyDown += OnKeyDown;
 
-        _fileService = fileService;
+        _fileService = fileService ?? new FileService();
         _analysisService = analysisService;
         _ocrService = ocrService;
         _azureService = azureService;
-        _invoiceService = invoiceService;
+        _invoiceService = invoiceService ?? new InvoiceService();
+        _invoiceProcessingService = invoiceProcessingService ?? new InvoiceProcessingService(_fileService, _invoiceService);
+        _configurationService = configurationService ?? new ConfigurationService();
 
         // Load configuration
         var basePath = AppDomain.CurrentDomain.BaseDirectory;
@@ -72,16 +77,19 @@ public partial class MainWindow : Window
         LoadDefaultStartDirectory();
     }
 
-    private void LoadDefaultStartDirectory()
+    private async void LoadDefaultStartDirectory()
     {
         try
         {
-            var defaultDirectory = _config?["DefaultStartDirectory"];
-            if (!string.IsNullOrEmpty(defaultDirectory) && 
-                System.IO.Directory.Exists(defaultDirectory) &&
-                DataContext is MainWindowViewModel viewModel)
+            if (_configurationService != null)
             {
-                viewModel.LoadImageFilesFromFolder(defaultDirectory);
+                var settings = await _configurationService.LoadSettingsAsync();
+                if (!string.IsNullOrEmpty(settings.DefaultStartDirectory) && 
+                    System.IO.Directory.Exists(settings.DefaultStartDirectory) &&
+                    DataContext is MainWindowViewModel viewModel)
+                {
+                    viewModel.LoadImageFilesFromFolder(settings.DefaultStartDirectory);
+                }
             }
         }
         catch
@@ -179,13 +187,13 @@ public partial class MainWindow : Window
         var position = e.GetPosition(displayImage);
 
         // Find the field whose bounding box contains this point (using LINQ - no explicit loops)
-        // Both click position and bounding boxes are in original image space, so compare directly
+        // Scale bounding boxes from inches to pixels to match click coordinates
         var clickedField = viewModel.DocumentFields
             .Where(field => field.BoundingBoxes != null && field.BoundingBoxes.Any())
             .FirstOrDefault(field => field.BoundingBoxes!.Any(box => 
                 box.Points != null && 
                 box.Points.Count >= 8 && 
-                IsPointInPolygon((float)position.X, (float)position.Y, box.Points)));
+                IsPointInPolygon((float)position.X, (float)position.Y, ScaleBoundingBoxToPixels(box.Points))));
 
         if (clickedField != null)
         {
@@ -216,7 +224,7 @@ public partial class MainWindow : Window
                 .FirstOrDefault(item => item.BoundingBoxes!.Any(box =>
                     box.Points != null &&
                     box.Points.Count >= 8 &&
-                    IsPointInPolygon((float)position.X, (float)position.Y, box.Points)));
+                    IsPointInPolygon((float)position.X, (float)position.Y, ScaleBoundingBoxToPixels(box.Points))));
 
             if (clickedLineItem != null)
             {
@@ -230,6 +238,43 @@ public partial class MainWindow : Window
                 FocusLineItemTextBox(clickedLineItem);
             }
         }
+    }
+
+    private List<float> ScaleBoundingBoxToPixels(List<float> inchPoints)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+            return inchPoints;
+
+        // Get original page dimensions from the invoice (Azure coordinates are in inches)
+        double originalPageWidth = viewModel.CurrentInvoice?.OriginalPageWidth ?? 0;
+        double originalPageHeight = viewModel.CurrentInvoice?.OriginalPageHeight ?? 0;
+        
+        // If page dimensions are 0 (old cached JSON without dimensions), use defaults
+        if (originalPageWidth <= 0 || originalPageHeight <= 0)
+        {
+            originalPageWidth = 8.5;
+            originalPageHeight = 11.0;
+        }
+        
+        // Get displayed canvas dimensions (in pixels)
+        double canvasWidth = viewModel.CanvasWidth;
+        double canvasHeight = viewModel.CanvasHeight;
+        
+        // Calculate scale factors
+        double scaleX = canvasWidth / originalPageWidth;
+        double scaleY = canvasHeight / originalPageHeight;
+        
+        // Scale all points from inches to pixels
+        var pixelPoints = new List<float>();
+        for (int i = 0; i < inchPoints.Count; i++)
+        {
+            if (i % 2 == 0)
+                pixelPoints.Add((float)(inchPoints[i] * scaleX)); // x coordinate
+            else
+                pixelPoints.Add((float)(inchPoints[i] * scaleY)); // y coordinate
+        }
+        
+        return pixelPoints;
     }
 
     private bool IsPointInPolygon(float x, float y, List<float> points)
@@ -268,7 +313,7 @@ public partial class MainWindow : Window
         validationScrollViewer.Offset = new Vector(0, Math.Max(0, targetOffset - 50));
     }
 
-    private void FocusFieldTextBox(K_OCRDesktop.Models.DocumentField field)
+    private void FocusFieldTextBox(K_OCR.Models.DocumentField field)
     {
         // Find the validation scroll viewer
         var validationScrollViewer = this.FindControl<ScrollViewer>("ValidationScrollViewer");
@@ -392,54 +437,58 @@ public partial class MainWindow : Window
                     _currentIndex = 0;
                 }
 
-                // Check if cached JSON exists
-                var jsonOutputPath = System.IO.Path.ChangeExtension(filePath, ".json");
-                PipelineContext? pipelineContext = null;
-                string json;
-
-                if (System.IO.File.Exists(jsonOutputPath))
+                // Use InvoiceProcessingService to process the file
+                if (_invoiceProcessingService != null)
                 {
-                    // Load from cached JSON
                     try
                     {
-                        json = await System.IO.File.ReadAllTextAsync(jsonOutputPath);
-                        pipelineContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
+                        var result = await _invoiceProcessingService.ProcessFileAsync(filePath, useCache: true);
                         
-                        // Display cached JSON in right panel
-                        viewModel.SetOcrJson(json);
-                    }
-                    catch
-                    {
-                        // If cached JSON is invalid, we'll run the pipeline
-                        pipelineContext = null;
-                    }
-                }
-
-                // Run OCR pipeline only if no valid cache exists
-                if (pipelineContext == null)
-                {
-                    try
-                    {
-                        var configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipelineService", "DefaultPipeline.json");
-                        var config = PipelineConfigLoader.Load(configPath);
-                        var executor = new PipelineExecutor(_invoiceService);
-                        var context = new PipelineContext
+                        if (result.IsSuccess && result.Context != null)
                         {
-                            InputPath = filePath
-                        };
-
-                        pipelineContext = await executor.RunAsync(config, context);
-
-                        // Save PipelineContext to JSON file for future use
-                        json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
-                        await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
-                        
-                        // Display JSON in right panel
-                        viewModel.SetOcrJson(json);
+                            // Display JSON in right panel
+                            viewModel.SetOcrJson(result.Json);
+                            
+                            // Process the PipelineContext
+                            var pipelineContext = result.Context;
+                            
+                            // Create an OCRFile for display
+                            var ocrFile = new OCRFile
+                            {
+                                filePath = filePath,
+                                ocrText = pipelineContext.Text ?? string.Empty,
+                                LineBlocks = new List<OcrBlock>(),
+                                TableBlocks = new List<OcrBlock>()
+                            };
+                            
+                            _filesToProcess.Add(ocrFile);
+                            
+                            // Extract and display invoice data
+                            ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
+                        }
+                        else if (result.Error != null)
+                        {
+                            // Handle error
+                            var errorWindow = new Window
+                            {
+                                Title = "Error",
+                                Width = 400,
+                                Height = 200,
+                                Content = new TextBlock
+                                {
+                                    Text = $"Error processing {filePath}:\n{result.Error.Message}",
+                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                                    TextWrapping = TextWrapping.Wrap,
+                                    Padding = new Thickness(10)
+                                }
+                            };
+                            await errorWindow.ShowDialog(this);
+                        }
                     }
                     catch (Exception ex)
                     {
-                        // Handle error - show message to user
+                        // Handle error
                         var errorWindow = new Window
                         {
                             Title = "Error",
@@ -447,7 +496,7 @@ public partial class MainWindow : Window
                             Height = 200,
                             Content = new TextBlock
                             {
-                                Text = $"Error processing {filePath}:\n{ex.Message}\n\nStack: {ex.StackTrace}",
+                                Text = $"Error processing {filePath}:\n{ex.Message}",
                                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
                                 TextWrapping = TextWrapping.Wrap,
@@ -455,23 +504,7 @@ public partial class MainWindow : Window
                             }
                         };
                         await errorWindow.ShowDialog(this);
-                        continue; // Skip to next file
                     }
-                }
-
-                // Process the PipelineContext (whether from cache or fresh)
-                if (pipelineContext != null)
-                {
-                    // Create an OCRFile for display
-                    var ocrFile = new OCRFile
-                    {
-                        filePath = filePath,
-                        ocrText = pipelineContext.Text ?? string.Empty,
-                        LineBlocks = new List<OcrBlock>(),
-                        TableBlocks = new List<OcrBlock>()
-                    };
-                    
-                    _filesToProcess.Add(ocrFile);
                 }
             }
         }
@@ -727,6 +760,9 @@ public partial class MainWindow : Window
         if (availableHeight > 40)
             availableHeight -= 40;
         
+        // Store the original file path for JSON lookup
+        var originalFilePath = filePath;
+        
         // If the file is a PDF, check if it has already been converted to PNG
         // Do not automatically convert PDFs - user must use Batch Process
         if (System.IO.Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
@@ -737,7 +773,7 @@ public partial class MainWindow : Window
             
             if (System.IO.File.Exists(pngPath))
             {
-                // Use the already converted PNG
+                // Use the already converted PNG for display
                 filePath = pngPath;
             }
             else
@@ -755,8 +791,8 @@ public partial class MainWindow : Window
         // Load and display the image
         viewModel.LoadImage(filePath, availableWidth, availableHeight);
 
-        // Check if cached JSON exists
-        var jsonOutputPath = System.IO.Path.ChangeExtension(filePath, ".json");
+        // Check if cached JSON exists - use original file path for JSON lookup
+        var jsonOutputPath = System.IO.Path.ChangeExtension(originalFilePath, ".json");
         PipelineContext? pipelineContext = null;
         string json;
 
@@ -1230,7 +1266,7 @@ public partial class MainWindow : Window
             boundingBoxes = boxes;
         }
         
-        viewModel.DocumentFields.Add(new K_OCRDesktop.Models.DocumentField
+        viewModel.DocumentFields.Add(new K_OCR.Models.DocumentField
         {
             Name = name,
             DisplayName = displayName,
@@ -1243,7 +1279,7 @@ public partial class MainWindow : Window
 
     private void OnFieldClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (sender is Button button && button.DataContext is K_OCRDesktop.Models.DocumentField field && DataContext is MainWindowViewModel viewModel)
+        if (sender is Button button && button.DataContext is K_OCR.Models.DocumentField field && DataContext is MainWindowViewModel viewModel)
         {
             // Update current field index to the clicked field
             var index = viewModel.DocumentFields.IndexOf(field);
@@ -1263,7 +1299,7 @@ public partial class MainWindow : Window
     private void OnFieldGotFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         Avalonia.Controls.Control? control = sender as Avalonia.Controls.Control;
-        K_OCRDesktop.Models.DocumentField? field = control?.DataContext as K_OCRDesktop.Models.DocumentField;
+        K_OCR.Models.DocumentField? field = control?.DataContext as K_OCR.Models.DocumentField;
         
         if (field != null && DataContext is MainWindowViewModel viewModel)
         {
@@ -1479,6 +1515,35 @@ public partial class MainWindow : Window
 
         _highlightCanvas.Children.Clear();
 
+        var viewModel = DataContext as MainWindowViewModel;
+        if (viewModel == null) return;
+
+        // Get original page dimensions from the invoice (Azure coordinates are in inches)
+        double originalPageWidth = viewModel.CurrentInvoice?.OriginalPageWidth ?? 0;
+        double originalPageHeight = viewModel.CurrentInvoice?.OriginalPageHeight ?? 0;
+        
+        // If page dimensions are 0 (old cached JSON without dimensions), use defaults
+        if (originalPageWidth <= 0 || originalPageHeight <= 0)
+        {
+            // Use standard letter size as default (8.5 x 11 inches)
+            originalPageWidth = 8.5;
+            originalPageHeight = 11.0;
+        }
+        
+        // Get displayed canvas dimensions (in pixels)
+        double canvasWidth = viewModel.CanvasWidth;
+        double canvasHeight = viewModel.CanvasHeight;
+        
+        // Calculate scale factors to convert from Azure's inch-based coordinates to pixel coordinates
+        double scaleX = canvasWidth / originalPageWidth;
+        double scaleY = canvasHeight / originalPageHeight;
+        
+        Console.WriteLine($"[DEBUG] Canvas Size: {canvasWidth} x {canvasHeight} pixels");
+        Console.WriteLine($"[DEBUG] Original Page Size: {originalPageWidth} x {originalPageHeight} inches");
+        Console.WriteLine($"[DEBUG] Scale Factors: {scaleX:F2}x, {scaleY:F2}y");
+        Console.WriteLine($"[DEBUG] Image Zoom: {viewModel.ImageZoom}");
+        Console.WriteLine($"[DEBUG] Highlighting {boundingBoxes.Count} bounding boxes");
+
         // Track the bounds of all highlights to calculate the center
         double minX = double.MaxValue, minY = double.MaxValue;
         double maxX = double.MinValue, maxY = double.MinValue;
@@ -1487,6 +1552,13 @@ public partial class MainWindow : Window
         {
             if (box.Points == null || box.Points.Count < 8)
                 continue;
+
+            // Debug: Log first box's coordinates before and after scaling
+            if (box == boundingBoxes.First())
+            {
+                Console.WriteLine($"[DEBUG] First box Points (inches): [{string.Join(", ", box.Points)}]");
+                Console.WriteLine($"[DEBUG] First box Points (pixels): [{string.Join(", ", box.Points.Select((p, i) => i % 2 == 0 ? p * scaleX : p * scaleY))}]");
+            }
 
             var polygon = new Avalonia.Controls.Shapes.Polygon
             {
@@ -1500,8 +1572,9 @@ public partial class MainWindow : Window
             {
                 if (i + 1 < box.Points.Count)
                 {
-                    double x = box.Points[i];
-                    double y = box.Points[i + 1];
+                    // Azure coordinates are in inches, convert to pixels
+                    double x = box.Points[i] * scaleX;
+                    double y = box.Points[i + 1] * scaleY;
                     points.Add(new Avalonia.Point(x, y));
                     
                     // Track bounds

@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using K_OCR.PipelineService;
 
 namespace K_OCR.Services
 {
@@ -22,6 +23,42 @@ namespace K_OCR.Services
             }
             return File.ReadAllText(jsonFilePath);
         }
-
+        
+        public string GetJsonFilePath(string imagePath)
+        {
+            return Path.ChangeExtension(imagePath, ".json");
+        }
+        
+        public async Task<PipelineContext?> LoadCachedContextAsync(string imagePath)
+        {
+            var jsonPath = GetJsonFilePath(imagePath);
+            
+            if (!File.Exists(jsonPath))
+            {
+                return null;
+            }
+            
+            try
+            {
+                var json = await File.ReadAllTextAsync(jsonPath);
+                return Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+        
+        public async Task SaveContextAsync(string imagePath, PipelineContext context)
+        {
+            var jsonPath = GetJsonFilePath(imagePath);
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
+            await File.WriteAllTextAsync(jsonPath, json);
+        }
+        
+        public bool HasCachedJson(string imagePath)
+        {
+            return File.Exists(GetJsonFilePath(imagePath));
+        }
     }
 }

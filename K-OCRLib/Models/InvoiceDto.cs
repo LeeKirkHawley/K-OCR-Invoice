@@ -31,5 +31,9 @@ namespace K_OCR.Models
         
         // Bounding boxes for each field
         public Dictionary<string, List<BoundingBoxDto>> FieldBoundingBoxes { get; init; } = new();
+        
+        // Original page dimensions from Azure OCR (in inches)
+        public double OriginalPageWidth { get; init; }
+        public double OriginalPageHeight { get; init; }
     }
 }
