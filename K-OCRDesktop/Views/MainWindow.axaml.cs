@@ -254,15 +254,8 @@ public partial class MainWindow : Window
             return inchPoints;
 
         // Get original page dimensions from the invoice (Azure coordinates are in inches)
-        double originalPageWidth = viewModel.CurrentInvoice?.OriginalPageWidth ?? 0;
-        double originalPageHeight = viewModel.CurrentInvoice?.OriginalPageHeight ?? 0;
-        
-        // If page dimensions are 0 (old cached JSON without dimensions), use defaults
-        if (originalPageWidth <= 0 || originalPageHeight <= 0)
-        {
-            originalPageWidth = 8.5;
-            originalPageHeight = 11.0;
-        }
+        double originalPageWidth = viewModel.CurrentInvoice?.OriginalPageWidth ?? 8.5;
+        double originalPageHeight = viewModel.CurrentInvoice?.OriginalPageHeight ?? 11.0;
         
         // Get displayed canvas dimensions (in pixels)
         double canvasWidth = viewModel.CanvasWidth;
@@ -1328,6 +1321,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnFieldTextBoxKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+            return;
+
+        // Handle Tab and Shift+Tab to navigate between fields with wrap-around
+        if (e.Key == Key.Tab)
+        {
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            {
+                viewModel.NavigateToPreviousField();
+            }
+            else
+            {
+                viewModel.NavigateToNextField();
+            }
+            
+            // Find and focus the TextBox for the new current field
+            var currentField = viewModel.GetCurrentField();
+            if (currentField != null)
+            {
+                FocusFieldTextBox(currentField);
+            }
+            
+            e.Handled = true;
+        }
+    }
+
     private void OnLineItemClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (sender is Button button && button.DataContext is InvoiceItemDto lineItem)
@@ -1527,16 +1548,8 @@ public partial class MainWindow : Window
         if (viewModel == null) return;
 
         // Get original page dimensions from the invoice (Azure coordinates are in inches)
-        double originalPageWidth = viewModel.CurrentInvoice?.OriginalPageWidth ?? 0;
-        double originalPageHeight = viewModel.CurrentInvoice?.OriginalPageHeight ?? 0;
-        
-        // If page dimensions are 0 (old cached JSON without dimensions), use defaults
-        if (originalPageWidth <= 0 || originalPageHeight <= 0)
-        {
-            // Use standard letter size as default (8.5 x 11 inches)
-            originalPageWidth = 8.5;
-            originalPageHeight = 11.0;
-        }
+        double originalPageWidth = viewModel.CurrentInvoice?.OriginalPageWidth ?? 8.5;
+        double originalPageHeight = viewModel.CurrentInvoice?.OriginalPageHeight ?? 11.0;
         
         // Get displayed canvas dimensions (in pixels)
         double canvasWidth = viewModel.CanvasWidth;
@@ -1545,12 +1558,6 @@ public partial class MainWindow : Window
         // Calculate scale factors to convert from Azure's inch-based coordinates to pixel coordinates
         double scaleX = canvasWidth / originalPageWidth;
         double scaleY = canvasHeight / originalPageHeight;
-        
-        Console.WriteLine($"[DEBUG] Canvas Size: {canvasWidth} x {canvasHeight} pixels");
-        Console.WriteLine($"[DEBUG] Original Page Size: {originalPageWidth} x {originalPageHeight} inches");
-        Console.WriteLine($"[DEBUG] Scale Factors: {scaleX:F2}x, {scaleY:F2}y");
-        Console.WriteLine($"[DEBUG] Image Zoom: {viewModel.ImageZoom}");
-        Console.WriteLine($"[DEBUG] Highlighting {boundingBoxes.Count} bounding boxes");
 
         // Track the bounds of all highlights to calculate the center
         double minX = double.MaxValue, minY = double.MaxValue;
@@ -1560,13 +1567,6 @@ public partial class MainWindow : Window
         {
             if (box.Points == null || box.Points.Count < 8)
                 continue;
-
-            // Debug: Log first box's coordinates before and after scaling
-            if (box == boundingBoxes.First())
-            {
-                Console.WriteLine($"[DEBUG] First box Points (inches): [{string.Join(", ", box.Points)}]");
-                Console.WriteLine($"[DEBUG] First box Points (pixels): [{string.Join(", ", box.Points.Select((p, i) => i % 2 == 0 ? p * scaleX : p * scaleY))}]");
-            }
 
             var polygon = new Avalonia.Controls.Shapes.Polygon
             {

@@ -265,6 +265,7 @@
                                                                 Padding="8,5"
                                                                 Margin="5,0"
                                                                 GotFocus="OnFieldGotFocus"
+                                                                KeyDown="OnFieldTextBoxKeyDown"
                                                                 Tag="{Binding Name}"/>
                                                     </Grid>
                                                 </DataTemplate>
@@ -289,7 +290,8 @@
                                                                         <TextBlock Text="Description:" FontWeight="SemiBold" FontSize="11"/>
                                                                         <TextBox Text="{Binding Description, Mode=TwoWay}" 
                                                                                 TextWrapping="Wrap"
-                                                                                GotFocus="OnLineItemGotFocus"/>
+                                                                                GotFocus="OnLineItemGotFocus"
+                                                                                KeyDown="OnFieldTextBoxKeyDown"/>
                                                                     </StackPanel>
                                                                     
                                                                     <!-- Quantity -->
@@ -297,7 +299,8 @@
                                                                         <TextBlock Text="Quantity:" FontWeight="SemiBold" FontSize="11"/>
                                                                         <TextBox Text="{Binding Quantity, Mode=TwoWay}" 
                                                                                 TextAlignment="Right"
-                                                                                GotFocus="OnLineItemGotFocus"/>
+                                                                                GotFocus="OnLineItemGotFocus"
+                                                                                KeyDown="OnFieldTextBoxKeyDown"/>
                                                                     </StackPanel>
                                                                     
                                                                     <!-- Unit Price -->
@@ -305,7 +308,8 @@
                                                                         <TextBlock Text="Unit Price:" FontWeight="SemiBold" FontSize="11"/>
                                                                         <TextBox Text="{Binding UnitPrice, Mode=TwoWay, StringFormat={}{0:F2}}" 
                                                                                 TextAlignment="Right"
-                                                                                GotFocus="OnLineItemGotFocus"/>
+                                                                                GotFocus="OnLineItemGotFocus"
+                                                                                KeyDown="OnFieldTextBoxKeyDown"/>
                                                                     </StackPanel>
                                                                     
                                                                     <!-- Line Total (Read-only) -->

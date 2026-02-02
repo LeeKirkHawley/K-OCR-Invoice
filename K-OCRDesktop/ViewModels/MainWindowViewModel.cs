@@ -108,17 +108,11 @@ public partial class MainWindowViewModel : ViewModelBase
                 CanvasWidth = OriginalImageSource.PixelSize.Width;
                 CanvasHeight = OriginalImageSource.PixelSize.Height;
 
-                // Only calculate initial fit-to-panel zoom if still at default zoom (1.0)
-                // This preserves user's zoom level when loading similar images
-                if (Math.Abs(ImageZoom - 1.0) < 0.01) // Check if zoom is still at default
+                // Calculate initial zoom to fit width horizontally (allow vertical scrolling)
+                if (availableWidth > 0 && availableHeight > 0)
                 {
-                    if (availableWidth > 0 && availableHeight > 0)
-                    {
-                        double scaleX = availableWidth / OriginalImageSource.PixelSize.Width;
-                        double scaleY = availableHeight / OriginalImageSource.PixelSize.Height;
-                        ImageZoom = Math.Min(scaleX, scaleY); // Use the smaller scale to fit both dimensions
-                    }
-                    // If zoom has been adjusted, keep the current zoom level
+                    double scaleX = availableWidth / OriginalImageSource.PixelSize.Width;
+                    ImageZoom = scaleX;
                 }
             }
         }
@@ -157,13 +151,31 @@ public partial class MainWindowViewModel : ViewModelBase
         var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
         var files = System.IO.Directory.GetFiles(folderPath)
             .Where(f => extensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
-            .OrderBy(f => f);
+            .OrderBy(f => f)
+            .ToList();
+        
+        // Build a set of PDF filenames (without extension) to check against
+        var pdfBaseNames = new HashSet<string>(
+            files.Where(f => System.IO.Path.GetExtension(f).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+                 .Select(f => System.IO.Path.GetFileNameWithoutExtension(f)),
+            StringComparer.OrdinalIgnoreCase);
         
         foreach (var filePath in files)
         {
             var fileName = System.IO.Path.GetFileName(filePath);
-            if (fileName != null)
+            var extension = System.IO.Path.GetExtension(filePath);
+            var baseNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
+            
+            if (fileName != null && baseNameWithoutExt != null)
             {
+                // Skip PNG files that have a corresponding PDF
+                // (these are generated PNG files from PDF conversion)
+                if (extension.Equals(".png", StringComparison.OrdinalIgnoreCase) && 
+                    pdfBaseNames.Contains(baseNameWithoutExt))
+                {
+                    continue; // Don't show the PNG, the PDF will be shown instead
+                }
+                
                 var jsonPath = System.IO.Path.ChangeExtension(filePath, ".json");
                 var isProcessed = System.IO.File.Exists(jsonPath);
                 
