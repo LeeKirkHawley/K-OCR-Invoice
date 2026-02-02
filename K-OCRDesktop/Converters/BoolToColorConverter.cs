@@ -11,12 +11,12 @@ public class BoolToColorConverter : IValueConverter
     {
         if (value is bool isProcessed)
         {
-            // Red if processed, Gray if not
+            // Green if processed, transparent/background if not
             return isProcessed 
-                ? new SolidColorBrush(Color.FromRgb(220, 38, 38)) 
-                : new SolidColorBrush(Color.FromRgb(156, 163, 175));
+                ? new SolidColorBrush(Color.FromRgb(34, 197, 94)) 
+                : new SolidColorBrush(Colors.Transparent);
         }
-        return new SolidColorBrush(Color.FromRgb(156, 163, 175)); // Default gray
+        return new SolidColorBrush(Colors.Transparent); // Default transparent
     }
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

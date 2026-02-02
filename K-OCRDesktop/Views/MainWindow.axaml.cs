@@ -1442,6 +1442,12 @@ public partial class MainWindow : Window
             
             // Update the OCR JSON text display
             viewModel.SetOcrJson(json);
+            
+            // Mark the current file as validated
+            if (viewModel.SelectedImageFile != null)
+            {
+                viewModel.SelectedImageFile.IsValidated = true;
+            }
 
             await ShowMessageBox("Success", $"Validated data saved successfully to:\n{jsonOutputPath}");
         }

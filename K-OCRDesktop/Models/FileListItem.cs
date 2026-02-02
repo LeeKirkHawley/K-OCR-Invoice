@@ -1,7 +1,57 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
 namespace K_OCRDesktop.Models;
 
-public class FileListItem
+public class FileListItem : INotifyPropertyChanged
 {
-    public string FileName { get; set; } = string.Empty;
-    public bool IsProcessed { get; set; }
+    private string _fileName = string.Empty;
+    private bool _isProcessed;
+    private bool _isValidated;
+
+    public string FileName
+    {
+        get => _fileName;
+        set
+        {
+            if (_fileName != value)
+            {
+                _fileName = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsProcessed
+    {
+        get => _isProcessed;
+        set
+        {
+            if (_isProcessed != value)
+            {
+                _isProcessed = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsValidated
+    {
+        get => _isValidated;
+        set
+        {
+            if (_isValidated != value)
+            {
+                _isValidated = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
 }

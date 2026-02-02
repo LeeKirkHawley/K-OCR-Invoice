@@ -178,11 +178,15 @@ public partial class MainWindowViewModel : ViewModelBase
                 
                 var jsonPath = System.IO.Path.ChangeExtension(filePath, ".json");
                 var isProcessed = System.IO.File.Exists(jsonPath);
+                // For now, we'll consider a file validated if it's processed
+                // In the future, we could track this separately
+                var isValidated = false; // Will be set to true when user saves validated data
                 
                 ImageFiles.Add(new FileListItem
                 {
                     FileName = fileName,
-                    IsProcessed = isProcessed
+                    IsProcessed = isProcessed,
+                    IsValidated = isValidated
                 });
             }
         }

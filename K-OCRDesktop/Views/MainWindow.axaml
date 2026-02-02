@@ -125,10 +125,22 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <!-- Status indicator circle -->
+                                        <!-- Status indicator circle (Processed) -->
                                         <Ellipse Width="10" Height="10" 
                                                 VerticalAlignment="Center"
-                                                Fill="{Binding IsProcessed, Converter={StaticResource BoolToColorConverter}}"/>
+                                                Fill="{Binding IsProcessed, Converter={StaticResource BoolToColorConverter}}">
+                                            <ToolTip.Tip>
+                                                <TextBlock Text="Processed" IsVisible="{Binding IsProcessed}"/>
+                                            </ToolTip.Tip>
+                                        </Ellipse>
+                                        <!-- Status indicator circle (Validated) -->
+                                        <Ellipse Width="10" Height="10" 
+                                                VerticalAlignment="Center"
+                                                Fill="{Binding IsValidated, Converter={StaticResource BoolToColorConverter}}">
+                                            <ToolTip.Tip>
+                                                <TextBlock Text="Validated" IsVisible="{Binding IsValidated}"/>
+                                            </ToolTip.Tip>
+                                        </Ellipse>
                                         <!-- File name -->
                                         <TextBlock Text="{Binding FileName}" 
                                                   TextWrapping="NoWrap"
