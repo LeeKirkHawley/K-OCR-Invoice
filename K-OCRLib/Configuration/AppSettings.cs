@@ -7,4 +7,7 @@ public class AppSettings
     public string? OCRProvider { get; set; }
     public string? DefaultStartDirectory { get; set; }
     public int MaxConcurrentRequests { get; set; } = 3;
+    public double? SplitterLeftPaneWidth { get; set; }
+    public double? SplitterCenterPaneWidth { get; set; }
+    public double? SplitterRightPaneWidth { get; set; }
 }

@@ -89,7 +89,7 @@
             </Border>
 
             <!-- Bottom panel: three panes with vertical splitters -->
-            <Grid Grid.Row="2">
+            <Grid Grid.Row="2" x:Name="MainContentGrid">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="200" MinWidth="150"/>
                     <ColumnDefinition Width="Auto"/>

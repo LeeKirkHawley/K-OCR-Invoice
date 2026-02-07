@@ -174,6 +174,7 @@ namespace K_OCR.Services
             Azure.Operation<AnalyzeResult>? operation = null;
             try
             {
+                System.Console.WriteLine($"[Azure OCR] Sending file: {Path.GetFileName(imagePath)}");
                 operation = await client.AnalyzeDocumentAsync(WaitUntil.Completed, options);
             }
             catch (Exception ex)
@@ -183,6 +184,8 @@ namespace K_OCR.Services
             }
 
             AnalyzeResult result = operation!.Value;
+
+            System.Console.WriteLine($"[Azure OCR] Received result: {Path.GetFileName(imagePath)}");
 
             List<InvoiceDto> invoices = AnalyzeOCR(result);
 

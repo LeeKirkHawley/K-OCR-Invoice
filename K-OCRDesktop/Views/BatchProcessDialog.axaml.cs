@@ -6,7 +6,10 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Docnet.Core;
+using Docnet.Core.Models;
 using K_OCR.Services;
 using K_OCR.PipelineService;
 using K_OCR.Models;
@@ -229,6 +232,34 @@ public partial class BatchProcessDialog : Window
         {
             // Create new invoice service with configured concurrency
             var invoiceService = new InvoiceService(maxConcurrent);
+            
+            // Convert PDFs to PNG first
+            var processablePaths = new List<string>();
+            var pdfMappings = new Dictionary<string, string>(); // PNG path -> original PDF path
+            
+            for (int i = 0; i < filePaths.Count; i++)
+            {
+                var filePath = filePaths[i];
+                var fileName = Path.GetFileName(filePath);
+                
+                progressText.Text = $"Preparing {i + 1} of {filePaths.Count}";
+                currentFileText.Text = $"Current: {fileName}";
+                
+                if (Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Convert PDF to PNG
+                    var pngPath = await ConvertPdfToPngAsync(filePath);
+                    if (pngPath != null)
+                    {
+                        processablePaths.Add(pngPath);
+                        pdfMappings[pngPath] = filePath; // Remember the original PDF path
+                    }
+                }
+                else
+                {
+                    processablePaths.Add(filePath);
+                }
+            }
 
             // Process all files with progress updates
             var progress = new Progress<(int completed, int total, string currentFile)>(p =>
@@ -237,20 +268,24 @@ public partial class BatchProcessDialog : Window
                 currentFileText.Text = $"Current: {p.currentFile}";
             });
 
-            var results = await invoiceService.ProcessInvoiceBatchAsync(filePaths, progress);
+            var results = await invoiceService.ProcessInvoiceBatchAsync(processablePaths, progress);
 
             // Save results to JSON files
             foreach (var (filePath, invoices) in results)
             {
-                var jsonOutputPath = Path.ChangeExtension(filePath, ".json");
+                // Use original PDF path if this was converted from PDF
+                var originalPath = pdfMappings.TryGetValue(filePath, out var pdfPath) ? pdfPath : filePath;
+                
+                var jsonOutputPath = Path.ChangeExtension(originalPath, ".json");
                 var pipelineContext = new PipelineContext
                 {
-                    InputPath = filePath,
+                    InputPath = originalPath,
                     Layout = invoices
                 };
 
                 var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
                 await File.WriteAllTextAsync(jsonOutputPath, json);
+                System.Console.WriteLine($"[Batch JSON] Wrote file: {Path.GetFileName(jsonOutputPath)}");
             }
 
             progressWindow.Close();
@@ -272,6 +307,64 @@ public partial class BatchProcessDialog : Window
             
             // Re-enable button
             if (runButton != null) runButton.IsEnabled = true;
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
+    private async Task<string?> ConvertPdfToPngAsync(string pdfPath)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(pdfPath);
+            var fileNameWithoutExt = Path.GetFileNameWithoutExtension(pdfPath);
+            var outputPath = Path.Combine(directory!, $"{fileNameWithoutExt}.png");
+            
+            // Check if PNG already exists
+            if (File.Exists(outputPath))
+                return outputPath;
+            
+            // Convert PDF to PNG using Docnet.Core
+            try
+            {
+                using var docReader = DocLib.Instance.GetDocReader(pdfPath, new PageDimensions(1920, 1920));
+                
+                // Only convert first page for batch processing
+                using var pageReader = docReader.GetPageReader(0);
+                var rawBytes = pageReader.GetImage();
+                var width = pageReader.GetPageWidth();
+                var height = pageReader.GetPageHeight();
+                
+                // Create Avalonia bitmap from raw bytes
+                using var bitmap = new WriteableBitmap(
+                    new PixelSize(width, height), 
+                    new Vector(96, 96), 
+                    Avalonia.Platform.PixelFormat.Bgra8888, 
+                    Avalonia.Platform.AlphaFormat.Unpremul);
+                
+                using var lockedBitmap = bitmap.Lock();
+                unsafe
+                {
+                    var dest = (byte*)lockedBitmap.Address.ToPointer();
+                    fixed (byte* src = rawBytes)
+                    {
+                        Buffer.MemoryCopy(src, dest, lockedBitmap.RowBytes * height, rawBytes.Length);
+                    }
+                }
+                
+                bitmap.Save(outputPath);
+                return outputPath;
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"[PDF Conversion] Error converting {Path.GetFileName(pdfPath)}: {ex.Message}");
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"[PDF Conversion] Failed for {Path.GetFileName(pdfPath)}: {ex.Message}");
+            return null;
         }
     }
 

@@ -28,6 +28,7 @@ namespace K_OCRDesktop.Views;
 
 public partial class MainWindow : Window
 {
+    private Grid? _mainContentGrid;
     private Canvas? _ocrCanvas;
     private Canvas? _highlightCanvas;
     private ScrollViewer? _imageScrollViewer;
@@ -57,6 +58,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
         KeyDown += OnKeyDown;
+        Closing += OnClosing;
 
         _fileService = fileService ?? new FileService();
         _analysisService = analysisService;
@@ -134,6 +136,8 @@ public partial class MainWindow : Window
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+
+        _mainContentGrid = this.FindControl<Grid>("MainContentGrid");
         
         // Find the canvas in the visual tree - will need to be given a name in AXAML
         // _ocrCanvas = this.FindControl<Canvas>("OcrCanvas");
@@ -149,13 +153,30 @@ public partial class MainWindow : Window
         if (imageScrollViewer != null)
         {
             imageScrollViewer.PointerWheelChanged += OnImageMouseWheel;
+            // Keep available width updated when the scroll viewer resizes
+            imageScrollViewer.SizeChanged += (s, args) =>
+            {
+                if (DataContext is MainWindowViewModel vm)
+                {
+                    // Use Viewport width which is the actual visible area minus scrollbars
+                    var viewportWidth = imageScrollViewer.Viewport.Width;
+                    if (viewportWidth > 0)
+                        vm.UpdateAvailableWidth(viewportWidth);
+                }
+            };
         }
         
         // Auto-show folder picker dialog on startup
         Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
         {
+            await LoadSplitterPositionsAsync();
             await SelectFolderAsync();
         }, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
+    }
+
+    private void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        SaveSplitterPositions();
     }
 
     private void OnImageMouseWheel(object? sender, PointerWheelEventArgs e)
@@ -172,6 +193,80 @@ public partial class MainWindow : Window
                 viewModel.ZoomOut();
             }
             e.Handled = true;
+        }
+    }
+
+    private async Task LoadSplitterPositionsAsync()
+    {
+        if (_mainContentGrid == null || _configurationService == null)
+            return;
+
+        try
+        {
+            var settings = await _configurationService.LoadSettingsAsync();
+
+            if (settings.SplitterLeftPaneWidth.HasValue && settings.SplitterLeftPaneWidth.Value > 0)
+            {
+                _mainContentGrid.ColumnDefinitions[0].Width =
+                    new GridLength(settings.SplitterLeftPaneWidth.Value, GridUnitType.Pixel);
+            }
+
+            if (settings.SplitterCenterPaneWidth.HasValue && settings.SplitterCenterPaneWidth.Value > 0)
+            {
+                _mainContentGrid.ColumnDefinitions[2].Width =
+                    new GridLength(settings.SplitterCenterPaneWidth.Value, GridUnitType.Pixel);
+            }
+
+            if (settings.SplitterRightPaneWidth.HasValue && settings.SplitterRightPaneWidth.Value > 0)
+            {
+                _mainContentGrid.ColumnDefinitions[4].Width =
+                    new GridLength(settings.SplitterRightPaneWidth.Value, GridUnitType.Pixel);
+            }
+        }
+        catch
+        {
+            // If loading fails, keep defaults
+        }
+    }
+
+    private void SaveSplitterPositions()
+    {
+        if (_mainContentGrid == null)
+            return;
+
+        try
+        {
+            var path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+            
+            // Load existing settings synchronously
+            K_OCR.Configuration.AppSettings settings;
+            if (System.IO.File.Exists(path))
+            {
+                var existingJson = System.IO.File.ReadAllText(path);
+                settings = System.Text.Json.JsonSerializer.Deserialize<K_OCR.Configuration.AppSettings>(existingJson, new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                }) ?? new K_OCR.Configuration.AppSettings();
+            }
+            else
+            {
+                settings = new K_OCR.Configuration.AppSettings();
+            }
+
+            settings.SplitterLeftPaneWidth = _mainContentGrid.ColumnDefinitions[0].ActualWidth;
+            settings.SplitterCenterPaneWidth = _mainContentGrid.ColumnDefinitions[2].ActualWidth;
+            settings.SplitterRightPaneWidth = _mainContentGrid.ColumnDefinitions[4].ActualWidth;
+
+            var json = System.Text.Json.JsonSerializer.Serialize(settings, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            
+            System.IO.File.WriteAllText(path, json);
+        }
+        catch
+        {
+            // If saving fails, ignore
         }
     }
 
@@ -352,20 +447,8 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel viewModel)
         {
-            // Tab for next field, Shift+Tab for previous field
-            if (e.Key == Key.Tab && !e.KeyModifiers.HasFlag(KeyModifiers.Control))
-            {
-                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-                {
-                    viewModel.NavigateToPreviousField();
-                }
-                else
-                {
-                    viewModel.NavigateToNextField();
-                }
-                e.Handled = true;
-                return;
-            }
+            // Tab handling is done at the TextBox level (OnFieldTextBoxKeyDown)
+            // to distinguish between document fields and line items
             
             // Ctrl+ = or Ctrl++ for Zoom In
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && 
@@ -420,12 +503,8 @@ public partial class MainWindow : Window
             
             // Get the ScrollViewer dimensions for initial zoom calculation
             var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
-            double availableWidth = imageScrollViewer?.Bounds.Width ?? 0;
-            double availableHeight = imageScrollViewer?.Bounds.Height ?? 0;
-            
-            // Account for toolbar height (approximately 40px)
-            if (availableHeight > 40)
-                availableHeight -= 40;
+            double availableWidth = imageScrollViewer?.Viewport.Width ?? 0;
+            double availableHeight = imageScrollViewer?.Viewport.Height ?? 0;
             
             foreach (var file in files)
             {
@@ -754,12 +833,8 @@ public partial class MainWindow : Window
 
         // Get the ScrollViewer dimensions for initial zoom calculation
         var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
-        double availableWidth = imageScrollViewer?.Bounds.Width ?? 0;
-        double availableHeight = imageScrollViewer?.Bounds.Height ?? 0;
-        
-        // Account for toolbar height (approximately 40px)
-        if (availableHeight > 40)
-            availableHeight -= 40;
+        double availableWidth = imageScrollViewer?.Viewport.Width ?? 0;
+        double availableHeight = imageScrollViewer?.Viewport.Height ?? 0;
         
         // Store the original file path for JSON lookup
         var originalFilePath = filePath;
@@ -856,12 +931,8 @@ public partial class MainWindow : Window
         {
             // Get the ScrollViewer dimensions for initial zoom calculation
             var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
-            double availableWidth = imageScrollViewer?.Bounds.Width ?? 0;
-            double availableHeight = imageScrollViewer?.Bounds.Height ?? 0;
-            
-            // Account for toolbar height
-            if (availableHeight > 40)
-                availableHeight -= 40;
+            double availableWidth = imageScrollViewer?.Viewport.Width ?? 0;
+            double availableHeight = imageScrollViewer?.Viewport.Height ?? 0;
             
             viewModel.LoadImage(first.filePath, availableWidth, availableHeight);
             DrawOCROverlay(first);
@@ -1326,15 +1397,85 @@ public partial class MainWindow : Window
         if (DataContext is not MainWindowViewModel viewModel)
             return;
 
-        // Handle Tab and Shift+Tab to navigate between fields with wrap-around
+        // Check if this is a line item textbox
+        if (sender is TextBox textBox && textBox.DataContext is InvoiceItemDto lineItem)
+        {
+            if (e.Key == Key.Tab && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            {
+                // Check if this is the last field of the last line item
+                var items = viewModel.CurrentInvoice?.Items;
+                if (items != null && lineItem == items.Last())
+                {
+                    // Find all line item textboxes
+                    var validationScrollViewer = this.FindControl<ScrollViewer>("ValidationScrollViewer");
+                    if (validationScrollViewer != null)
+                    {
+                        var lineItemTextBoxes = validationScrollViewer.GetVisualDescendants()
+                            .OfType<TextBox>()
+                            .Where(tb => tb.DataContext is InvoiceItemDto && !tb.IsReadOnly)
+                            .ToList();
+
+                        // If we're on the last editable textbox, wrap to first document field
+                        if (lineItemTextBoxes.Count > 0 && textBox == lineItemTextBoxes.Last())
+                        {
+                            viewModel.CurrentFieldIndex = 0;
+                            var firstField = viewModel.GetCurrentField();
+                            if (firstField != null)
+                                FocusFieldTextBox(firstField);
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+                }
+            }
+            else if (e.Key == Key.Tab && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            {
+                // Check if this is the first field of the first line item
+                var items = viewModel.CurrentInvoice?.Items;
+                if (items != null && lineItem == items.First())
+                {
+                    var validationScrollViewer = this.FindControl<ScrollViewer>("ValidationScrollViewer");
+                    if (validationScrollViewer != null)
+                    {
+                        var lineItemTextBoxes = validationScrollViewer.GetVisualDescendants()
+                            .OfType<TextBox>()
+                            .Where(tb => tb.DataContext is InvoiceItemDto && !tb.IsReadOnly)
+                            .ToList();
+
+                        if (lineItemTextBoxes.Count > 0 && textBox == lineItemTextBoxes.First())
+                        {
+                            // Wrap back to last document field
+                            viewModel.CurrentFieldIndex = viewModel.DocumentFields.Count - 1;
+                            var lastField = viewModel.GetCurrentField();
+                            if (lastField != null)
+                                FocusFieldTextBox(lastField);
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+                }
+            }
+            // Otherwise let default tab work within line items
+            return;
+        }
+
+        // Handle Tab and Shift+Tab to navigate between document fields
         if (e.Key == Key.Tab)
         {
             if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
             {
+                // If on the first document field, let default tab go back to line items
+                if (viewModel.CurrentFieldIndex <= 0)
+                    return;
+                    
                 viewModel.NavigateToPreviousField();
             }
             else
             {
+                // If on the last document field, let default tab go into line items
+                if (viewModel.CurrentFieldIndex >= viewModel.DocumentFields.Count - 1)
+                    return;
+                    
                 viewModel.NavigateToNextField();
             }
             
@@ -1770,11 +1911,8 @@ public partial class MainWindow : Window
             {
                 var firstFile = filePaths[0];
                 var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
-                double availableWidth = imageScrollViewer?.Bounds.Width ?? 0;
-                double availableHeight = imageScrollViewer?.Bounds.Height ?? 0;
-                
-                if (availableHeight > 40)
-                    availableHeight -= 40;
+                double availableWidth = imageScrollViewer?.Viewport.Width ?? 0;
+                double availableHeight = imageScrollViewer?.Viewport.Height ?? 0;
 
                 viewModel.LoadImage(firstFile, availableWidth, availableHeight);
 

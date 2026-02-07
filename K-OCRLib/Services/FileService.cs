@@ -13,6 +13,7 @@ namespace K_OCR.Services
             string jsonFilePath = System.IO.Path.Combine(directory, $"{fileNameWithoutExtension}.json");
 
             File.WriteAllText(jsonFilePath, json);
+            System.Console.WriteLine($"[JSON Cache] Wrote file: {Path.GetFileName(jsonFilePath)}");
         }
 
         public string ReadJsonFromDisk(string jsonFilePath)
@@ -54,6 +55,7 @@ namespace K_OCR.Services
             var jsonPath = GetJsonFilePath(imagePath);
             var json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
             await File.WriteAllTextAsync(jsonPath, json);
+            System.Console.WriteLine($"[JSON Cache] Wrote file: {Path.GetFileName(jsonPath)}");
         }
         
         public bool HasCachedJson(string imagePath)

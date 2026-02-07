@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using K_OCR.Models;
@@ -32,6 +34,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private double _canvasHeight = 600;
+
+    private double _availableWidth;
 
     [ObservableProperty]
     private ObservableCollection<FileListItem> _imageFiles = new();
@@ -91,6 +95,12 @@ public partial class MainWindowViewModel : ViewModelBase
     private void Exit()
     {
         // Exit application
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            desktop.Shutdown();
+            return;
+        }
+
         Environment.Exit(0);
     }
 
@@ -109,8 +119,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 CanvasHeight = OriginalImageSource.PixelSize.Height;
 
                 // Calculate initial zoom to fit width horizontally (allow vertical scrolling)
-                if (availableWidth > 0 && availableHeight > 0)
+                if (availableWidth > 0)
                 {
+                    _availableWidth = availableWidth;
                     double scaleX = availableWidth / OriginalImageSource.PixelSize.Width;
                     ImageZoom = scaleX;
                 }
@@ -130,7 +141,19 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public void ZoomFit()
     {
-        ImageZoom = 1.0; // Reset to fit
+        if (_availableWidth > 0 && OriginalImageSource != null && OriginalImageSource.PixelSize.Width > 0)
+        {
+            ImageZoom = _availableWidth / OriginalImageSource.PixelSize.Width;
+        }
+        else
+        {
+            ImageZoom = 1.0;
+        }
+    }
+
+    public void UpdateAvailableWidth(double width)
+    {
+        _availableWidth = width;
     }
 
     public void SetOcrJson(string json)
