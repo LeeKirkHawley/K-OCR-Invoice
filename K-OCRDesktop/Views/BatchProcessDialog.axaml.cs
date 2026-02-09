@@ -6,10 +6,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
-using Docnet.Core;
-using Docnet.Core.Models;
 using K_OCR.Services;
 using K_OCR.PipelineService;
 using K_OCR.Models;
@@ -24,6 +21,7 @@ public partial class BatchProcessDialog : Window
     private readonly IInvoiceService? _invoiceService;
     private readonly IConfiguration? _config;
     private readonly string _currentDirectory;
+    private readonly IImageService _imageService;
 
     public bool ProcessingCompleted { get; private set; }
     public int FilesProcessed { get; private set; }
@@ -38,6 +36,7 @@ public partial class BatchProcessDialog : Window
         _invoiceService = invoiceService;
         _config = config;
         _currentDirectory = currentDirectory;
+        _imageService = new ImageService();
         
         // Set current directory text in UI
         var currentDirText = this.FindControl<TextBlock>("CurrentDirectoryText");
@@ -47,16 +46,16 @@ public partial class BatchProcessDialog : Window
         }
         
         // Load files from current directory on initialization
-        LoadFilesFromCurrentDirectory();
+        LoadFiles(_currentDirectory);
     }
     
-    private void LoadFilesFromCurrentDirectory()
+    private void LoadFiles(string directory)
     {
-        if (string.IsNullOrEmpty(_currentDirectory) || !Directory.Exists(_currentDirectory))
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
             return;
             
         var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
-        var files = Directory.GetFiles(_currentDirectory)
+        var files = Directory.GetFiles(directory)
             .Where(f => extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
             .OrderBy(f => f)
             .ToList();
@@ -247,12 +246,19 @@ public partial class BatchProcessDialog : Window
                 
                 if (Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Convert PDF to PNG
-                    var pngPath = await ConvertPdfToPngAsync(filePath);
-                    if (pngPath != null)
+                    // Convert PDF to PNG using ImageService
+                    try
                     {
-                        processablePaths.Add(pngPath);
-                        pdfMappings[pngPath] = filePath; // Remember the original PDF path
+                        var pngPath = await _imageService.ConvertPdfToPngAsync(filePath);
+                        if (pngPath != null)
+                        {
+                            processablePaths.Add(pngPath);
+                            pdfMappings[pngPath] = filePath; // Remember the original PDF path
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[PDF Conversion] Error converting {Path.GetFileName(filePath)}: {ex.Message}");
                     }
                 }
                 else
@@ -307,64 +313,6 @@ public partial class BatchProcessDialog : Window
             
             // Re-enable button
             if (runButton != null) runButton.IsEnabled = true;
-        }
-    }
-
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    private async Task<string?> ConvertPdfToPngAsync(string pdfPath)
-    {
-        try
-        {
-            var directory = Path.GetDirectoryName(pdfPath);
-            var fileNameWithoutExt = Path.GetFileNameWithoutExtension(pdfPath);
-            var outputPath = Path.Combine(directory!, $"{fileNameWithoutExt}.png");
-            
-            // Check if PNG already exists
-            if (File.Exists(outputPath))
-                return outputPath;
-            
-            // Convert PDF to PNG using Docnet.Core
-            try
-            {
-                using var docReader = DocLib.Instance.GetDocReader(pdfPath, new PageDimensions(1920, 1920));
-                
-                // Only convert first page for batch processing
-                using var pageReader = docReader.GetPageReader(0);
-                var rawBytes = pageReader.GetImage();
-                var width = pageReader.GetPageWidth();
-                var height = pageReader.GetPageHeight();
-                
-                // Create Avalonia bitmap from raw bytes
-                using var bitmap = new WriteableBitmap(
-                    new PixelSize(width, height), 
-                    new Vector(96, 96), 
-                    Avalonia.Platform.PixelFormat.Bgra8888, 
-                    Avalonia.Platform.AlphaFormat.Unpremul);
-                
-                using var lockedBitmap = bitmap.Lock();
-                unsafe
-                {
-                    var dest = (byte*)lockedBitmap.Address.ToPointer();
-                    fixed (byte* src = rawBytes)
-                    {
-                        Buffer.MemoryCopy(src, dest, lockedBitmap.RowBytes * height, rawBytes.Length);
-                    }
-                }
-                
-                bitmap.Save(outputPath);
-                return outputPath;
-            }
-            catch (Exception ex)
-            {
-                System.Console.WriteLine($"[PDF Conversion] Error converting {Path.GetFileName(pdfPath)}: {ex.Message}");
-                return null;
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Console.WriteLine($"[PDF Conversion] Failed for {Path.GetFileName(pdfPath)}: {ex.Message}");
-            return null;
         }
     }
 

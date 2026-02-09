@@ -185,6 +185,8 @@ namespace K_OCR.Services
 
             AnalyzeResult result = operation!.Value;
 
+            
+
             System.Console.WriteLine($"[Azure OCR] Received result: {Path.GetFileName(imagePath)}");
 
             List<InvoiceDto> invoices = AnalyzeOCR(result);
