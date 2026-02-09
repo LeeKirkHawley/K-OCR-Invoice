@@ -22,6 +22,7 @@ public partial class BatchProcessDialog : Window
     private readonly IConfiguration? _config;
     private readonly string _currentDirectory;
     private readonly IImageService _imageService;
+    private readonly IFileService _fileService;
 
     public bool ProcessingCompleted { get; private set; }
     public int FilesProcessed { get; private set; }
@@ -37,6 +38,7 @@ public partial class BatchProcessDialog : Window
         _config = config;
         _currentDirectory = currentDirectory;
         _imageService = new ImageService();
+        _fileService = new FileService();
         
         // Set current directory text in UI
         var currentDirText = this.FindControl<TextBlock>("CurrentDirectoryText");
@@ -46,33 +48,11 @@ public partial class BatchProcessDialog : Window
         }
         
         // Load files from current directory on initialization
-        var files = LoadFiles(_currentDirectory, new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" });
+        var files = _fileService.LoadFiles(_currentDirectory, new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" });
         _filePaths.Clear();
         _filePaths.AddRange(files);
         UpdateFileList();
 
-    }
-    
-    private IEnumerable<string> LoadFiles(string directory, string[]? extensions = null)
-    {
-        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
-        {
-            return Enumerable.Empty<string>();
-        } 
-
-        if (extensions == null)
-        {
-            // Return all files when no extensions specified
-            return Directory.EnumerateFiles(directory).OrderBy(f => f);
-        }
-
-        // HashSet for O(1) lookup instead of array O(n) - important for large directories
-        var extensionSet = new HashSet<string>(extensions, StringComparer.OrdinalIgnoreCase);
-        
-        // Single directory traversal, lazy streaming, efficient filtering
-        return Directory.EnumerateFiles(directory)
-            .Where(f => extensionSet.Contains(Path.GetExtension(f)))
-            .OrderBy(f => f);
     }
 
     private async void OnSelectFiles(object? sender, RoutedEventArgs e)

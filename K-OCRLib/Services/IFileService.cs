@@ -26,5 +26,14 @@ namespace K_OCR.Services
         /// Check if cached JSON exists for an image
         /// </summary>
         bool HasCachedJson(string imagePath);
+        
+        /// <summary>
+        /// Load files from a directory, optionally filtered by extensions.
+        /// Uses lazy enumeration for efficient handling of large directories.
+        /// </summary>
+        /// <param name="directory">The directory to search</param>
+        /// <param name="extensions">Optional file extensions to filter (e.g., ".png", ".jpg"). If null, returns all files.</param>
+        /// <returns>Lazy enumerable of file paths</returns>
+        IEnumerable<string> LoadFiles(string directory, string[]? extensions = null);
     }
 }
