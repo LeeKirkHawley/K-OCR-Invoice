@@ -4,6 +4,7 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using System.Linq;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
 using K_OCRDesktop.ViewModels;
 using K_OCRDesktop.Views;
 using K_OCR.Services;
@@ -49,6 +50,9 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Force Light theme to override system dark theme
+        this.RequestedThemeVariant = ThemeVariant.Light;
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Avoid duplicate validations from both Avalonia and the CommunityToolkit. 
