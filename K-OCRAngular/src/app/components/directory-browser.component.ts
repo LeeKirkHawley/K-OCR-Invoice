@@ -1,4 +1,4 @@
-import { Component, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { KocrApiService } from '../services/kocr-api.service';
 
@@ -16,23 +16,23 @@ interface DirectoryEntry {
   imports: [CommonModule]
 })
 export class DirectoryBrowserComponent implements OnDestroy {
-  entries: DirectoryEntry[] = [];
-  currentPath: string | null = null;
-  loading = false;
-  error: string | null = null;
-  pathStack: string[] = [];
+  entries = signal<DirectoryEntry[]>([]);
+  currentPath = signal<string | null>(null);
+  loading = signal(false);
+  error = signal<string | null>(null);
+  pathStack = signal<string[]>([]);
 
-  constructor(private kocrApi: KocrApiService, private cdr: ChangeDetectorRef) {
+  constructor(private kocrApi: KocrApiService) {
     const ts = new Date().toISOString();
-    console.log(`🔄 [${ts}] DirectoryBrowserComponent constructor called, loading:`, this.loading);
+    console.log(`🔄 [${ts}] DirectoryBrowserComponent constructor called, loading:`, this.loading());
     this.loadDirectory();
   }
 
   loadDirectory(path: string | null = null) {
     const timestamp = new Date().toISOString();
     console.log(`⏰ [${timestamp}] Loading directory:`, path);
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
     console.log('API URL:', this.kocrApi['apiUrl']); // Access private property for debugging
     this.kocrApi.listDirectory(path).subscribe({
       next: (data) => {
@@ -43,39 +43,41 @@ export class DirectoryBrowserComponent implements OnDestroy {
         console.log('Data length:', Array.isArray(data) ? data.length : 'not array');
         console.log('First item:', data && data.length > 0 ? data[0] : 'no data');
         console.log('Setting loading to false...');
-        this.entries = data;
-        this.currentPath = path;
-        this.loading = false;
-        console.log('Loading state after setting:', this.loading);
-        this.cdr.detectChanges(); // Force change detection
-        console.log('Change detection triggered');
-        console.log('Entries set:', this.entries);
-        console.log('Current entries in component:', this.entries);
+        this.entries.set(data);
+        this.currentPath.set(path);
+        this.loading.set(false);
+        console.log('Loading state after setting:', this.loading());
+        console.log('Entries set:', this.entries());
+        console.log('Current entries in component:', this.entries());
       },
       error: (err) => {
         const ts = new Date().toISOString();
         console.error(`❌ [${ts}] API call failed:`, err);
         console.error('Error details:', err.message);
         console.error('Error status:', err.status);
-        this.error = 'Failed to load directory: ' + err.message;
-        this.loading = false;
-        this.cdr.detectChanges(); // Force change detection
+        this.error.set('Failed to load directory: ' + err.message);
+        this.loading.set(false);
       }
     });
   }
 
   enterDirectory(entry: DirectoryEntry) {
     if (entry.isDirectory) {
-      this.pathStack.push(this.currentPath || '');
+      this.pathStack.update(stack => [...stack, this.currentPath() || '']);
       this.loadDirectory(entry.path);
     }
   }
 
   goUp() {
-    if (this.pathStack.length > 0) {
-      const prev = this.pathStack.pop() || null;
-      this.loadDirectory(prev);
-    }
+    this.pathStack.update(stack => {
+      if (stack.length > 0) {
+        const newStack = [...stack];
+        const prev = newStack.pop() || null;
+        this.loadDirectory(prev);
+        return newStack;
+      }
+      return stack;
+    });
   }
 
   ngOnDestroy() {
