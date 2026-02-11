@@ -1,0 +1,21 @@
+<div class="directory-browser">
+	@if (pathStack.length > 0) {
+		<button (click)="goUp()">Up</button>
+	}
+	<h3>Directory: {{ currentPath || 'Root' }}</h3>
+	@if (loading) {
+		<div>Loading...</div>
+	}
+	@if (error) {
+		<div class="error">{{ error }}</div>
+	}
+	<ul>
+		@for (entry of entries; track entry) {
+			<li (click)="enterDirectory(entry)" [class.dir]="entry.isDirectory">
+				@if (entry.isDirectory) { <span>📁</span> }
+				@if (!entry.isDirectory) { <span>📄</span> }
+				{{ entry.name }}
+			</li>
+		}
+	</ul>
+</div>

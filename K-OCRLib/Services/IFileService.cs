@@ -35,5 +35,9 @@ namespace K_OCR.Services
         /// <param name="extensions">Optional file extensions to filter (e.g., ".png", ".jpg"). If null, returns all files.</param>
         /// <returns>Lazy enumerable of file paths</returns>
         IEnumerable<string> LoadFiles(string directory, string[]? extensions = null);
+        /// <summary>
+        /// List directories and files for a given path
+        /// </summary>
+        IEnumerable<K_OCR.Models.DirectoryEntry> ListDirectory(string? path = null);
     }
 }

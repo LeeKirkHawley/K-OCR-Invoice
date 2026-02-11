@@ -1,8 +1,21 @@
 using Microsoft.OpenApi;
+using K_OCR.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddScoped<IFileService, FileService>();
+
+// Add CORS for Angular dev server
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngular", policy =>
+    {
+        policy.WithOrigins("http://localhost:4200", "http://localhost:4201", "http://localhost:33311")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -38,6 +51,9 @@ if (app.Environment.IsDevelopment())
         // Swagger UI available at /swagger
     });    
 }
+
+// Enable CORS
+app.UseCors("AllowAngular");
 
 // Serve static files from wwwroot
 app.UseDefaultFiles();  // Serves index.html by default

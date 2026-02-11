@@ -1,0 +1,28 @@
+<div class="directory-browser">
+  <div>DEBUG: Component loaded, entries: {{ entries?.length || 0 }}, loading: {{ loading }}</div>
+  @if (pathStack.length > 0) {
+    <button (click)="goUp()">Up</button>
+  }
+  <h3>Directory: {{ currentPath || 'Root' }} ({{ entries.length }} entries)</h3>
+  @if (loading) {
+    <div>Loading...</div>
+  }
+  @if (error) {
+    <div class="error">{{ error }}</div>
+  }
+  <ul>
+    @if (loading) {
+      <li>Loading directories...</li>
+    } @else if (entries.length > 0) {
+      @for (entry of entries; track entry.path) {
+        <li (click)="enterDirectory(entry)" [class.dir]="entry.isDirectory">
+          @if (entry.isDirectory) { <span>📁</span> }
+          @if (!entry.isDirectory) { <span>📄</span> }
+          {{ entry.name }}
+        </li>
+      }
+    } @else {
+      <li>No entries found</li>
+    }
+  </ul>
+</div>

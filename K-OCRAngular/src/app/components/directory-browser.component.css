@@ -1,0 +1,14 @@
+.directory-browser ul {
+  list-style: none;
+  padding: 0;
+}
+.directory-browser li {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.directory-browser li.dir {
+  font-weight: bold;
+}
+.error {
+  color: red;
+}

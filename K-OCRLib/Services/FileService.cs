@@ -1,5 +1,9 @@
 ﻿using System.IO;
+using K_OCR.Models;
 using K_OCR.PipelineService;
+using System.IO;
+using K_OCR.PipelineService;
+
 
 namespace K_OCR.Services
 {
@@ -84,5 +88,36 @@ namespace K_OCR.Services
                 .Where(f => extensionSet.Contains(Path.GetExtension(f)))
                 .OrderBy(f => f);
         }
+
+    public IEnumerable<DirectoryEntry> ListDirectory(string? path = null)
+    {
+        var entries = new List<DirectoryEntry>();
+        var dir = string.IsNullOrEmpty(path) ? Directory.GetDirectoryRoot(Directory.GetCurrentDirectory()) : path;
+        if (!Directory.Exists(dir))
+            return entries;
+
+        // Add directories
+        foreach (var d in Directory.EnumerateDirectories(dir))
+        {
+            entries.Add(new DirectoryEntry
+            {
+                Name = Path.GetFileName(d),
+                Path = d,
+                IsDirectory = true
+            });
+        }
+        // Add files
+        foreach (var f in Directory.EnumerateFiles(dir))
+        {
+            entries.Add(new DirectoryEntry
+            {
+                Name = Path.GetFileName(f),
+                Path = f,
+                IsDirectory = false
+            });
+        }
+        return entries;
+    }
+
     }
 }
