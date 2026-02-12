@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using Avalonia.Platform.Storage;
 using K_OCR.Configuration;
 using K_OCR.Services;
 
@@ -55,41 +54,15 @@ public partial class SettingsDialog : Window
 
     private async void OnBrowseDirectory(object? sender, RoutedEventArgs e)
     {
-        var storageProvider = StorageProvider;
-        if (storageProvider == null) return;
-
-        var options = new FolderPickerOpenOptions
+        var folderPicker = new FolderPickerDialog();
+        var result = await folderPicker.ShowDialog<bool>(this);
+        
+        if (result)
         {
-            Title = "Select Default Start Directory",
-            AllowMultiple = false
-        };
-
-        // If there's an existing path, try to use it as the starting location
-        var directoryTextBox = this.FindControl<TextBox>("DirectoryTextBox");
-        if (directoryTextBox != null && !string.IsNullOrEmpty(directoryTextBox.Text) && Directory.Exists(directoryTextBox.Text))
-        {
-            try
+            var directoryTextBox = this.FindControl<TextBox>("DirectoryTextBox");
+            if (directoryTextBox != null && !string.IsNullOrEmpty(folderPicker.SelectedPath))
             {
-                var folder = await storageProvider.TryGetFolderFromPathAsync(directoryTextBox.Text);
-                if (folder != null)
-                {
-                    options.SuggestedStartLocation = folder;
-                }
-            }
-            catch
-            {
-                // If it fails, just don't set a suggested location
-            }
-        }
-
-        var folders = await storageProvider.OpenFolderPickerAsync(options);
-
-        if (folders.Count > 0)
-        {
-            var selectedPath = folders[0].Path.LocalPath;
-            if (directoryTextBox != null)
-            {
-                directoryTextBox.Text = selectedPath;
+                directoryTextBox.Text = folderPicker.SelectedPath;
             }
         }
     }

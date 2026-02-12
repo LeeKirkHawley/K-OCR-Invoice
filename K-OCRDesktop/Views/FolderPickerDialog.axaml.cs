@@ -18,7 +18,7 @@ public partial class FolderPickerDialog : Window
 
     private List<FolderItem> path = new List<FolderItem>();
 
-    public FolderPickerDialog()
+    public FolderPickerDialog(string? initialDirectory = null)
     {
         InitializeComponent();
 #if DEBUG
@@ -76,6 +76,39 @@ public partial class FolderPickerDialog : Window
                 upButton.IsEnabled = true;
             }
         };
+
+        // If initial directory is provided, navigate to it
+        if (!string.IsNullOrEmpty(initialDirectory) && Directory.Exists(initialDirectory))
+        {
+            NavigateToDirectory(initialDirectory, folderTreeView, upButton);
+        }
+    }
+
+    private void NavigateToDirectory(string directory, TreeView folderTreeView, Button upButton)
+    {
+        // Build the path to the directory
+        var current = directory;
+        var dirs = new List<string>();
+        while (!string.IsNullOrEmpty(current))
+        {
+            dirs.Insert(0, current);
+            var parent = Directory.GetParent(current)?.FullName;
+            if (parent == current) break; // root
+            current = parent;
+        }
+
+        // Navigate by simulating double-clicks
+        foreach (var dir in dirs)
+        {
+            var item = new FolderItem(dir, Path.GetFileName(dir) ?? dir);
+            path.Add(item);
+        }
+
+        if (path.Count > 0)
+        {
+            folderTreeView.ItemsSource = path.Last().GetChildren();
+            upButton.IsEnabled = true;
+        }
     }
 
     private void InitializeComponent()

@@ -629,7 +629,21 @@ public partial class MainWindow : Window
 
     private async Task SelectFolderAsync()
     {
-        var dialog = new FolderPickerDialog();
+        string? initialDirectory = null;
+        if (_configurationService != null)
+        {
+            try
+            {
+                var settings = await _configurationService.LoadSettingsAsync();
+                initialDirectory = settings.DefaultStartDirectory;
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+
+        var dialog = new FolderPickerDialog(initialDirectory);
         var result = await dialog.ShowDialog<bool>(this);
 
         string? selectedPath = null;
@@ -791,6 +805,18 @@ public partial class MainWindow : Window
         try
         {
             viewModel.LoadImage(filePath, availableWidth, availableHeight);
+            // Update available width for zoom calculations
+            if (imageScrollViewer != null)
+            {
+                viewModel.UpdateAvailableWidth(imageScrollViewer.Viewport.Width);
+            }
+            // Auto-fit the image to the panel
+            viewModel.ZoomFit();
+            // Reset scroll position after layout update
+            if (imageScrollViewer != null)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => imageScrollViewer.ScrollToHome(), Avalonia.Threading.DispatcherPriority.Loaded);
+            }
         }
         catch (Exception ex)
         {
@@ -808,34 +834,35 @@ public partial class MainWindow : Window
         PipelineContext? pipelineContext = null;
         string json;
 
-        // Don't load cached JSON when clicking on files - only show results after batch processing
-        // if (System.IO.File.Exists(jsonOutputPath))
-        // {
-        //     // Load from cached JSON
-        //     try
-        //     {
-        //         json = await System.IO.File.ReadAllTextAsync(jsonOutputPath);
-        //         pipelineContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
-        //         
-        //         // Display cached JSON in right panel
-        //         viewModel.SetOcrJson(json);
-        //         
-        //         // Extract and display invoice data in validation tab
-        //         ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
-        //     }
-        //     catch
-        //     {
-        //         // If cached JSON is invalid, we'll run the pipeline
-        //         pipelineContext = null;
-        //     }
-        // }
+        if (System.IO.File.Exists(jsonOutputPath))
+        {
+            // Load from cached JSON
+            try
+            {
+                json = await System.IO.File.ReadAllTextAsync(jsonOutputPath);
+                pipelineContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
+                
+                // Display cached JSON in right panel
+                viewModel.SetOcrJson(json);
+                
+                // Extract and display invoice data in validation tab
+                ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
+            }
+            catch
+            {
+                // If cached JSON is invalid, treat as not processed
+                pipelineContext = null;
+            }
+        }
 
-        // Always treat as not processed when clicking on files
-        // No cached results - clear the panels and show message
-        viewModel.FileCaption = "This file has not been processed yet. Please use Batch Process to run OCR on this file.";
-        viewModel.SetOcrJson(string.Empty);
-        viewModel.DocumentFields.Clear();
-        viewModel.CurrentInvoice = null;
+        if (pipelineContext == null)
+        {
+            // No cached results - clear the panels and show message
+            viewModel.FileCaption = "This file has not been processed yet. Please use Batch Process to run OCR on this file.";
+            viewModel.SetOcrJson(string.Empty);
+            viewModel.DocumentFields.Clear();
+            viewModel.CurrentInvoice = null;
+        }
     }
 
     private void ShowAbout()
