@@ -61,14 +61,12 @@ public partial class App : Application
             
             // Get services
             var fileService = Services?.GetService(typeof(IFileService)) as IFileService;
-            var analysisService = Services?.GetService(typeof(IAnalysisService)) as IAnalysisService;
             var ocrService = Services?.GetService(typeof(IOCRService)) as IOCRService;
-            var azureService = Services?.GetService(typeof(IAzureService)) as IAzureService;
             var invoiceService = Services?.GetService(typeof(IInvoiceService)) as IInvoiceService;
             var invoiceProcessingService = Services?.GetService(typeof(IInvoiceProcessingService)) as IInvoiceProcessingService;
             var configurationService = Services?.GetService(typeof(IConfigurationService)) as IConfigurationService;
 
-            desktop.MainWindow = new MainWindow(fileService, analysisService, ocrService, azureService, invoiceService, invoiceProcessingService, configurationService)
+            desktop.MainWindow = new MainWindow(fileService, ocrService, invoiceService, invoiceProcessingService, configurationService)
             {
                 DataContext = new MainWindowViewModel(),
             };

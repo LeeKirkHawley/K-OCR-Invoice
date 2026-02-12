@@ -3,25 +3,21 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using K_OCR.Models;
-using K_OCR.Services;
 using K_OCR.PipelineService;
+using K_OCR.Services;
 using K_OCRDesktop.ViewModels;
 using Microsoft.Extensions.Configuration;
 
@@ -40,21 +36,20 @@ public partial class MainWindow : Window
     private readonly IInvoiceService? _invoiceService;
     private readonly IInvoiceProcessingService? _invoiceProcessingService;
     private readonly IConfigurationService? _configurationService;
-    private readonly IAzureService? _azureService;
-    private readonly IAnalysisService? _analysisService;
+    //private readonly IAzureService? _azureService;
+    //private readonly IAnalysisService? _analysisService;
     private readonly IOCRService? _ocrService;
     private readonly IImageService? _imageService;
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    public MainWindow() : this(null, null, null, null, null, null, null)
+    public MainWindow() : this(null, null, null, null, null)
     {
     }
     
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    public MainWindow(IFileService? fileService, IAnalysisService? analysisService, 
-        IOCRService? ocrService, IAzureService? azureService, IInvoiceService? invoiceService,
+    public MainWindow(IFileService? fileService, IOCRService? ocrService, IInvoiceService? invoiceService,
         IInvoiceProcessingService? invoiceProcessingService, IConfigurationService? configurationService)
     {
         InitializeComponent();
@@ -63,9 +58,7 @@ public partial class MainWindow : Window
         Closing += OnClosing;
 
         _fileService = fileService ?? new FileService();
-        _analysisService = analysisService;
         _ocrService = ocrService;
-        _azureService = azureService;
         _invoiceService = invoiceService ?? new InvoiceService();
         _invoiceProcessingService = invoiceProcessingService ?? new InvoiceProcessingService(_fileService, _invoiceService);
         _configurationService = configurationService ?? new ConfigurationService();
@@ -1350,6 +1343,35 @@ public partial class MainWindow : Window
         });
     }
 
+    private void ScrollImageToBoundingBox(BoundingBoxDto boundingBox)
+    {
+        if (DataContext is not MainWindowViewModel viewModel || _imageScrollViewer == null)
+            return;
+
+        // Get the scaled points
+        var scaledPoints = ScaleBoundingBoxToPixels(boundingBox.Points);
+
+        if (scaledPoints.Count >= 8)
+        {
+            // Calculate the center of the bounding box
+            double minX = scaledPoints.Where((p, i) => i % 2 == 0).Min();
+            double maxX = scaledPoints.Where((p, i) => i % 2 == 0).Max();
+            double minY = scaledPoints.Where((p, i) => i % 2 == 1).Min();
+            double maxY = scaledPoints.Where((p, i) => i % 2 == 1).Max();
+
+            double centerX = (minX + maxX) / 2;
+            double centerY = (minY + maxY) / 2;
+
+            // Scroll to center the bounding box in the viewport
+            double viewportWidth = _imageScrollViewer.Viewport.Width;
+            double viewportHeight = _imageScrollViewer.Viewport.Height;
+
+            double scrollX = Math.Max(0, centerX - viewportWidth / 2);
+            double scrollY = Math.Max(0, centerY - viewportHeight / 2);
+
+            _imageScrollViewer.Offset = new Vector(scrollX, scrollY);
+        }
+    }
     private void OnFieldClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (sender is Button button && button.DataContext is K_OCR.Models.DocumentField field && DataContext is MainWindowViewModel viewModel)
@@ -1365,6 +1387,8 @@ public partial class MainWindow : Window
             if (field.BoundingBoxes != null && field.BoundingBoxes.Count > 0)
             {
                 HighlightBoundingBoxes(field.BoundingBoxes);
+                // Scroll the image to the bounding box
+                ScrollImageToBoundingBox(field.BoundingBoxes[0]); // Use the first bounding box
             }
         }
     }
