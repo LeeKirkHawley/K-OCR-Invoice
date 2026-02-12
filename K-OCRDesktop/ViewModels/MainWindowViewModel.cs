@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -48,6 +49,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private InvoiceDto? _currentInvoice;
+
+    public bool HasLineItems => CurrentInvoice?.Items?.Count > 0;
+    public int LineItemsCount => CurrentInvoice?.Items?.Count ?? 0;
+    public IEnumerable<InvoiceItemDto> LineItems => CurrentInvoice?.Items ?? Enumerable.Empty<InvoiceItemDto>();
 
     [ObservableProperty]
     private ObservableCollection<DocumentField> _documentFields = new();
@@ -108,23 +113,35 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (System.IO.File.Exists(filePath))
         {
-            OriginalImageSource = new Bitmap(filePath);
-            OcrJsonText = string.Empty; // Clear JSON text when loading new image
-            FileCaption = filePath;
-
-            // Update canvas dimensions to match image
-            if (OriginalImageSource != null)
+            try
             {
-                CanvasWidth = OriginalImageSource.PixelSize.Width;
-                CanvasHeight = OriginalImageSource.PixelSize.Height;
+                OriginalImageSource = new Bitmap(filePath);
+                OcrJsonText = string.Empty; // Clear JSON text when loading new image
+                FileCaption = filePath;
 
-                // Calculate initial zoom to fit width horizontally (allow vertical scrolling)
-                if (availableWidth > 0)
+                // Update canvas dimensions to match image
+                if (OriginalImageSource != null)
                 {
-                    _availableWidth = availableWidth;
-                    double scaleX = availableWidth / OriginalImageSource.PixelSize.Width;
-                    ImageZoom = scaleX;
+                    CanvasWidth = OriginalImageSource.PixelSize.Width;
+                    CanvasHeight = OriginalImageSource.PixelSize.Height;
+
+                    // Calculate initial zoom to fit width horizontally (allow vertical scrolling)
+                    if (availableWidth > 0)
+                    {
+                        _availableWidth = availableWidth;
+                        double scaleX = availableWidth / OriginalImageSource.PixelSize.Width;
+                        ImageZoom = scaleX;
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                // If bitmap loading fails, clear the image and show error
+                OriginalImageSource = null;
+                FileCaption = $"Failed to load image: {ex.Message}";
+                CanvasWidth = 800;
+                CanvasHeight = 600;
+                ImageZoom = 1.0;
             }
         }
     }
@@ -164,18 +181,23 @@ public partial class MainWindowViewModel : ViewModelBase
     public void SetInvoiceData(InvoiceDto? invoice)
     {
         CurrentInvoice = invoice;
+        OnPropertyChanged(nameof(HasLineItems));
+        OnPropertyChanged(nameof(LineItemsCount));
+        OnPropertyChanged(nameof(LineItems));
     }
 
     public void LoadImageFilesFromFolder(string folderPath)
     {
-        ImageFiles.Clear();
-        CurrentDirectory = folderPath;
-        
-        var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
-        var files = System.IO.Directory.GetFiles(folderPath)
-            .Where(f => extensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
-            .OrderBy(f => f)
-            .ToList();
+        try
+        {
+            ImageFiles.Clear();
+            CurrentDirectory = folderPath;
+            
+            var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
+            var files = System.IO.Directory.GetFiles(folderPath)
+                .Where(f => extensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
+                .OrderBy(f => f)
+                .ToList();
         
         // Build a set of PDF filenames (without extension) to check against
         var pdfBaseNames = new HashSet<string>(
@@ -200,7 +222,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
                 
                 var jsonPath = System.IO.Path.ChangeExtension(filePath, ".json");
-                var isProcessed = System.IO.File.Exists(jsonPath);
+                var isProcessed = false; // Don't check for cached results when listing files - only mark as processed after batch processing
                 // For now, we'll consider a file validated if it's processed
                 // In the future, we could track this separately
                 var isValidated = false; // Will be set to true when user saves validated data
@@ -212,6 +234,17 @@ public partial class MainWindowViewModel : ViewModelBase
                     IsValidated = isValidated
                 });
             }
+        }
+        }
+        catch (Exception ex)
+        {
+            // Clear any partial results and show error
+            ImageFiles.Clear();
+            CurrentDirectory = $"Error loading directory: {ex.Message}";
+            Console.WriteLine($"Directory loading error: {ex}");
+            
+            // Could show a message dialog here, but for now just update the caption
+            FileCaption = $"Failed to load directory contents: {ex.Message}";
         }
     }
 

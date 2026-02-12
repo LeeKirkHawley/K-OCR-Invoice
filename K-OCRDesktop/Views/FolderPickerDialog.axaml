@@ -1,0 +1,34 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:K_OCRDesktop.Views"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
+        x:Class="K_OCRDesktop.Views.FolderPickerDialog"
+        Title="Select Folder with Images"
+        Width="600" Height="400"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Button x:Name="UpButton" Content="↑" Grid.Row="0" Margin="10" HorizontalAlignment="Left" IsEnabled="False" />
+
+        <TreeView x:Name="FolderTreeView" Grid.Row="1" Margin="10">
+            <TreeView.DataTemplates>
+                <TreeDataTemplate DataType="local:FolderItem" ItemsSource="{Binding GetChildren}">
+                    <TextBlock Text="{Binding Name}" />
+                </TreeDataTemplate>
+            </TreeView.DataTemplates>
+        </TreeView>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
+            <Button x:Name="OkButton" Content="OK" IsDefault="True" Margin="0,0,10,0" />
+            <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

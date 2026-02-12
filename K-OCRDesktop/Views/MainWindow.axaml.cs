@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Avalonia;
@@ -626,40 +629,74 @@ public partial class MainWindow : Window
 
     private async Task SelectFolderAsync()
     {
-        var options = new FolderPickerOpenOptions
-        {
-            Title = "Select Folder with Images",
-            AllowMultiple = false
-        };
+        var dialog = new FolderPickerDialog();
+        var result = await dialog.ShowDialog<bool>(this);
 
-        // Set suggested start location from default directory in settings
+        string? selectedPath = null;
+        if (result)
+        {
+            selectedPath = dialog.SelectedPath;
+        }
+
+        if (!string.IsNullOrEmpty(selectedPath) && DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.LoadImageFilesFromFolder(selectedPath);
+        }
+    }
+
+    private async void SelectFolderButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        await SelectFolderAsync();
+    }
+
+    private async Task<string?> SelectFolderWithZenityAsync()
+    {
         try
         {
-            var config = new ConfigurationBuilder()
-                .SetBasePath(AppContext.BaseDirectory)
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
-                .Build();
-
-            var defaultDir = config["DefaultStartDirectory"];
-            if (!string.IsNullOrEmpty(defaultDir) && Directory.Exists(defaultDir))
+            return await Task.Run(() =>
             {
-                var folder = await StorageProvider.TryGetFolderFromPathAsync(defaultDir);
-                if (folder != null)
+                var psi = new ProcessStartInfo
                 {
-                    options.SuggestedStartLocation = folder;
+                    FileName = "zenity",
+                    Arguments = "--file-selection --directory --title=\"Select Folder with Images\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var process = Process.Start(psi);
+                if (process == null)
+                {
+                    return null;
                 }
-            }
-        }
-        catch
-        {
-            // If loading settings fails, just don't set a suggested location
-        }
 
-        var folders = await StorageProvider.OpenFolderPickerAsync(options);
+                // Wait for exit with 30 second timeout
+                if (!process.WaitForExit(30000))
+                {
+                    Console.WriteLine("Zenity process did not exit within 30 seconds, killing it");
+                    process.Kill();
+                    return null;
+                }
 
-        if (folders.Count > 0 && DataContext is MainWindowViewModel viewModel)
+                Console.WriteLine($"Zenity process exited with code {process.ExitCode}");
+
+                if (process.ExitCode == 0)
+                {
+                    var output = process.StandardOutput.ReadToEnd();
+                    if (!string.IsNullOrWhiteSpace(output))
+                    {
+                        return output.Trim();
+                    }
+                }
+
+                return null;
+            });
+        }
+        catch (Exception ex)
         {
-            viewModel.LoadImageFilesFromFolder(folders[0].Path.LocalPath);
+            Console.WriteLine($"Zenity fallback failed: {ex}");
+            return null;
         }
     }
 
@@ -751,44 +788,54 @@ public partial class MainWindow : Window
         }
         
         // Load and display the image
-        viewModel.LoadImage(filePath, availableWidth, availableHeight);
+        try
+        {
+            viewModel.LoadImage(filePath, availableWidth, availableHeight);
+        }
+        catch (Exception ex)
+        {
+            // If image loading fails, show error message
+            viewModel.OriginalImageSource = null;
+            viewModel.FileCaption = $"Failed to load image: {ex.Message}";
+            viewModel.SetOcrJson(string.Empty);
+            viewModel.DocumentFields.Clear();
+            viewModel.CurrentInvoice = null;
+            return;
+        }
 
         // Check if cached JSON exists - use original file path for JSON lookup
         var jsonOutputPath = System.IO.Path.ChangeExtension(originalFilePath, ".json");
         PipelineContext? pipelineContext = null;
         string json;
 
-        if (System.IO.File.Exists(jsonOutputPath))
-        {
-            // Load from cached JSON
-            try
-            {
-                json = await System.IO.File.ReadAllTextAsync(jsonOutputPath);
-                pipelineContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
-                
-                // Display cached JSON in right panel
-                viewModel.SetOcrJson(json);
-                
-                // Extract and display invoice data in validation tab
-                ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
-            }
-            catch
-            {
-                // If cached JSON is invalid, we'll run the pipeline
-                pipelineContext = null;
-            }
-        }
+        // Don't load cached JSON when clicking on files - only show results after batch processing
+        // if (System.IO.File.Exists(jsonOutputPath))
+        // {
+        //     // Load from cached JSON
+        //     try
+        //     {
+        //         json = await System.IO.File.ReadAllTextAsync(jsonOutputPath);
+        //         pipelineContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
+        //         
+        //         // Display cached JSON in right panel
+        //         viewModel.SetOcrJson(json);
+        //         
+        //         // Extract and display invoice data in validation tab
+        //         ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
+        //     }
+        //     catch
+        //     {
+        //         // If cached JSON is invalid, we'll run the pipeline
+        //         pipelineContext = null;
+        //     }
+        // }
 
-        // Do not run OCR automatically - only load cached results if they exist
-        // User must use Batch Process to run OCR on files
-        if (pipelineContext == null)
-        {
-            // No cached results - clear the panels and show message
-            viewModel.FileCaption = "This file has not been processed yet. Please use Batch Process to run OCR on this file.";
-            viewModel.SetOcrJson(string.Empty);
-            viewModel.DocumentFields.Clear();
-            viewModel.CurrentInvoice = null;
-        }
+        // Always treat as not processed when clicking on files
+        // No cached results - clear the panels and show message
+        viewModel.FileCaption = "This file has not been processed yet. Please use Batch Process to run OCR on this file.";
+        viewModel.SetOcrJson(string.Empty);
+        viewModel.DocumentFields.Clear();
+        viewModel.CurrentInvoice = null;
     }
 
     private void ShowAbout()
