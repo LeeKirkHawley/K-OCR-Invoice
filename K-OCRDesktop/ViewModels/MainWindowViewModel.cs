@@ -222,7 +222,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
                 
                 var jsonPath = System.IO.Path.ChangeExtension(filePath, ".json");
-                var isProcessed = false; // Don't check for cached results when listing files - only mark as processed after batch processing
+                var isProcessed = File.Exists(jsonPath); // Check for existing .json files to indicate processed
                 // For now, we'll consider a file validated if it's processed
                 // In the future, we could track this separately
                 var isValidated = false; // Will be set to true when user saves validated data
