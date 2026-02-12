@@ -777,28 +777,69 @@ public partial class MainWindow : Window
         var originalFilePath = filePath;
         
         // If the file is a PDF, check if it has already been converted to PNG
-        // Do not automatically convert PDFs - user must use Batch Process
         if (System.IO.Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
             var directory = System.IO.Path.GetDirectoryName(filePath);
             var fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
             var pngPath = System.IO.Path.Combine(directory!, $"{fileNameWithoutExt}.png");
             
-            if (System.IO.File.Exists(pngPath))
+            if (!System.IO.File.Exists(pngPath))
             {
-                // Use the already converted PNG for display
-                filePath = pngPath;
+                // Convert PDF to PNG on-the-fly
+                var convertingDialog = new Window
+                {
+                    Title = "Converting PDF",
+                    Width = 250,
+                    Height = 100,
+                    Content = new TextBlock
+                    {
+                        Text = "Converting PDF to image...",
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                        FontSize = 14
+                    },
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false
+                };
+
+                // Show the dialog
+                _ = convertingDialog.ShowDialog(this);
+
+                try
+                {
+                    var convertedPath = await ConvertPdfToPngAsync(filePath);
+                    if (convertedPath != null)
+                    {
+                        pngPath = convertedPath;
+                    }
+                    else
+                    {
+                        // Conversion failed
+                        convertingDialog.Close();
+                        viewModel.OriginalImageSource = null;
+                        viewModel.FileCaption = "Failed to convert PDF for display.";
+                        viewModel.SetOcrJson(string.Empty);
+                        viewModel.DocumentFields.Clear();
+                        viewModel.CurrentInvoice = null;
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    convertingDialog.Close();
+                    viewModel.OriginalImageSource = null;
+                    viewModel.FileCaption = $"Error converting PDF: {ex.Message}";
+                    viewModel.SetOcrJson(string.Empty);
+                    viewModel.DocumentFields.Clear();
+                    viewModel.CurrentInvoice = null;
+                    return;
+                }
+
+                convertingDialog.Close();
             }
-            else
-            {
-                // PDF hasn't been processed yet - clear panels and show message
-                viewModel.OriginalImageSource = null;
-                viewModel.FileCaption = "This PDF has not been processed yet. Please use Batch Process to run OCR on this file.";
-                viewModel.SetOcrJson(string.Empty);
-                viewModel.DocumentFields.Clear();
-                viewModel.CurrentInvoice = null;
-                return;
-            }
+
+            // Use the PNG for display
+            filePath = pngPath;
         }
         
         // Load and display the image
