@@ -248,14 +248,14 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    public void DrawOCROverlay(OCRFile ocrFile)
-    {
-        // This will be called from code-behind to draw the overlay
-        if (ocrFile.LineBlocks == null || ocrFile.LineBlocks.Count == 0)
-            return;
+    // public void DrawOCROverlay(OCRFile ocrFile)
+    // {
+    //     // This will be called from code-behind to draw the overlay
+    //     if (ocrFile.LineBlocks == null || ocrFile.LineBlocks.Count == 0)
+    //         return;
 
-        LoadImage(ocrFile.filePath);
-    }
+    //     LoadImage(ocrFile.filePath);
+    // }
 
     public void NavigateToNextField()
     {
