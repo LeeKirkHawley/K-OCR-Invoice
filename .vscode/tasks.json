@@ -6,7 +6,8 @@
             "dependsOn": [
                 "Build K-OCRLib Only",
                 "Build K-OCRIntegrationTests Only",
-                "Build K-OCRDesktop Only"
+                "Build K-OCRDesktop Only",
+                "Build K-OCR-API Only"
             ],
             "dependsOrder": "sequence",
             "group": {
@@ -14,6 +15,18 @@
                 "isDefault": true
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Build K-OCR-API Only",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/K-OCR-API/K-OCR-API.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile"
         },
         {
             "label": "Build K-OCRLib Only",
@@ -111,6 +124,50 @@
             "group": "build",
             "presentation": {
                 "reveal": "always"
+            }
+        },
+        {
+            "label": "npm: start",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "start"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/K-OCRAngular"
+            },
+            "isBackground": true,
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": {
+                "owner": "webpack",
+                "source": "webpack",
+                "fileLocation": "relative",
+                "pattern": {
+                    "regexp": "ERROR in (.*)\\((\\d+),(\\d+)\\)",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3
+                }
+            }
+        },
+        {
+            "label": "npm: test",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "test"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/K-OCRAngular"
+            },
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
             }
         }
     ]

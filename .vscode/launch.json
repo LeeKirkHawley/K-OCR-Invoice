@@ -1,7 +1,22 @@
 {
-    // Launch configurations for K-OCR Desktop (Avalonia)
+    // Launch configurations for K-OCR projects
     "version": "0.2.0",
     "configurations": [
+        {
+            "name": "Launch K-OCR-API",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/K-OCR-API/bin/Debug/net10.0/K-OCR-API.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/K-OCR-API",
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            }
+        },
         {
             "name": "Launch K-OCRDesktop (Avalonia)",
             "type": "coreclr",
@@ -28,6 +43,31 @@
             "name": "Attach to Process",
             "type": "coreclr",
             "request": "attach"
+        },
+        {
+            "name": "ng serve",
+            "type": "chrome",
+            "request": "launch",
+            "preLaunchTask": "npm: start",
+            "url": "http://localhost:4200/",
+            "cwd": "${workspaceFolder}/K-OCRAngular",
+            "webRoot": "${workspaceFolder}/K-OCRAngular",
+            "sourceMaps": true,
+            "sourceMapPathOverrides": {
+                "webpack://_N_E/*": "${webRoot}/*"
+            },
+            "runtimeArgs": [
+                "--disable-web-security",
+                "--user-data-dir=${workspaceFolder}/.vscode/chrome-debug-profile"
+            ]
+        },
+        {
+            "name": "ng test",
+            "type": "chrome",
+            "request": "launch",
+            "preLaunchTask": "npm: test",
+            "url": "http://localhost:9876/debug.html",
+            "cwd": "${workspaceFolder}/K-OCRAngular"
         }
     ]
 }
