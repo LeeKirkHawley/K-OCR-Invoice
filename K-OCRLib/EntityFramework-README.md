@@ -42,18 +42,46 @@ The following NuGet packages have been added to K-OCRLib:
    - ocrText
    - LineBlocks, TableBlocks
 
-## Usage
+## Configuration
 
-### Setting up Dependency Injection
+### App Settings
 
-In your application startup (e.g., in K-OCR-API Program.cs):
+Add database configuration to your `appsettings.json`:
 
-```csharp
-builder.Services.AddDbContext<KOCRDbContext>(options =>
-    options.UseSqlite("Data Source=kocr.db"));
-
-builder.Services.AddScoped<DatabaseService>();
+```json
+{
+  "Database": {
+    "ConnectionString": "Data Source=kocr.db",
+    "Provider": "SQLite",
+    "EnableSensitiveDataLogging": false,
+    "EnableDetailedErrors": false
+  }
+}
 ```
+
+### Dependency Injection Setup
+
+#### Option 1: Using Configuration
+```csharp
+// In Program.cs or Startup.cs
+builder.Services.AddKOCRDatabase(builder.Configuration);
+```
+
+#### Option 2: Using Connection String Directly
+```csharp
+// In Program.cs or Startup.cs
+builder.Services.AddKOCRDatabase("Data Source=myapp.db");
+```
+
+### Database Providers
+
+The library currently supports SQLite, but can be extended to support other providers:
+
+- **SQLite** (default): `Data Source=filename.db`
+- **SQL Server**: `Server=server;Database=db;Trusted_Connection=True;`
+- **PostgreSQL**: `Host=host;Database=db;Username=user;Password=password`
+
+To add additional providers, install the corresponding EF Core package and update the `DatabaseConfiguration.cs`.
 
 ### Using the Database Service
 
