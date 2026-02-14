@@ -29,4 +29,11 @@ public class DocumentField
     // Navigation property
     [ForeignKey("InvoiceId")]
     public virtual Invoice Invoice { get; set; } = null!;
+
+    // UI properties (not stored in database)
+    [NotMapped]
+    public object? RawValue { get; set; }
+
+    [NotMapped]
+    public List<BoundingBoxDto>? BoundingBoxes { get; set; }
 }
