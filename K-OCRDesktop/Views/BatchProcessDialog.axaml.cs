@@ -23,22 +23,24 @@ public partial class BatchProcessDialog : Window
     private readonly string _currentDirectory;
     private readonly IImageService _imageService;
     private readonly IFileService _fileService;
+    private readonly DatabaseService _databaseService;
 
     public bool ProcessingCompleted { get; private set; }
     public int FilesProcessed { get; private set; }
 
-    public BatchProcessDialog() : this(null, null, string.Empty)
+    public BatchProcessDialog() : this(null, null, null!, string.Empty)
     {
     }
 
-    public BatchProcessDialog(IInvoiceService? invoiceService, IConfiguration? config, string currentDirectory)
+    public BatchProcessDialog(IInvoiceService? invoiceService, IConfiguration? config, DatabaseService databaseService, string currentDirectory)
     {
         InitializeComponent();
         _invoiceService = invoiceService;
         _config = config;
+        _databaseService = databaseService;
         _currentDirectory = currentDirectory;
         _imageService = new ImageService();
-        _fileService = new FileService();
+        _fileService = new FileService(databaseService);
         
         // Set current directory text in UI
         var currentDirText = this.FindControl<TextBlock>("CurrentDirectoryText");
@@ -102,7 +104,7 @@ public partial class BatchProcessDialog : Window
             var items = _filePaths.Select(path => new FileListItem
             {
                 FileName = Path.GetFileName(path),
-                IsProcessed = File.Exists(Path.ChangeExtension(path, ".json"))
+                IsProcessed = _databaseService.GetOCRFileByPathAsync(path).GetAwaiter().GetResult() != null
             }).ToList();
             
             listBox.ItemsSource = items;
@@ -171,6 +173,28 @@ public partial class BatchProcessDialog : Window
         {
             await ShowMessageAsync("Error", "Invoice service not available.");
             return;
+        }
+
+        // Validate database service before expensive OCR processing
+        if (_databaseService != null)
+        {
+            try
+            {
+                // Test database connectivity
+                bool isDbAvailable = await _databaseService.IsDatabaseAvailableAsync();
+                if (!isDbAvailable)
+                {
+                    await ShowMessageAsync("Error", "Database is not available. Please check your database configuration before processing files.");
+                    return;
+                }
+                System.Console.WriteLine("[Batch DB] Database validation successful");
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"[Batch DB] Database validation failed: {ex.Message}");
+                await ShowMessageAsync("Error", "Database is not available. Please check your database configuration before processing files.");
+                return;
+            }
         }
 
         // Get max concurrent requests from config
@@ -266,22 +290,66 @@ public partial class BatchProcessDialog : Window
 
             var results = await invoiceService.ProcessInvoiceBatchAsync(processablePaths, progress);
 
-            // Save results to JSON files
-            foreach (var (filePath, invoices) in results)
+            // Save results to database
+            if (_databaseService != null)
             {
-                // Use original PDF path if this was converted from PDF
-                var originalPath = pdfMappings.TryGetValue(filePath, out var pdfPath) ? pdfPath : filePath;
-                
-                var jsonOutputPath = Path.ChangeExtension(originalPath, ".json");
-                var pipelineContext = new PipelineContext
+                foreach (var (filePath, invoices) in results)
                 {
-                    InputPath = originalPath,
-                    Layout = invoices
-                };
+                    try
+                    {
+                        // Use original PDF path if this was converted from PDF
+                        var originalPath = pdfMappings.TryGetValue(filePath, out var pdfPath) ? pdfPath : filePath;
+                        
+                        var pipelineContext = new PipelineContext
+                        {
+                            InputPath = originalPath,
+                            Layout = invoices
+                        };
 
-                var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
-                await File.WriteAllTextAsync(jsonOutputPath, json);
-                System.Console.WriteLine($"[Batch JSON] Wrote file: {Path.GetFileName(jsonOutputPath)}");
+                        var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                        
+                        // Validate data before saving
+                        if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(originalPath))
+                        {
+                            System.Console.WriteLine($"[Batch DB] Skipping save for {Path.GetFileName(originalPath)} - invalid data");
+                            continue;
+                        }
+                        
+                        var ocrFile = new OCRFile
+                        {
+                            FilePath = originalPath,
+                            OcrText = json
+                        };
+
+                        await _databaseService.SaveOCRFileAsync(ocrFile);
+                        System.Console.WriteLine($"[Batch DB] Saved OCR result for: {Path.GetFileName(originalPath)}");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Console.WriteLine($"[Batch DB] Failed to save {Path.GetFileName(filePath)}: {ex.Message}");
+                        // Continue processing other files instead of failing completely
+                    }
+                }
+            }
+            else
+            {
+                // Fallback to JSON files if database is not available
+                foreach (var (filePath, invoices) in results)
+                {
+                    // Use original PDF path if this was converted from PDF
+                    var originalPath = pdfMappings.TryGetValue(filePath, out var pdfPath) ? pdfPath : filePath;
+                    
+                    var jsonOutputPath = Path.ChangeExtension(originalPath, ".json");
+                    var pipelineContext = new PipelineContext
+                    {
+                        InputPath = originalPath,
+                        Layout = invoices
+                    };
+
+                    var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                    await File.WriteAllTextAsync(jsonOutputPath, json);
+                    System.Console.WriteLine($"[Batch JSON] Wrote file: {Path.GetFileName(jsonOutputPath)}");
+                }
             }
 
             progressWindow.Close();
@@ -319,6 +387,7 @@ public partial class BatchProcessDialog : Window
             Title = title,
             Width = 400,
             Height = 200,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Content = new TextBlock
             {
                 Text = message,
@@ -328,6 +397,8 @@ public partial class BatchProcessDialog : Window
                 Padding = new Thickness(10)
             }
         };
-        await messageWindow.ShowDialog(this);
+        
+        // Show dialog with the main window as owner (not this dialog)
+        await messageWindow.ShowDialog(Owner as Window ?? this);
     }
 }

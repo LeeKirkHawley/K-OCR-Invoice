@@ -9,6 +9,12 @@ namespace K_OCR.Services
 {
     public class FileService : IFileService
     {
+        private readonly DatabaseService _databaseService;
+
+        public FileService(DatabaseService databaseService)
+        {
+            _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+        }
         public void WriteJsonToDisk(string filePath, string json)
         {
             // Get directory and build new path with .json extension
@@ -36,35 +42,46 @@ namespace K_OCR.Services
         
         public async Task<PipelineContext?> LoadCachedContextAsync(string imagePath)
         {
-            var jsonPath = GetJsonFilePath(imagePath);
-            
-            if (!File.Exists(jsonPath))
+            var ocrFile = await _databaseService.GetOCRFileByPathAsync(imagePath);
+            if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.OcrText))
             {
-                return null;
+                try
+                {
+                    return Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.OcrText);
+                }
+                catch (Exception ex)
+                {
+                    System.Console.WriteLine($"[Database Cache] Failed to deserialize OCR data from database for {Path.GetFileName(imagePath)}: {ex.Message}");
+                    return null;
+                }
             }
-            
-            try
-            {
-                var json = await File.ReadAllTextAsync(jsonPath);
-                return Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
-            }
-            catch
-            {
-                return null;
-            }
+
+            return null;
         }
         
         public async Task SaveContextAsync(string imagePath, PipelineContext context)
         {
-            var jsonPath = GetJsonFilePath(imagePath);
+            if (_databaseService == null)
+            {
+                throw new InvalidOperationException("Database service is required for saving OCR context");
+            }
+
             var json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
-            await File.WriteAllTextAsync(jsonPath, json);
-            System.Console.WriteLine($"[JSON Cache] Wrote file: {Path.GetFileName(jsonPath)}");
+            
+            var ocrFile = new OCRFile
+            {
+                FilePath = imagePath,
+                OcrText = json
+            };
+            
+            await _databaseService.SaveOCRFileAsync(ocrFile);
+            System.Console.WriteLine($"[Database Cache] Saved OCR data for: {Path.GetFileName(imagePath)}");
         }
         
         public bool HasCachedJson(string imagePath)
         {
-            return File.Exists(GetJsonFilePath(imagePath));
+            var ocrFile = _databaseService.GetOCRFileByPathAsync(imagePath).GetAwaiter().GetResult();
+            return ocrFile != null && !string.IsNullOrEmpty(ocrFile.OcrText);
         }
         
         public IEnumerable<string> LoadFiles(string directory, string[]? extensions = null)

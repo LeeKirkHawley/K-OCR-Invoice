@@ -41,7 +41,7 @@ namespace K_OCR.Database
             });
 
             // Add database service
-            services.AddScoped<DatabaseService>();
+            services.AddSingleton<DatabaseService>();
 
             return services;
         }
@@ -59,7 +59,7 @@ namespace K_OCR.Database
             services.AddDbContext<KOCRDbContext>(options =>
                 options.UseSqlite(connectionString));
 
-            services.AddScoped<DatabaseService>();
+            services.AddSingleton<DatabaseService>();
 
             return services;
         }

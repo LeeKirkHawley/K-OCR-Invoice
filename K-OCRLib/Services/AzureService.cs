@@ -26,7 +26,7 @@ namespace K_OCR.Services
                 string endpoint = _config["AzureCognitiveServicesEndpoint"];
                 string apiKey = _config["AzureCognitiveServicesKey"];
 
-                string filePath = ocrFile.filePath;
+                string filePath = ocrFile.FilePath;
 
 
                 var client = new HttpClient();

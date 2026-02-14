@@ -1,18 +1,25 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace K_OCR.Models
 {
+    [Table("OcrFiles")]
     public class OCRFile
     {
-        public string filePath { get; set; } = string.Empty;
-        public string ocrText { get; set; } = string.Empty;
+        [Key]
+        public int Id { get; set; }
 
-        public List<OcrBlock> LineBlocks = new List<OcrBlock>();
-        public List<OcrBlock> TableBlocks = new List<OcrBlock>();
+        [Required]
+        public string FilePath { get; set; } = string.Empty;
 
+        [Required]
+        public string OcrText { get; set; } = string.Empty;
+
+        // Navigation properties for related OCR blocks (not stored in DB)
+        [NotMapped]
+        public List<OcrBlock> LineBlocks { get; set; } = new List<OcrBlock>();
+        
+        [NotMapped]
+        public List<OcrBlock> TableBlocks { get; set; } = new List<OcrBlock>();
     }
 }

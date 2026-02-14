@@ -18,21 +18,34 @@ namespace K_OCR.Services
         {
             _context = context;
             _logger = logger;
-        }
-
-        // Initialize the database
-        public async Task InitializeDatabaseAsync()
-        {
+            
+            // Initialize database synchronously on first use
             try
             {
-                _logger.LogInformation("Initializing database...");
-                await _context.Database.EnsureCreatedAsync();
-                _logger.LogInformation("Database initialized successfully.");
+                _logger.LogInformation("Ensuring database exists...");
+                _context.Database.EnsureCreated();
+                _logger.LogInformation("Database ready.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error initializing database");
+                _logger.LogError(ex, "Error ensuring database exists");
                 throw;
+            }
+        }
+
+        // Database health check
+        public async Task<bool> IsDatabaseAvailableAsync()
+        {
+            try
+            {
+                // Simple query to test database connectivity
+                await _context.OCRFiles.FirstOrDefaultAsync(f => false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Database connectivity test failed");
+                return false;
             }
         }
 
@@ -108,34 +121,74 @@ namespace K_OCR.Services
         }
 
         // OCR File operations
-        public async Task<OCRFile?> GetOCRFileByPathAsync(string filePath)
+        public async Task<OCRFile?> GetOCRFileByIdAsync(int id)
         {
-            return await _context.OCRFiles.FirstOrDefaultAsync(f => f.filePath == filePath);
+            return await _context.OCRFiles.FindAsync(id);
         }
 
-        public async Task SaveOCRFileAsync(OCRFile ocrFile)
+        public async Task<OCRFile?> GetOCRFileByPathAsync(string filePath)
         {
+            return await _context.OCRFiles.FirstOrDefaultAsync(f => f.FilePath == filePath);
+        }
+
+        public async Task<List<OCRFile>> GetAllOCRFilesAsync()
+        {
+            return await _context.OCRFiles
+                .OrderByDescending(f => f.Id)
+                .ToListAsync();
+        }
+
+        public async Task<OCRFile> SaveOCRFileAsync(OCRFile ocrFile)
+        {
+            // Validate input
+            if (ocrFile == null)
+                throw new ArgumentNullException(nameof(ocrFile));
+            
+            if (string.IsNullOrEmpty(ocrFile.FilePath))
+                throw new ArgumentException("FilePath cannot be null or empty", nameof(ocrFile.FilePath));
+            
+            if (string.IsNullOrEmpty(ocrFile.OcrText))
+                throw new ArgumentException("OcrText cannot be null or empty", nameof(ocrFile.OcrText));
+
             try
             {
-                var existing = await GetOCRFileByPathAsync(ocrFile.filePath);
-                if (existing != null)
-                {
-                    existing.ocrText = ocrFile.ocrText;
-                    existing.LineBlocks = ocrFile.LineBlocks;
-                    existing.TableBlocks = ocrFile.TableBlocks;
-                    _context.OCRFiles.Update(existing);
-                }
-                else
+                if (ocrFile.Id == 0)
                 {
                     _context.OCRFiles.Add(ocrFile);
                 }
+                else
+                {
+                    _context.OCRFiles.Update(ocrFile);
+                }
 
                 await _context.SaveChangesAsync();
-                _logger.LogInformation($"OCR file saved: {ocrFile.filePath}");
+                _logger.LogInformation($"OCR file saved with ID: {ocrFile.Id}, Path: {ocrFile.FilePath}");
+                return ocrFile;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error saving OCR file: {ocrFile.filePath}");
+                _logger.LogError(ex, $"Error saving OCR file: {ocrFile.FilePath}");
+                throw;
+            }
+        }
+
+        public async Task<bool> DeleteOCRFileAsync(int id)
+        {
+            try
+            {
+                var ocrFile = await _context.OCRFiles.FindAsync(id);
+                if (ocrFile != null)
+                {
+                    _context.OCRFiles.Remove(ocrFile);
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation($"OCR file deleted with ID: {id}");
+                    return true;
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error deleting OCR file with ID: {id}");
                 throw;
             }
         }

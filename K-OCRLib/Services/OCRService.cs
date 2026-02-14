@@ -23,12 +23,12 @@ namespace K_OCR.Services
                 {
                     var engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default);
 
-                    var img = Pix.LoadFromFile(ocrFile.filePath);
+                    var img = Pix.LoadFromFile(ocrFile.FilePath);
                     using (var page = engine.Process(img))
                     {
                         var text = page.GetText();
                         Debug.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
-                        ocrFile.ocrText = text;
+                        ocrFile.OcrText = text;
 
                         List<OcrBlock> lineBlocks, tableBlocks;
                         _analysisService.AnalyzePage(ocrFile, page, out lineBlocks, out tableBlocks);
@@ -49,7 +49,7 @@ namespace K_OCR.Services
                         //    }
                         //});
 
-                        Debug.WriteLine($"OCR'd {System.IO.Path.GetFileName(ocrFile.filePath)}");
+                        Debug.WriteLine($"OCR'd {System.IO.Path.GetFileName(ocrFile.FilePath)}");
                     }
                 }
                 catch (Exception ex)

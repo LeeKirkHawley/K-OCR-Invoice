@@ -8,8 +8,10 @@ using Avalonia.Styling;
 using K_OCRDesktop.ViewModels;
 using K_OCRDesktop.Views;
 using K_OCR.Services;
+using K_OCR.Database;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System;
 
 namespace K_OCRDesktop;
@@ -38,6 +40,16 @@ public partial class App : Application
         // Register configuration
         services.AddSingleton<IConfiguration>(configuration);
 
+        // Register logging
+        services.AddLogging(logging =>
+        {
+            logging.AddConfiguration(configuration.GetSection("Logging"));
+            logging.AddConsole();
+        });
+
+        // Register database services
+        services.AddKOCRDatabase(configuration);
+
         // Register OCR services
         services.AddSingleton<IFileService, FileService>();
         services.AddSingleton<IAnalysisService, AnalysisService>();
@@ -65,8 +77,10 @@ public partial class App : Application
             var invoiceService = Services?.GetService(typeof(IInvoiceService)) as IInvoiceService;
             var invoiceProcessingService = Services?.GetService(typeof(IInvoiceProcessingService)) as IInvoiceProcessingService;
             var configurationService = Services?.GetService(typeof(IConfigurationService)) as IConfigurationService;
+            var databaseService = Services?.GetService(typeof(DatabaseService)) as DatabaseService 
+                ?? throw new InvalidOperationException("DatabaseService is required but not registered in DI container");
 
-            desktop.MainWindow = new MainWindow(fileService, ocrService, invoiceService, invoiceProcessingService, configurationService)
+            desktop.MainWindow = new MainWindow(fileService, ocrService, invoiceService, invoiceProcessingService, configurationService, databaseService)
             {
                 DataContext = new MainWindowViewModel(),
             };

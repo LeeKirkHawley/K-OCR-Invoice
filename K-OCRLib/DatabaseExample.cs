@@ -34,9 +34,7 @@ namespace K_OCR.DatabaseExample
 
                 try
                 {
-                    // Initialize the database (creates tables if they don't exist)
-                    await dbService.InitializeDatabaseAsync();
-
+                    // Database is automatically initialized when DatabaseService is created
                     Console.WriteLine("Database initialized successfully!");
                     Console.WriteLine("SQLite database file: kocr.db");
 

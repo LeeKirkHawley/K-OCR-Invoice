@@ -38,17 +38,18 @@ public partial class MainWindow : Window
     private readonly IConfigurationService? _configurationService;
     private readonly IOCRService? _ocrService;
     private readonly IImageService? _imageService;
+    private readonly DatabaseService _databaseService;
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    public MainWindow() : this(null, null, null, null, null)
+    public MainWindow() : this(null, null, null, null, null, null!)
     {
     }
     
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     public MainWindow(IFileService? fileService, IOCRService? ocrService, IInvoiceService? invoiceService,
-        IInvoiceProcessingService? invoiceProcessingService, IConfigurationService? configurationService)
+        IInvoiceProcessingService? invoiceProcessingService, IConfigurationService? configurationService, DatabaseService databaseService)
     {
         InitializeComponent();
         
@@ -78,11 +79,8 @@ public partial class MainWindow : Window
         KeyDown += OnKeyDown;
         Closing += OnClosing;
 
-        _fileService = fileService ?? new FileService();
-        _ocrService = ocrService;
-        _invoiceService = invoiceService ?? new InvoiceService();
-        _invoiceProcessingService = invoiceProcessingService ?? new InvoiceProcessingService(_fileService, _invoiceService);
-        _configurationService = configurationService ?? new ConfigurationService();
+        _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+        _fileService = fileService ?? new FileService(_databaseService);
         _imageService = new ImageService();
 
         // Load configuration
@@ -552,8 +550,8 @@ public partial class MainWindow : Window
                             // Create an OCRFile for display
                             var ocrFile = new OCRFile
                             {
-                                filePath = filePath,
-                                ocrText = pipelineContext.Text ?? string.Empty,
+                                FilePath = filePath,
+                                OcrText = pipelineContext.Text ?? string.Empty,
                                 LineBlocks = new List<OcrBlock>(),
                                 TableBlocks = new List<OcrBlock>()
                             };
@@ -631,13 +629,13 @@ public partial class MainWindow : Window
             return;
         }
         
-        var batchDialog = new BatchProcessDialog(_invoiceService, _config, viewModel.CurrentDirectory);
+        var batchDialog = new BatchProcessDialog(_invoiceService, _config, _databaseService, viewModel.CurrentDirectory);
         await batchDialog.ShowDialog(this);
         
         // If processing completed, reload the current folder to show new results
         if (batchDialog.ProcessingCompleted)
         {
-            viewModel.LoadImageFilesFromFolder(viewModel.CurrentDirectory);
+            viewModel.LoadImageFilesFromFolder(viewModel.CurrentDirectory, _databaseService);
         }
     }
 
@@ -668,7 +666,7 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrEmpty(selectedPath) && DataContext is MainWindowViewModel viewModel)
         {
-            viewModel.LoadImageFilesFromFolder(selectedPath);
+            viewModel.LoadImageFilesFromFolder(selectedPath, _databaseService);
         }
     }
 
@@ -886,17 +884,17 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Check if cached JSON exists - use original file path for JSON lookup
-        var jsonOutputPath = System.IO.Path.ChangeExtension(originalFilePath, ".json");
+        // Check if cached OCR data exists in database
         PipelineContext? pipelineContext = null;
-        string json;
+        string json = string.Empty;
 
-        if (System.IO.File.Exists(jsonOutputPath))
+        // Load from database only
+        var ocrFile = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
+        if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.OcrText))
         {
-            // Load from cached JSON
             try
             {
-                json = await System.IO.File.ReadAllTextAsync(jsonOutputPath);
+                json = ocrFile.OcrText;
                 pipelineContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
                 
                 // Display cached JSON in right panel
@@ -907,14 +905,14 @@ public partial class MainWindow : Window
             }
             catch
             {
-                // If cached JSON is invalid, treat as not processed
+                // If cached data is invalid, treat as not processed
                 pipelineContext = null;
             }
         }
 
         if (pipelineContext == null)
         {
-            // No cached results - clear the panels and show message
+            // No cached results in database - clear the panels and show message
             viewModel.FileCaption = "This file has not been processed yet. Please use Batch Process to run OCR on this file.";
             viewModel.SetOcrJson(string.Empty);
             viewModel.DocumentFields.Clear();
@@ -1026,7 +1024,7 @@ public partial class MainWindow : Window
                     Patterns = new[] { "*.docx" }
                 }
             },
-            SuggestedFileName = System.IO.Path.GetFileNameWithoutExtension(ocrFile.filePath) + ".docx"
+            SuggestedFileName = System.IO.Path.GetFileNameWithoutExtension(ocrFile.FilePath) + ".docx"
         });
 
         if (saveDialog != null)
@@ -1970,14 +1968,12 @@ public partial class MainWindow : Window
 
                 viewModel.LoadImage(firstFile, availableWidth, availableHeight);
 
-                // Load the JSON
-                var jsonPath = System.IO.Path.ChangeExtension(firstFile, ".json");
-                if (System.IO.File.Exists(jsonPath))
+                // Load the OCR data from database
+                var ocrFile = await _databaseService.GetOCRFileByPathAsync(firstFile);
+                if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.OcrText))
                 {
-                    var json = await System.IO.File.ReadAllTextAsync(jsonPath);
-                    viewModel.SetOcrJson(json);
-
-                    var context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
+                    viewModel.SetOcrJson(ocrFile.OcrText);
+                    var context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.OcrText);
                     ExtractAndDisplayInvoiceData(context, viewModel);
                 }
             }

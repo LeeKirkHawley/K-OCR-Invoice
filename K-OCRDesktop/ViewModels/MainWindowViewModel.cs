@@ -12,6 +12,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using K_OCR.Models;
+using K_OCR.Services;
 using K_OCRDesktop.Models;
 
 namespace K_OCRDesktop.ViewModels;
@@ -186,7 +187,7 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(LineItems));
     }
 
-    public void LoadImageFilesFromFolder(string folderPath)
+    public void LoadImageFilesFromFolder(string folderPath, DatabaseService? databaseService = null)
     {
         try
         {
@@ -221,8 +222,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     continue; // Don't show the PNG, the PDF will be shown instead
                 }
                 
-                var jsonPath = System.IO.Path.ChangeExtension(filePath, ".json");
-                var isProcessed = File.Exists(jsonPath); // Check for existing .json files to indicate processed
+                var isProcessed = databaseService?.GetOCRFileByPathAsync(filePath).GetAwaiter().GetResult() != null;
                 // For now, we'll consider a file validated if it's processed
                 // In the future, we could track this separately
                 var isValidated = false; // Will be set to true when user saves validated data
