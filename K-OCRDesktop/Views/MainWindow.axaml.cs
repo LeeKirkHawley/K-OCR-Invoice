@@ -865,12 +865,15 @@ public partial class MainWindow : Window
             {
                 viewModel.UpdateAvailableWidth(imageScrollViewer.Viewport.Width);
             }
-            // Auto-fit the image to the panel
-            viewModel.ZoomFit();
-            // Reset scroll position after layout update
+            // Auto-fit the image to the panel and reset scroll position after layout update
             if (imageScrollViewer != null)
             {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => imageScrollViewer.ScrollToHome(), Avalonia.Threading.DispatcherPriority.Loaded);
+                Avalonia.Threading.Dispatcher.UIThread.Post(async () => 
+                {
+                    viewModel.ZoomFit();
+                    await Task.Delay(10);
+                    imageScrollViewer.ScrollToHome();
+                }, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
             }
         }
         catch (Exception ex)
@@ -1749,8 +1752,9 @@ public partial class MainWindow : Window
         double canvasHeight = viewModel.CanvasHeight;
         
         // Calculate scale factors to convert from Azure's inch-based coordinates to pixel coordinates
-        double scaleX = canvasWidth / originalPageWidth;
-        double scaleY = canvasHeight / originalPageHeight;
+        // If original page dimensions are 0 (meaning coordinates are already in pixels), use scale of 1
+        double scaleX = originalPageWidth > 0 ? canvasWidth / originalPageWidth : 1.0;
+        double scaleY = originalPageHeight > 0 ? canvasHeight / originalPageHeight : 1.0;
 
         // Track the bounds of all highlights to calculate the center
         double minX = double.MaxValue, minY = double.MaxValue;
@@ -1816,12 +1820,18 @@ public partial class MainWindow : Window
         double targetOffsetX = scaledCenterX - (viewportWidth / 2);
         double targetOffsetY = scaledCenterY - (viewportHeight / 2);
 
-        // Clamp to valid scroll range
-        targetOffsetX = Math.Max(0, Math.Min(targetOffsetX, _imageScrollViewer.Extent.Width - viewportWidth));
-        targetOffsetY = Math.Max(0, Math.Min(targetOffsetY, _imageScrollViewer.Extent.Height - viewportHeight));
+        // Clamp to assumed extent = CanvasWidth * zoom
+        double assumedExtentWidth = viewModel.CanvasWidth * zoom;
+        double assumedExtentHeight = viewModel.CanvasHeight * zoom;
+        targetOffsetX = Math.Max(0, Math.Min(targetOffsetX, assumedExtentWidth - viewportWidth));
+        targetOffsetY = Math.Max(0, Math.Min(targetOffsetY, assumedExtentHeight - viewportHeight));
 
-        // Perform the scroll
-        _imageScrollViewer.Offset = new Vector(targetOffsetX, targetOffsetY);
+        // Perform the scroll after layout updates
+        Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+        {
+            await Task.Delay(10);
+            _imageScrollViewer.Offset = new Vector(targetOffsetX, targetOffsetY);
+        }, Avalonia.Threading.DispatcherPriority.Render);
     }
 
     private void ClearHighlights()
