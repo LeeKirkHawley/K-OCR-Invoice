@@ -1,11 +1,32 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace K_OCR.Models;
 
+[Table("DocumentFields")]
 public class DocumentField
 {
+    [Key]
+    public int Id { get; set; }
+
+    [Required]
+    public int InvoiceId { get; set; }
+
+    [Required]
+    [MaxLength(100)]
     public string Name { get; set; } = string.Empty;
+
+    [Required]
+    [MaxLength(200)]
     public string DisplayName { get; set; } = string.Empty;
+
+    [MaxLength(2000)]
     public string Value { get; set; } = string.Empty;
+
+    [MaxLength(50)]
     public string FieldType { get; set; } = "Text"; // Text, Currency, Date, Number, List
-    public object? RawValue { get; set; } // Store the original value for type-specific operations
-    public List<BoundingBoxDto>? BoundingBoxes { get; set; } // Bounding boxes for highlighting
+
+    // Navigation property
+    [ForeignKey("InvoiceId")]
+    public virtual Invoice Invoice { get; set; } = null!;
 }
