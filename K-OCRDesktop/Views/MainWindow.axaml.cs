@@ -868,10 +868,9 @@ public partial class MainWindow : Window
             // Auto-fit the image to the panel and reset scroll position after layout update
             if (imageScrollViewer != null)
             {
-                Avalonia.Threading.Dispatcher.UIThread.Post(async () => 
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => 
                 {
                     viewModel.ZoomFit();
-                    await Task.Delay(10);
                     imageScrollViewer.ScrollToHome();
                 }, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
             }
@@ -1827,9 +1826,8 @@ public partial class MainWindow : Window
         targetOffsetY = Math.Max(0, Math.Min(targetOffsetY, assumedExtentHeight - viewportHeight));
 
         // Perform the scroll after layout updates
-        Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            await Task.Delay(10);
             _imageScrollViewer.Offset = new Vector(targetOffsetX, targetOffsetY);
         }, Avalonia.Threading.DispatcherPriority.Render);
     }
