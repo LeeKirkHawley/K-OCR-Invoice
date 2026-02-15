@@ -81,6 +81,7 @@ public partial class MainWindow : Window
 
         _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
         _fileService = fileService ?? new FileService(_databaseService);
+        _configurationService = configurationService ?? new ConfigurationService();
         _imageService = new ImageService();
 
         // Load configuration
