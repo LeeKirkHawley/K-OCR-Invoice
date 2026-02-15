@@ -15,6 +15,8 @@ namespace K_OCR.Models
         [Required]
         public string OcrText { get; set; } = string.Empty;
 
+        public string? ValidatedOcrText { get; set; }
+
         // Navigation properties for related OCR blocks (not stored in DB)
         [NotMapped]
         public List<OcrBlock> LineBlocks { get; set; } = new List<OcrBlock>();

@@ -56,6 +56,8 @@ public partial class App : Application
         services.AddSingleton<IOCRService, OCRService>();
         services.AddSingleton<IAzureService, AzureService>();
         services.AddSingleton<IInvoiceService, InvoiceService>();
+        services.AddSingleton<IInvoiceProcessingService, InvoiceProcessingService>();
+        services.AddSingleton<IConfigurationService, ConfigurationService>();
 
         Services = services.BuildServiceProvider();
     }

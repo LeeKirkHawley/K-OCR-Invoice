@@ -43,17 +43,37 @@ namespace K_OCR.Services
         public async Task<PipelineContext?> LoadCachedContextAsync(string imagePath)
         {
             var ocrFile = await _databaseService.GetOCRFileByPathAsync(imagePath);
-            if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.OcrText))
+            if (ocrFile != null)
             {
-                try
+                PipelineContext? context = null;
+
+                // Try ValidatedOcrText first if it exists
+                if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
                 {
-                    return Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.OcrText);
+                    try
+                    {
+                        context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.ValidatedOcrText);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Console.WriteLine($"[Database Cache] Failed to deserialize ValidatedOcrText for {Path.GetFileName(imagePath)}: {ex.Message}");
+                    }
                 }
-                catch (Exception ex)
+
+                // If ValidatedOcrText didn't work or doesn't exist, try OcrText
+                if (context == null && !string.IsNullOrEmpty(ocrFile.OcrText))
                 {
-                    System.Console.WriteLine($"[Database Cache] Failed to deserialize OCR data from database for {Path.GetFileName(imagePath)}: {ex.Message}");
-                    return null;
+                    try
+                    {
+                        context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.OcrText);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Console.WriteLine($"[Database Cache] Failed to deserialize OcrText for {Path.GetFileName(imagePath)}: {ex.Message}");
+                    }
                 }
+
+                return context;
             }
 
             return null;
@@ -81,7 +101,7 @@ namespace K_OCR.Services
         public bool HasCachedJson(string imagePath)
         {
             var ocrFile = _databaseService.GetOCRFileByPathAsync(imagePath).GetAwaiter().GetResult();
-            return ocrFile != null && !string.IsNullOrEmpty(ocrFile.OcrText);
+            return ocrFile != null && (!string.IsNullOrEmpty(ocrFile.OcrText) || !string.IsNullOrEmpty(ocrFile.ValidatedOcrText));
         }
         
         public IEnumerable<string> LoadFiles(string directory, string[]? extensions = null)

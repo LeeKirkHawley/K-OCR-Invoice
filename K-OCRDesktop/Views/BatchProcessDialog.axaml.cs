@@ -169,12 +169,6 @@ public partial class BatchProcessDialog : Window
 
     private async Task ProcessFilesAsync(List<string> filePaths)
     {
-        if (_invoiceService == null)
-        {
-            await ShowMessageAsync("Error", "Invoice service not available.");
-            return;
-        }
-
         // Validate database service before expensive OCR processing
         if (_databaseService != null)
         {

@@ -29,6 +29,20 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _ocrJsonText = string.Empty;
 
     [ObservableProperty]
+    private string _originalOcrText = string.Empty;
+
+    [ObservableProperty]
+    private string _validatedOcrText = string.Empty;
+
+    [ObservableProperty]
+    private bool _showOriginalOcr = true; // Default to showing original OCR
+
+    partial void OnShowOriginalOcrChanged(bool value)
+    {
+        UpdateDisplayedOcrText();
+    }
+
+    [ObservableProperty]
     private double _imageZoom = 1.0;
 
     [ObservableProperty]
@@ -176,7 +190,38 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public void SetOcrJson(string json)
     {
-        OcrJsonText = json;
+        if (ShowOriginalOcr)
+        {
+            OriginalOcrText = json;
+        }
+        else
+        {
+            ValidatedOcrText = json;
+        }
+        UpdateDisplayedOcrText();
+    }
+
+    public void SetOriginalOcrText(string json)
+    {
+        OriginalOcrText = json;
+        if (ShowOriginalOcr)
+        {
+            UpdateDisplayedOcrText();
+        }
+    }
+
+    public void SetValidatedOcrText(string json)
+    {
+        ValidatedOcrText = json;
+        if (!ShowOriginalOcr)
+        {
+            UpdateDisplayedOcrText();
+        }
+    }
+
+    private void UpdateDisplayedOcrText()
+    {
+        OcrJsonText = ShowOriginalOcr ? OriginalOcrText : ValidatedOcrText;
     }
 
     public void SetInvoiceData(InvoiceDto? invoice)

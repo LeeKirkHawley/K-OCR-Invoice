@@ -81,6 +81,9 @@ public partial class MainWindow : Window
 
         _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
         _fileService = fileService ?? new FileService(_databaseService);
+        _invoiceService = invoiceService;
+        _invoiceProcessingService = invoiceProcessingService;
+        _ocrService = ocrService;
         _configurationService = configurationService ?? new ConfigurationService();
         _imageService = new ImageService();
 
@@ -286,6 +289,54 @@ public partial class MainWindow : Window
         catch
         {
             // If saving fails, ignore
+        }
+    }
+
+    private async Task ResetSplitterPositionsAsync()
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+            
+            // Load existing settings
+            K_OCR.Configuration.AppSettings settings;
+            if (System.IO.File.Exists(path))
+            {
+                var existingJson = System.IO.File.ReadAllText(path);
+                settings = System.Text.Json.JsonSerializer.Deserialize<K_OCR.Configuration.AppSettings>(existingJson, new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                }) ?? new K_OCR.Configuration.AppSettings();
+            }
+            else
+            {
+                settings = new K_OCR.Configuration.AppSettings();
+            }
+
+            // Reset splitter positions to null (will use defaults)
+            settings.SplitterLeftPaneWidth = null;
+            settings.SplitterCenterPaneWidth = null;
+            settings.SplitterRightPaneWidth = null;
+
+            var json = System.Text.Json.JsonSerializer.Serialize(settings, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            
+            System.IO.File.WriteAllText(path, json);
+            
+            // Reset the grid to default layout
+            if (_mainContentGrid != null)
+            {
+                // Set default widths (you may need to adjust these based on your XAML)
+                _mainContentGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star); // Left pane
+                _mainContentGrid.ColumnDefinitions[2].Width = new GridLength(2, GridUnitType.Star); // Center pane  
+                _mainContentGrid.ColumnDefinitions[4].Width = new GridLength(1, GridUnitType.Star); // Right pane
+            }
+        }
+        catch
+        {
+            // If reset fails, ignore
         }
     }
 
@@ -894,22 +945,58 @@ public partial class MainWindow : Window
 
         // Load from database only
         var ocrFile = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
-        if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.OcrText))
+        if (ocrFile != null)
         {
-            try
+            PipelineContext? context = null;
+            string jsonToUse = string.Empty;
+
+            // Try ValidatedOcrText first if it exists
+            if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
             {
-                json = ocrFile.OcrText;
-                pipelineContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(json);
+                try
+                {
+                    context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.ValidatedOcrText);
+                    jsonToUse = ocrFile.ValidatedOcrText;
+                }
+                catch
+                {
+                    // ValidatedOcrText is invalid, fall through to try OcrText
+                }
+            }
+
+            // If ValidatedOcrText didn't work or doesn't exist, try OcrText
+            if (context == null && !string.IsNullOrEmpty(ocrFile.OcrText))
+            {
+                try
+                {
+                    context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.OcrText);
+                    jsonToUse = ocrFile.OcrText;
+                }
+                catch
+                {
+                    // OcrText is also invalid
+                }
+            }
+
+            if (context != null && !string.IsNullOrEmpty(jsonToUse))
+            {
+                // Set both original and validated text in the view model
+                viewModel.SetOriginalOcrText(ocrFile.OcrText ?? string.Empty);
+                viewModel.SetValidatedOcrText(ocrFile.ValidatedOcrText ?? string.Empty);
                 
-                // Display cached JSON in right panel
-                viewModel.SetOcrJson(json);
+                // If we have validated text, switch to showing it by default
+                if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+                {
+                    viewModel.ShowOriginalOcr = false;
+                }
                 
                 // Extract and display invoice data in validation tab
-                ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
+                ExtractAndDisplayInvoiceData(context, viewModel);
+                pipelineContext = context; // Set pipelineContext so the final check knows data was loaded
             }
-            catch
+            else
             {
-                // If cached data is invalid, treat as not processed
+                // No valid data found
                 pipelineContext = null;
             }
         }
@@ -1631,8 +1718,30 @@ public partial class MainWindow : Window
             // Write to file
             await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
             
-            // Update the OCR JSON text display
-            viewModel.SetOcrJson(json);
+            // Save validated OCR text to database
+            var ocrFile = await _databaseService.GetOCRFileByPathAsync(imageFilePath);
+            if (ocrFile != null)
+            {
+                ocrFile.ValidatedOcrText = json;
+                await _databaseService.SaveOCRFileAsync(ocrFile);
+                
+                // Update the view model with the validated text
+                viewModel.SetValidatedOcrText(json);
+            }
+            else
+            {
+                // If no existing record, create one
+                ocrFile = new OCRFile
+                {
+                    FilePath = imageFilePath,
+                    OcrText = string.Empty, // Original text might not exist yet
+                    ValidatedOcrText = json
+                };
+                await _databaseService.SaveOCRFileAsync(ocrFile);
+                
+                // Update the view model
+                viewModel.SetValidatedOcrText(json);
+            }
             
             // Mark the current file as validated
             if (viewModel.SelectedImageFile != null)
@@ -1974,11 +2083,53 @@ public partial class MainWindow : Window
 
                 // Load the OCR data from database
                 var ocrFile = await _databaseService.GetOCRFileByPathAsync(firstFile);
-                if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.OcrText))
+                if (ocrFile != null)
                 {
-                    viewModel.SetOcrJson(ocrFile.OcrText);
-                    var context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.OcrText);
-                    ExtractAndDisplayInvoiceData(context, viewModel);
+                    PipelineContext? context = null;
+                    string jsonToUse = string.Empty;
+
+                    // Try ValidatedOcrText first if it exists
+                    if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+                    {
+                        try
+                        {
+                            context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.ValidatedOcrText);
+                            jsonToUse = ocrFile.ValidatedOcrText;
+                        }
+                        catch
+                        {
+                            // ValidatedOcrText is invalid, fall through to try OcrText
+                        }
+                    }
+
+                    // If ValidatedOcrText didn't work or doesn't exist, try OcrText
+                    if (context == null && !string.IsNullOrEmpty(ocrFile.OcrText))
+                    {
+                        try
+                        {
+                            context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.OcrText);
+                            jsonToUse = ocrFile.OcrText;
+                        }
+                        catch
+                        {
+                            // OcrText is also invalid
+                        }
+                    }
+
+                    if (context != null && !string.IsNullOrEmpty(jsonToUse))
+                    {
+                        // Set both original and validated text in the view model
+                        viewModel.SetOriginalOcrText(ocrFile.OcrText ?? string.Empty);
+                        viewModel.SetValidatedOcrText(ocrFile.ValidatedOcrText ?? string.Empty);
+                        
+                        // If we have validated text, switch to showing it by default
+                        if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+                        {
+                            viewModel.ShowOriginalOcr = false;
+                        }
+                        
+                        ExtractAndDisplayInvoiceData(context, viewModel);
+                    }
                 }
             }
         }

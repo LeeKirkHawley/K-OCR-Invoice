@@ -361,16 +361,33 @@
                         
                         <!-- OCR Tab (JSON output) -->
                         <TabItem Header="OCR">
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto" 
-                                         VerticalScrollBarVisibility="Auto">
-                                <TextBox Text="{Binding OcrJsonText}"
-                                        IsReadOnly="True"
-                                        FontFamily="Courier New"
-                                        FontSize="12"
-                                        TextWrapping="NoWrap"
-                                        AcceptsReturn="True"
-                                        Background="#F5F5F5"/>
-                            </ScrollViewer>
+                            <Grid RowDefinitions="Auto,*">
+                                <!-- Radio buttons for OCR text selection -->
+                                <StackPanel Grid.Row="0" 
+                                           Orientation="Horizontal" 
+                                           Margin="0,0,0,10"
+                                           Spacing="20">
+                                    <RadioButton Content="Original OCR" 
+                                                IsChecked="{Binding ShowOriginalOcr}"
+                                                GroupName="OcrTextType"/>
+                                    <RadioButton Content="Validated OCR" 
+                                                IsChecked="{Binding !ShowOriginalOcr}"
+                                                GroupName="OcrTextType"/>
+                                </StackPanel>
+                                
+                                <!-- OCR text display -->
+                                <ScrollViewer Grid.Row="1" 
+                                             HorizontalScrollBarVisibility="Auto" 
+                                             VerticalScrollBarVisibility="Auto">
+                                    <TextBox Text="{Binding OcrJsonText}"
+                                            IsReadOnly="True"
+                                            FontFamily="Courier New"
+                                            FontSize="12"
+                                            TextWrapping="NoWrap"
+                                            AcceptsReturn="True"
+                                            Background="#F5F5F5"/>
+                                </ScrollViewer>
+                            </Grid>
                         </TabItem>
                     </TabControl>
                 </Border>
