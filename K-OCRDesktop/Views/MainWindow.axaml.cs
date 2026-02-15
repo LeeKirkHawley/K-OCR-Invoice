@@ -93,6 +93,9 @@ public partial class MainWindow : Window
         
         // Load default start directory
         LoadDefaultStartDirectory();
+        
+        // Load splitter positions
+        _ = LoadSplitterPositionsAsync();
     }
 
     private async void LoadDefaultStartDirectory()
@@ -212,38 +215,38 @@ public partial class MainWindow : Window
         }
     }
 
-    // private async Task LoadSplitterPositionsAsync()
-    // {
-    //     if (_mainContentGrid == null || _configurationService == null)
-    //         return;
+    private async Task LoadSplitterPositionsAsync()
+    {
+        if (_mainContentGrid == null || _configurationService == null)
+            return;
 
-    //     try
-    //     {
-    //         var settings = await _configurationService.LoadSettingsAsync();
+        try
+        {
+            var settings = await _configurationService.LoadSettingsAsync();
 
-    //         if (settings.SplitterLeftPaneWidth.HasValue && settings.SplitterLeftPaneWidth.Value > 0)
-    //         {
-    //             _mainContentGrid.ColumnDefinitions[0].Width =
-    //                 new GridLength(settings.SplitterLeftPaneWidth.Value, GridUnitType.Pixel);
-    //         }
+            if (settings.SplitterLeftPaneWidth.HasValue && settings.SplitterLeftPaneWidth.Value > 0)
+            {
+                _mainContentGrid.ColumnDefinitions[0].Width =
+                    new GridLength(settings.SplitterLeftPaneWidth.Value, GridUnitType.Pixel);
+            }
 
-    //         if (settings.SplitterCenterPaneWidth.HasValue && settings.SplitterCenterPaneWidth.Value > 0)
-    //         {
-    //             _mainContentGrid.ColumnDefinitions[2].Width =
-    //                 new GridLength(settings.SplitterCenterPaneWidth.Value, GridUnitType.Pixel);
-    //         }
+            if (settings.SplitterCenterPaneWidth.HasValue && settings.SplitterCenterPaneWidth.Value > 0)
+            {
+                _mainContentGrid.ColumnDefinitions[2].Width =
+                    new GridLength(settings.SplitterCenterPaneWidth.Value, GridUnitType.Pixel);
+            }
 
-    //         if (settings.SplitterRightPaneWidth.HasValue && settings.SplitterRightPaneWidth.Value > 0)
-    //         {
-    //             _mainContentGrid.ColumnDefinitions[4].Width =
-    //                 new GridLength(settings.SplitterRightPaneWidth.Value, GridUnitType.Pixel);
-    //         }
-    //     }
-    //     catch
-    //     {
-    //         // If loading fails, keep defaults
-    //     }
-    // }
+            if (settings.SplitterRightPaneWidth.HasValue && settings.SplitterRightPaneWidth.Value > 0)
+            {
+                _mainContentGrid.ColumnDefinitions[4].Width =
+                    new GridLength(settings.SplitterRightPaneWidth.Value, GridUnitType.Pixel);
+            }
+        }
+        catch
+        {
+            // If loading fails, keep defaults
+        }
+    }
 
     private void SaveSplitterPositions()
     {
