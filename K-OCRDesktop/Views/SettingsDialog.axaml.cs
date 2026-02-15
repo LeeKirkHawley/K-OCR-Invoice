@@ -14,7 +14,8 @@ public partial class SettingsDialog : Window
     private readonly IConfigurationService _configService;
     private AppSettings _currentSettings;
     
-    public string? DefaultStartDirectory { get; private set; }
+    public string? ProjectDirectory { get; private set; }
+    public string? ProjectArtifacts { get; private set; }
     public int MaxConcurrentRequests { get; private set; } = 3;
     public bool SettingsSaved { get; private set; }
 
@@ -31,13 +32,20 @@ public partial class SettingsDialog : Window
         try
         {
             _currentSettings = await _configService.LoadSettingsAsync();
-            DefaultStartDirectory = _currentSettings.DefaultStartDirectory ?? string.Empty;
+            ProjectDirectory = _currentSettings.ProjectDirectory ?? string.Empty;
+            ProjectArtifacts = _currentSettings.ProjectArtifacts ?? string.Empty;
             MaxConcurrentRequests = _currentSettings.MaxConcurrentRequests;
             
-            var directoryTextBox = this.FindControl<TextBox>("DirectoryTextBox");
-            if (directoryTextBox != null)
+            var projectDirectoryTextBox = this.FindControl<TextBox>("ProjectDirectoryTextBox");
+            if (projectDirectoryTextBox != null)
             {
-                directoryTextBox.Text = DefaultStartDirectory;
+                projectDirectoryTextBox.Text = ProjectDirectory;
+            }
+            
+            var projectArtifactsTextBox = this.FindControl<TextBox>("ProjectArtifactsTextBox");
+            if (projectArtifactsTextBox != null)
+            {
+                projectArtifactsTextBox.Text = ProjectArtifacts;
             }
             
             var maxConcurrentTextBox = this.FindControl<NumericUpDown>("MaxConcurrentTextBox");
@@ -46,23 +54,39 @@ public partial class SettingsDialog : Window
                 maxConcurrentTextBox.Value = MaxConcurrentRequests;
             }
         }
-        catch (Exception ex)
+        catch
         {
             // If loading fails, just use empty defaults
         }
     }
 
-    private async void OnBrowseDirectory(object? sender, RoutedEventArgs e)
+    private async void OnBrowseProjectDirectory(object? sender, RoutedEventArgs e)
     {
-        var folderPicker = new FolderPickerDialog();
-        var result = await folderPicker.ShowDialog<bool>(this);
+        var folderPickerDialog = new FolderPickerDialog();
+        var result = await folderPickerDialog.ShowDialog<bool>(this);
         
         if (result)
         {
-            var directoryTextBox = this.FindControl<TextBox>("DirectoryTextBox");
-            if (directoryTextBox != null && !string.IsNullOrEmpty(folderPicker.SelectedPath))
+            var projectDirectoryTextBox = this.FindControl<TextBox>("ProjectDirectoryTextBox");
+            
+            if (projectDirectoryTextBox != null && !string.IsNullOrEmpty(folderPickerDialog.SelectedPath))
             {
-                directoryTextBox.Text = folderPicker.SelectedPath;
+                projectDirectoryTextBox.Text = folderPickerDialog.SelectedPath;
+            }
+        }
+    }
+
+    private async void OnBrowseProjectArtifacts(object? sender, RoutedEventArgs e)
+    {
+        var folderPickerDialog = new FolderPickerDialog();
+        var result = await folderPickerDialog.ShowDialog<bool>(this);
+        
+        if (result)
+        {
+            var projectArtifactsTextBox = this.FindControl<TextBox>("ProjectArtifactsTextBox");
+            if (projectArtifactsTextBox != null && !string.IsNullOrEmpty(folderPickerDialog.SelectedPath))
+            {
+                projectArtifactsTextBox.Text = folderPickerDialog.SelectedPath;
             }
         }
     }
@@ -71,27 +95,38 @@ public partial class SettingsDialog : Window
     {
         try
         {
-            var directoryTextBox = this.FindControl<TextBox>("DirectoryTextBox");
-            var newDirectory = directoryTextBox?.Text ?? string.Empty;
+            var projectDirectoryTextBox = this.FindControl<TextBox>("ProjectDirectoryTextBox");
+            var newProjectDirectory = projectDirectoryTextBox?.Text ?? string.Empty;
+            
+            var projectArtifactsTextBox = this.FindControl<TextBox>("ProjectArtifactsTextBox");
+            var newProjectArtifacts = projectArtifactsTextBox?.Text ?? string.Empty;
             
             var maxConcurrentTextBox = this.FindControl<NumericUpDown>("MaxConcurrentTextBox");
             var maxConcurrent = maxConcurrentTextBox?.Value ?? 3;
 
-            // Validate directory if not empty
-            if (!string.IsNullOrEmpty(newDirectory) && !Directory.Exists(newDirectory))
+            // Validate directories if not empty
+            if (!string.IsNullOrEmpty(newProjectDirectory) && !Directory.Exists(newProjectDirectory))
             {
-                ShowError("Invalid Directory", "The specified directory does not exist.");
+                ShowError("Invalid Project Directory", "The specified project directory does not exist.");
+                return;
+            }
+            
+            if (!string.IsNullOrEmpty(newProjectArtifacts) && !Directory.Exists(newProjectArtifacts))
+            {
+                ShowError("Invalid Project Artifacts Directory", "The specified project artifacts directory does not exist.");
                 return;
             }
 
             // Update settings
-            _currentSettings.DefaultStartDirectory = newDirectory;
+            _currentSettings.ProjectDirectory = newProjectDirectory;
+            _currentSettings.ProjectArtifacts = newProjectArtifacts;
             _currentSettings.MaxConcurrentRequests = (int)maxConcurrent;
 
             // Save settings using service
             await _configService.SaveSettingsAsync(_currentSettings);
 
-            DefaultStartDirectory = newDirectory;
+            ProjectDirectory = newProjectDirectory;
+            ProjectArtifacts = newProjectArtifacts;
             MaxConcurrentRequests = (int)maxConcurrent;
             SettingsSaved = true;
             Close();

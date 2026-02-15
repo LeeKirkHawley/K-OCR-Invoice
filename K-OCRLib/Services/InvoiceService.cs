@@ -418,7 +418,6 @@ namespace K_OCR.Services
                 await _semaphore.WaitAsync();
                 try
                 {
-                    progress?.Report((completed, total, Path.GetFileName(imagePath)));
                     var invoices = await RunAzureInvoiceParse(imagePath);
                     
                     lock (results)

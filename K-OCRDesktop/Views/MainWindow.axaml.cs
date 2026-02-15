@@ -94,27 +94,27 @@ public partial class MainWindow : Window
             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
             .Build();
         
-        // Load default start directory
-        LoadDefaultStartDirectory();
+        // Load project directory
+        LoadProjectDirectory();
         
         // Load splitter positions
         _ = LoadSplitterPositionsAsync();
     }
 
-    private async void LoadDefaultStartDirectory()
+    private async void LoadProjectDirectory()
     {
         try
         {
             if (_configurationService != null)
             {
                 var settings = await _configurationService.LoadSettingsAsync();
-                if (!string.IsNullOrEmpty(settings.DefaultStartDirectory) && 
-                    System.IO.Directory.Exists(settings.DefaultStartDirectory) &&
+                if (!string.IsNullOrEmpty(settings.ProjectDirectory) && 
+                    System.IO.Directory.Exists(settings.ProjectDirectory) &&
                     DataContext is MainWindowViewModel viewModel)
                 {
-                    // Set the current directory but don't load files
-                    // User must click "Select Folder" to see files
-                    viewModel.CurrentDirectory = settings.DefaultStartDirectory;
+                    // Set the current directory and load files automatically
+                    viewModel.CurrentDirectory = settings.ProjectDirectory;
+                    viewModel.LoadImageFilesFromFolder(settings.ProjectDirectory, _databaseService);
                 }
             }
         }
@@ -592,7 +592,15 @@ public partial class MainWindow : Window
                 {
                     try
                     {
-                        var result = await _invoiceProcessingService.ProcessFileAsync(filePath, useCache: true);
+                        // Get artifacts directory from configuration
+                        var artifactsDirectory = string.Empty;
+                        if (_configurationService != null)
+                        {
+                            var settings = await _configurationService.LoadSettingsAsync();
+                            artifactsDirectory = settings.ProjectArtifacts;
+                        }
+                        
+                        var result = await _invoiceProcessingService.ProcessFileAsync(filePath, useCache: true, artifactsDirectory);
                         
                         if (result.IsSuccess && result.Context != null)
                         {
@@ -665,10 +673,10 @@ public partial class MainWindow : Window
         var settingsDialog = new SettingsDialog();
         await settingsDialog.ShowDialog(this);
         
-        // If settings were saved and default directory changed, reload it
+        // If settings were saved and project directory changed, reload it
         if (settingsDialog.SettingsSaved && DataContext is MainWindowViewModel viewModel)
         {
-            LoadDefaultStartDirectory();
+            LoadProjectDirectory();
         }
     }
 
@@ -684,7 +692,7 @@ public partial class MainWindow : Window
             return;
         }
         
-        var batchDialog = new BatchProcessDialog(_invoiceService, _config, _databaseService, viewModel.CurrentDirectory);
+        var batchDialog = new BatchProcessDialog(_invoiceService, _config, _databaseService, viewModel.CurrentDirectory, _configurationService);
         await batchDialog.ShowDialog(this);
         
         // If processing completed, reload the current folder to show new results
@@ -702,7 +710,7 @@ public partial class MainWindow : Window
             try
             {
                 var settings = await _configurationService.LoadSettingsAsync();
-                initialDirectory = settings.DefaultStartDirectory;
+                initialDirectory = settings.ProjectDirectory;
             }
             catch
             {
@@ -793,7 +801,15 @@ public partial class MainWindow : Window
 
         try
         {
-            return await _imageService.ConvertPdfToPngAsync(pdfPath);
+            // Get artifacts directory from configuration
+            string? artifactsDirectory = null;
+            if (_configurationService != null)
+            {
+                var settings = await _configurationService.LoadSettingsAsync();
+                artifactsDirectory = settings.ProjectArtifacts;
+            }
+
+            return await _imageService.ConvertPdfToPngAsync(pdfPath, artifactsDirectory);
         }
         catch (FileNotFoundException)
         {
@@ -807,7 +823,7 @@ public partial class MainWindow : Window
         }
         catch (InvalidOperationException ex)
         {
-            await ShowMessageAsync("PDF Error", $"Unable to read PDF: {ex.Message}");
+            await ShowMessageAsync("Configuration Error", ex.Message);
             return null;
         }
         catch (Exception ex)
@@ -846,32 +862,26 @@ public partial class MainWindow : Window
         // If the file is a PDF, check if it has already been converted to PNG
         if (System.IO.Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
-            var directory = System.IO.Path.GetDirectoryName(filePath);
+            // Get artifacts directory from configuration
+            string? artifactsDirectory = null;
+            if (_configurationService != null)
+            {
+                var settings = await _configurationService.LoadSettingsAsync();
+                artifactsDirectory = settings.ProjectArtifacts;
+            }
+            
+            if (string.IsNullOrEmpty(artifactsDirectory))
+            {
+                await ShowMessageAsync("Configuration Error", "Artifacts directory is not configured. Please set the artifacts directory in settings before processing PDF files.");
+                return;
+            }
+            
             var fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
-            var pngPath = System.IO.Path.Combine(directory!, $"{fileNameWithoutExt}.png");
+            var pngPath = System.IO.Path.Combine(artifactsDirectory, $"{fileNameWithoutExt}.png");
             
             if (!System.IO.File.Exists(pngPath))
             {
                 // Convert PDF to PNG on-the-fly
-                var convertingDialog = new Window
-                {
-                    Title = "Converting PDF",
-                    Width = 250,
-                    Height = 100,
-                    Content = new TextBlock
-                    {
-                        Text = "Converting PDF to image...",
-                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                        FontSize = 14
-                    },
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                    CanResize = false
-                };
-
-                // Show the dialog
-                _ = convertingDialog.ShowDialog(this);
-
                 try
                 {
                     var convertedPath = await ConvertPdfToPngAsync(filePath);
@@ -882,7 +892,6 @@ public partial class MainWindow : Window
                     else
                     {
                         // Conversion failed
-                        convertingDialog.Close();
                         viewModel.OriginalImageSource = null;
                         viewModel.FileCaption = "Failed to convert PDF for display.";
                         viewModel.SetOcrJson(string.Empty);
@@ -893,7 +902,6 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    convertingDialog.Close();
                     viewModel.OriginalImageSource = null;
                     viewModel.FileCaption = $"Error converting PDF: {ex.Message}";
                     viewModel.SetOcrJson(string.Empty);
@@ -901,8 +909,6 @@ public partial class MainWindow : Window
                     viewModel.CurrentInvoice = null;
                     return;
                 }
-
-                convertingDialog.Close();
             }
 
             // Use the PNG for display
@@ -1696,8 +1702,7 @@ public partial class MainWindow : Window
             }
             
             var imageFilePath = System.IO.Path.Combine(viewModel.CurrentDirectory, viewModel.SelectedImageFile.FileName);
-            var jsonOutputPath = System.IO.Path.ChangeExtension(imageFilePath, ".json");
-
+            
             // Create/update PipelineContext with validated data
             var updatedInvoice = viewModel.CurrentInvoice != null ? CreateUpdatedInvoice(viewModel) : null;
             
@@ -1715,10 +1720,7 @@ public partial class MainWindow : Window
                 pipelineContext, 
                 Newtonsoft.Json.Formatting.Indented);
 
-            // Write to file
-            await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
-            
-            // Save validated OCR text to database
+            // Save validated OCR text to database only
             var ocrFile = await _databaseService.GetOCRFileByPathAsync(imageFilePath);
             if (ocrFile != null)
             {
@@ -1749,7 +1751,7 @@ public partial class MainWindow : Window
                 viewModel.SelectedImageFile.IsValidated = true;
             }
 
-            await ShowMessageBox("Success", $"Validated data saved successfully to:\n{jsonOutputPath}");
+            await ShowMessageBox("Success", "Validated data saved successfully to database.");
         }
         catch (Exception ex)
         {
@@ -1998,6 +2000,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Get artifacts directory from configuration
+        var artifactsDirectory = string.Empty;
+        if (_configurationService != null)
+        {
+            var settings = await _configurationService.LoadSettingsAsync();
+            artifactsDirectory = settings.ProjectArtifacts;
+        }
+
         // Get max concurrent requests from config
         var maxConcurrent = 3;
         if (_config != null && int.TryParse(_config["MaxConcurrentRequests"], out var parsedValue))
@@ -2052,18 +2062,43 @@ public partial class MainWindow : Window
 
             var results = await invoiceService.ProcessInvoiceBatchAsync(filePaths, progress);
 
-            // Save results to JSON files
-            foreach (var (filePath, invoices) in results)
+            // Save results to database
+            if (_databaseService != null)
             {
-                var jsonOutputPath = System.IO.Path.ChangeExtension(filePath, ".json");
-                var pipelineContext = new PipelineContext
+                foreach (var (filePath, invoices) in results)
                 {
-                    InputPath = filePath,
-                    Layout = invoices
-                };
+                    try
+                    {
+                        var pipelineContext = new PipelineContext
+                        {
+                            InputPath = filePath,
+                            Layout = invoices
+                        };
 
-                var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
-                await System.IO.File.WriteAllTextAsync(jsonOutputPath, json);
+                        var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                        
+                        // Validate data before saving
+                        if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(filePath))
+                        {
+                            System.Console.WriteLine($"[Batch DB] Skipping save for {System.IO.Path.GetFileName(filePath)} - invalid data");
+                            continue;
+                        }
+                        
+                        var ocrFile = new OCRFile
+                        {
+                            FilePath = filePath,
+                            OcrText = json
+                        };
+
+                        await _databaseService.SaveOCRFileAsync(ocrFile);
+                        System.Console.WriteLine($"[Batch DB] Saved OCR result for: {System.IO.Path.GetFileName(filePath)}");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Console.WriteLine($"[Batch DB] Failed to save {System.IO.Path.GetFileName(filePath)}: {ex.Message}");
+                        // Continue processing other files instead of failing completely
+                    }
+                }
             }
 
             progressWindow.Close();

@@ -9,8 +9,9 @@ public interface IInvoiceProcessingService
     /// </summary>
     /// <param name="filePath">Path to the file to process</param>
     /// <param name="useCache">Whether to use cached results if available</param>
+    /// <param name="artifactsDirectory">Directory where artifacts are stored (optional)</param>
     /// <returns>Processing result with context and JSON</returns>
-    Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true);
+    Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true, string? artifactsDirectory = null);
     
     /// <summary>
     /// Process multiple files in batch with progress reporting
@@ -18,25 +19,29 @@ public interface IInvoiceProcessingService
     /// <param name="filePaths">Paths to files to process</param>
     /// <param name="useCache">Whether to use cached results if available</param>
     /// <param name="progress">Optional progress reporter</param>
+    /// <param name="artifactsDirectory">Directory where artifacts are stored (optional)</param>
     /// <returns>Dictionary of file paths to processing results</returns>
     Task<Dictionary<string, ProcessingResult>> ProcessBatchAsync(
         IEnumerable<string> filePaths,
         bool useCache = true,
-        IProgress<(int completed, int total, string currentFile)>? progress = null);
+        IProgress<(int completed, int total, string currentFile)>? progress = null,
+        string? artifactsDirectory = null);
     
     /// <summary>
     /// Save a validated invoice back to its JSON file
     /// </summary>
     /// <param name="originalFilePath">Original image/PDF file path</param>
     /// <param name="invoice">Validated invoice data</param>
-    Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice);
+    /// <param name="artifactsDirectory">Directory to save artifacts (optional)</param>
+    Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice, string? artifactsDirectory = null);
     
     /// <summary>
     /// Load cached invoice from JSON file
     /// </summary>
     /// <param name="filePath">Path to the image/PDF file (not the JSON)</param>
+    /// <param name="artifactsDirectory">Directory where artifacts are stored (optional)</param>
     /// <returns>Cached invoice or null if not found</returns>
-    Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath);
+    Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath, string? artifactsDirectory = null);
     
     /// <summary>
     /// Check if a file has cached processing results

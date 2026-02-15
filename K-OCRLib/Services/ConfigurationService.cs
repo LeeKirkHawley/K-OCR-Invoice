@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using K_OCR.Configuration;
 
@@ -14,7 +15,7 @@ public class ConfigurationService : IConfigurationService
             AzureCognitiveServicesKey = null,
             AzureCognitiveServicesEndpoint = "https://parsedocimage.cognitiveservices.azure.com/",
             OCRProvider = "Azure",
-            DefaultStartDirectory = null,
+            ProjectDirectory = null,
             MaxConcurrentRequests = 3
         };
     }
@@ -42,7 +43,15 @@ public class ConfigurationService : IConfigurationService
                 PropertyNameCaseInsensitive = true
             });
             
-            return settings ?? GetDefaultSettings();
+            settings = settings ?? GetDefaultSettings();
+            
+            // Set default ProjectArtifacts if ProjectDirectory is set but ProjectArtifacts is not
+            if (!string.IsNullOrEmpty(settings.ProjectDirectory) && string.IsNullOrEmpty(settings.ProjectArtifacts))
+            {
+                settings.ProjectArtifacts = Path.Combine(settings.ProjectDirectory, "artifacts");
+            }
+            
+            return settings;
         }
         catch
         {

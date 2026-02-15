@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -12,13 +13,13 @@ using Avalonia.VisualTree;
 
 namespace K_OCRDesktop.Views;
 
-public partial class FolderPickerDialog : Window
+public partial class CreateFolderDialog : Window
 {
     public string? SelectedPath { get; private set; }
 
     private List<FolderItem> path = new List<FolderItem>();
 
-    public FolderPickerDialog(string? initialDirectory = null)
+    public CreateFolderDialog(string? initialDirectory = null)
     {
         InitializeComponent();
 #if DEBUG
@@ -27,33 +28,20 @@ public partial class FolderPickerDialog : Window
 
         // Get controls
         var folderTreeView = this.FindControl<TreeView>("FolderTreeView");
-        var okButton = this.FindControl<Button>("OkButton");
-        var cancelButton = this.FindControl<Button>("CancelButton");
         var upButton = this.FindControl<Button>("UpButton");
-        var newFolderButton = this.FindControl<Button>("NewFolderButton");
-        var newFolderTextBox = this.FindControl<TextBox>("NewFolderTextBox");
+        var newFolderNameTextBox = this.FindControl<TextBox>("NewFolderNameTextBox");
+        var createButton = this.FindControl<Button>("CreateButton");
+        var selectCurrentButton = this.FindControl<Button>("SelectCurrentButton");
+        var cancelButton = this.FindControl<Button>("CancelButton");
 
-        if (folderTreeView == null || okButton == null || cancelButton == null || 
-            upButton == null || newFolderButton == null || newFolderTextBox == null)
+        if (folderTreeView == null || upButton == null || newFolderNameTextBox == null || 
+            createButton == null || selectCurrentButton == null || cancelButton == null)
         {
             throw new InvalidOperationException("Required controls not found in XAML");
         }
 
         // Set up tree view
         folderTreeView.ItemsSource = GetRootFolders();
-
-        // Handle OK button
-        okButton.Click += (s, e) =>
-        {
-            if (folderTreeView.SelectedItem is FolderItem selectedItem)
-            {
-                SelectedPath = selectedItem.FullPath;
-                Close(true);
-            }
-        };
-
-        // Handle Cancel button
-        cancelButton.Click += (s, e) => Close(false);
 
         // Handle up button
         upButton.Click += (s, e) =>
@@ -84,6 +72,74 @@ public partial class FolderPickerDialog : Window
                 upButton.IsEnabled = true;
             }
         };
+
+        // Handle create button
+        createButton.Click += async (s, e) =>
+        {
+            var folderName = newFolderNameTextBox.Text?.Trim();
+            if (string.IsNullOrEmpty(folderName))
+            {
+                await ShowError("Invalid Folder Name", "Please enter a folder name.");
+                return;
+            }
+
+            // Get current directory
+            string currentDir;
+            if (path.Count > 0)
+            {
+                currentDir = path.Last().FullPath;
+            }
+            else if (folderTreeView.SelectedItem is FolderItem selectedItem)
+            {
+                currentDir = selectedItem.FullPath;
+            }
+            else
+            {
+                await ShowError("No Parent Folder Selected", "Please select a parent folder first.");
+                return;
+            }
+
+            // Create the full path
+            var newFolderPath = Path.Combine(currentDir, folderName);
+
+            try
+            {
+                // Create the directory if it doesn't exist
+                if (!Directory.Exists(newFolderPath))
+                {
+                    Directory.CreateDirectory(newFolderPath);
+                }
+
+                SelectedPath = newFolderPath;
+                Close(true);
+            }
+            catch (Exception ex)
+            {
+                await ShowError("Error Creating Folder", $"Failed to create folder: {ex.Message}");
+            }
+        };
+
+        // Handle select current button
+        selectCurrentButton.Click += (s, e) =>
+        {
+            if (path.Count > 0)
+            {
+                SelectedPath = path.Last().FullPath;
+                Close(true);
+            }
+            else if (folderTreeView.SelectedItem is FolderItem selectedItem)
+            {
+                SelectedPath = selectedItem.FullPath;
+                Close(true);
+            }
+            else
+            {
+                ShowError("No Folder Selected", "Please select a folder first.").Wait();
+            }
+        };
+
+        // Handle cancel button
+        cancelButton.Click += (s, e) => Close(false);
 
         // If initial directory is provided, navigate to it
         if (!string.IsNullOrEmpty(initialDirectory) && Directory.Exists(initialDirectory))
@@ -156,42 +212,43 @@ public partial class FolderPickerDialog : Window
 
         return rootFolders;
     }
-}
 
-public class FolderItem
-{
-    public string Name { get; }
-    public string FullPath { get; }
-    public ObservableCollection<FolderItem>? Children { get; private set; }
-
-    public FolderItem(string fullPath, string name)
+    private async Task ShowError(string title, string message)
     {
-        FullPath = fullPath;
-        Name = name;
-    }
-
-    public ObservableCollection<FolderItem> GetChildren()
-    {
-        if (Children == null)
+        var dialog = new Window
         {
-            Children = new ObservableCollection<FolderItem>();
-            try
+            Title = title,
+            Width = 400,
+            Height = 150,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            Content = new StackPanel
             {
-                var subDirs = Directory.GetDirectories(FullPath)
-                    .OrderBy(d => d)
-                    .Select(d => new FolderItem(d, Path.GetFileName(d)))
-                    .ToList();
-
-                foreach (var item in subDirs)
+                Margin = new Avalonia.Thickness(20),
+                Spacing = 20,
+                Children =
                 {
-                    Children.Add(item);
+                    new TextBlock
+                    {
+                        Text = message,
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                    },
+                    new Button
+                    {
+                        Content = "OK",
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                        Width = 100
+                    }
                 }
             }
-            catch
-            {
-                // Ignore access errors
-            }
+        };
+
+        var button = ((dialog.Content as StackPanel)?.Children[1] as Button);
+        if (button != null)
+        {
+            button.Click += (s, e) => dialog.Close();
         }
-        return Children;
+
+        await dialog.ShowDialog(this);
     }
 }

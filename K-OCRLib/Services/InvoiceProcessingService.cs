@@ -25,7 +25,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         return _fileService.HasCachedJson(filePath);
     }
     
-    public async Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true)
+    public async Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true, string? artifactsDirectory = null)
     {
         var result = new ProcessingResult();
         
@@ -34,7 +34,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             // Try to load from cache if enabled
             if (useCache)
             {
-                var cachedContext = await _fileService.LoadCachedContextAsync(filePath);
+                var cachedContext = await _fileService.LoadCachedContextAsync(filePath, artifactsDirectory);
                 if (cachedContext != null)
                 {
                     result.Context = cachedContext;
@@ -55,7 +55,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             var processedContext = await executor.RunAsync(config, context);
             
             // Save to cache
-            await _fileService.SaveContextAsync(filePath, processedContext);
+            await _fileService.SaveContextAsync(filePath, processedContext, artifactsDirectory);
             
             result.Context = processedContext;
             result.Json = Newtonsoft.Json.JsonConvert.SerializeObject(processedContext, Newtonsoft.Json.Formatting.Indented);
@@ -73,7 +73,8 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     public async Task<Dictionary<string, ProcessingResult>> ProcessBatchAsync(
         IEnumerable<string> filePaths,
         bool useCache = true,
-        IProgress<(int completed, int total, string currentFile)>? progress = null)
+        IProgress<(int completed, int total, string currentFile)>? progress = null,
+        string? artifactsDirectory = null)
     {
         var results = new Dictionary<string, ProcessingResult>();
         var filePathsList = filePaths.ToList();
@@ -87,7 +88,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             {
                 progress?.Report((completed, total, Path.GetFileName(filePath)));
                 
-                var result = await ProcessFileAsync(filePath, useCache);
+                var result = await ProcessFileAsync(filePath, useCache, artifactsDirectory);
                 
                 lock (results)
                 {
@@ -110,10 +111,10 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         return results;
     }
     
-    public async Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice)
+    public async Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice, string? artifactsDirectory = null)
     {
         // Load the existing context to preserve other data
-        var context = await _fileService.LoadCachedContextAsync(originalFilePath);
+        var context = await _fileService.LoadCachedContextAsync(originalFilePath, artifactsDirectory);
         
         if (context != null)
         {
@@ -136,7 +137,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             }
             
             // Save back to file
-            await _fileService.SaveContextAsync(originalFilePath, context);
+            await _fileService.SaveContextAsync(originalFilePath, context, artifactsDirectory);
         }
         else
         {
@@ -147,13 +148,13 @@ public class InvoiceProcessingService : IInvoiceProcessingService
                 Layout = new List<InvoiceDto> { invoice }
             };
             
-            await _fileService.SaveContextAsync(originalFilePath, newContext);
+            await _fileService.SaveContextAsync(originalFilePath, newContext, artifactsDirectory);
         }
     }
     
-    public async Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath)
+    public async Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath, string? artifactsDirectory = null)
     {
-        var context = await _fileService.LoadCachedContextAsync(filePath);
+        var context = await _fileService.LoadCachedContextAsync(filePath, artifactsDirectory);
         
         if (context?.Layout == null)
             return null;

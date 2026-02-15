@@ -24,21 +24,23 @@ public partial class BatchProcessDialog : Window
     private readonly IImageService _imageService;
     private readonly IFileService _fileService;
     private readonly DatabaseService _databaseService;
+    private readonly IConfigurationService? _configurationService;
 
     public bool ProcessingCompleted { get; private set; }
     public int FilesProcessed { get; private set; }
 
-    public BatchProcessDialog() : this(null, null, null!, string.Empty)
+    public BatchProcessDialog() : this(null, null, null!, string.Empty, null)
     {
     }
 
-    public BatchProcessDialog(IInvoiceService? invoiceService, IConfiguration? config, DatabaseService databaseService, string currentDirectory)
+    public BatchProcessDialog(IInvoiceService? invoiceService, IConfiguration? config, DatabaseService databaseService, string currentDirectory, IConfigurationService? configurationService = null)
     {
         InitializeComponent();
         _invoiceService = invoiceService;
         _config = config;
         _databaseService = databaseService;
         _currentDirectory = currentDirectory;
+        _configurationService = configurationService;
         _imageService = new ImageService();
         _fileService = new FileService(databaseService);
         
@@ -191,6 +193,20 @@ public partial class BatchProcessDialog : Window
             }
         }
 
+        // Validate artifacts directory before expensive OCR processing
+        var artifactsDirectory = string.Empty;
+        if (_configurationService != null)
+        {
+            var settings = await _configurationService.LoadSettingsAsync();
+            artifactsDirectory = settings.ProjectArtifacts;
+        }
+        
+        if (string.IsNullOrEmpty(artifactsDirectory))
+        {
+            await ShowMessageAsync("Configuration Error", "Artifacts directory is not configured. Please set the artifacts directory in settings before processing files.");
+            return;
+        }
+
         // Get max concurrent requests from config
         var maxConcurrent = 3;
         if (_config != null && int.TryParse(_config["MaxConcurrentRequests"], out var parsedValue))
@@ -214,7 +230,7 @@ public partial class BatchProcessDialog : Window
 
         var progressText = new TextBlock
         {
-            Text = "Processing 0 of " + filePaths.Count,
+            Text = $"Processed: 0 of {filePaths.Count}",
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             Margin = new Thickness(20, 20, 20, 10)
         };
@@ -257,7 +273,7 @@ public partial class BatchProcessDialog : Window
                     // Convert PDF to PNG using ImageService
                     try
                     {
-                        var pngPath = await _imageService.ConvertPdfToPngAsync(filePath);
+                        var pngPath = await _imageService.ConvertPdfToPngAsync(filePath, artifactsDirectory);
                         if (pngPath != null)
                         {
                             processablePaths.Add(pngPath);
@@ -278,7 +294,7 @@ public partial class BatchProcessDialog : Window
             // Process all files with progress updates
             var progress = new Progress<(int completed, int total, string currentFile)>(p =>
             {
-                progressText.Text = $"Processing {p.completed} of {p.total}";
+                progressText.Text = $"Processed: {p.completed} of {p.total}";
                 currentFileText.Text = $"Current: {p.currentFile}";
             });
 
@@ -323,26 +339,6 @@ public partial class BatchProcessDialog : Window
                         System.Console.WriteLine($"[Batch DB] Failed to save {Path.GetFileName(filePath)}: {ex.Message}");
                         // Continue processing other files instead of failing completely
                     }
-                }
-            }
-            else
-            {
-                // Fallback to JSON files if database is not available
-                foreach (var (filePath, invoices) in results)
-                {
-                    // Use original PDF path if this was converted from PDF
-                    var originalPath = pdfMappings.TryGetValue(filePath, out var pdfPath) ? pdfPath : filePath;
-                    
-                    var jsonOutputPath = Path.ChangeExtension(originalPath, ".json");
-                    var pipelineContext = new PipelineContext
-                    {
-                        InputPath = originalPath,
-                        Layout = invoices
-                    };
-
-                    var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
-                    await File.WriteAllTextAsync(jsonOutputPath, json);
-                    System.Console.WriteLine($"[Batch JSON] Wrote file: {Path.GetFileName(jsonOutputPath)}");
                 }
             }
 

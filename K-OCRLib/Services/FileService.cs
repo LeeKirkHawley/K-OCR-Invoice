@@ -15,32 +15,7 @@ namespace K_OCR.Services
         {
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
         }
-        public void WriteJsonToDisk(string filePath, string json)
-        {
-            // Get directory and build new path with .json extension
-            string directory = System.IO.Path.GetDirectoryName(filePath) ?? string.Empty;
-            string fileNameWithoutExtension = System.IO.Path.GetFileNameWithoutExtension(filePath);
-            string jsonFilePath = System.IO.Path.Combine(directory, $"{fileNameWithoutExtension}.json");
-
-            File.WriteAllText(jsonFilePath, json);
-            System.Console.WriteLine($"[JSON Cache] Wrote file: {Path.GetFileName(jsonFilePath)}");
-        }
-
-        public string ReadJsonFromDisk(string jsonFilePath)
-        {
-            if (!File.Exists(jsonFilePath))
-            {
-                throw new FileNotFoundException($"JSON file not found at path: {jsonFilePath}");
-            }
-            return File.ReadAllText(jsonFilePath);
-        }
-        
-        public string GetJsonFilePath(string imagePath)
-        {
-            return Path.ChangeExtension(imagePath, ".json");
-        }
-        
-        public async Task<PipelineContext?> LoadCachedContextAsync(string imagePath)
+        public async Task<PipelineContext?> LoadCachedContextAsync(string imagePath, string? artifactsDirectory = null)
         {
             var ocrFile = await _databaseService.GetOCRFileByPathAsync(imagePath);
             if (ocrFile != null)
@@ -79,7 +54,7 @@ namespace K_OCR.Services
             return null;
         }
         
-        public async Task SaveContextAsync(string imagePath, PipelineContext context)
+        public async Task SaveContextAsync(string imagePath, PipelineContext context, string? artifactsDirectory = null)
         {
             if (_databaseService == null)
             {

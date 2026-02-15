@@ -4,6 +4,6 @@ namespace K_OCR.Services
 {
     public interface IAzureService
     {
-        public Task RunAzureOcrAsync(IEnumerable<OCRFile> items);
+        public Task RunAzureOcrAsync(IEnumerable<OCRFile> items, string? artifactsDirectory = null);
     }
 }

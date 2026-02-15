@@ -18,7 +18,7 @@ namespace K_OCR.Services
             _fileService = fileService;
         }
 
-        public async Task RunAzureOcrAsync(IEnumerable<OCRFile> items)
+        public async Task RunAzureOcrAsync(IEnumerable<OCRFile> items, string? artifactsDirectory = null)
         {
             foreach (OCRFile ocrFile in items)
             {
@@ -63,7 +63,9 @@ namespace K_OCR.Services
 
                 if (resultJson.Length > 0)
                 {
-                    _fileService.WriteJsonToDisk(filePath, resultJson);
+                    // Store OCR results in the database instead of writing to JSON files
+                    ocrFile.OcrText = resultJson;
+                    // Note: The caller is responsible for saving the OCRFile to the database
                 }
 
                 Console.WriteLine(resultJson);

@@ -4,8 +4,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:K_OCRDesktop.Views"
         mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
-        x:Class="K_OCRDesktop.Views.FolderPickerDialog"
-        Title="Select Folder with Images"
+        x:Class="K_OCRDesktop.Views.CreateFolderDialog"
+        Title="Create or Select Folder"
         Width="600" Height="400"
         WindowStartupLocation="CenterOwner"
         CanResize="True">
@@ -17,15 +17,12 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Button x:Name="UpButton" Content="↑" Grid.Row="0" Margin="10" HorizontalAlignment="Left" IsEnabled="False" />
+        <TextBlock Grid.Row="0" 
+                   Text="Select parent folder and enter new folder name:" 
+                   Margin="10" 
+                   FontWeight="Bold" />
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10,0,10,10">
-            <TextBox x:Name="NewFolderTextBox" 
-                     Watermark="Enter new folder name..." 
-                     Margin="0,0,10,0" 
-                     Width="200" />
-            <Button x:Name="NewFolderButton" Content="New Folder" />
-        </StackPanel>
+        <Button x:Name="UpButton" Content="↑" Grid.Row="1" Margin="10" HorizontalAlignment="Left" IsEnabled="False" />
 
         <TreeView x:Name="FolderTreeView" Grid.Row="2" Margin="10">
             <TreeView.DataTemplates>
@@ -35,8 +32,13 @@
             </TreeView.DataTemplates>
         </TreeView>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
-            <Button x:Name="OkButton" Content="OK" IsDefault="True" Margin="0,0,10,0" />
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="10" Spacing="10">
+            <TextBlock Text="New folder name:" VerticalAlignment="Center" />
+            <TextBox x:Name="NewFolderNameTextBox" 
+                     Width="200" 
+                     Watermark="Enter folder name..." />
+            <Button x:Name="CreateButton" Content="Create &amp; Select" IsDefault="True" />
+            <Button x:Name="SelectCurrentButton" Content="Select Current" />
             <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" />
         </StackPanel>
     </Grid>

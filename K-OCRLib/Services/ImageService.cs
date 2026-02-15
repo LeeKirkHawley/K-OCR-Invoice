@@ -14,12 +14,23 @@ namespace K_OCR.Services;
 public class ImageService : IImageService
 {
     /// <inheritdoc />
-    public async Task<string?> ConvertPdfToPngAsync(string pdfPath, int maxDimension = 1920)
+    public async Task<string?> ConvertPdfToPngAsync(string pdfPath, string? artifactsDirectory = null, int maxDimension = 1920)
     {
         ValidatePdfFile(pdfPath);
 
-        var directory = Path.GetDirectoryName(pdfPath)!;
+        if (string.IsNullOrEmpty(artifactsDirectory))
+        {
+            throw new InvalidOperationException("Artifacts directory must be configured before converting PDFs. Please set the Project Artifacts directory in Settings.");
+        }
+
+        var directory = artifactsDirectory;
         var fileNameWithoutExt = Path.GetFileNameWithoutExtension(pdfPath);
+
+        // Ensure the output directory exists
+        if (!Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
 
         int pageCount;
         try
@@ -81,12 +92,23 @@ public class ImageService : IImageService
     }
 
     /// <inheritdoc />
-    public async Task<List<string>> ConvertPdfToAllPngsAsync(string pdfPath, int maxDimension = 1920)
+    public async Task<List<string>> ConvertPdfToAllPngsAsync(string pdfPath, string? artifactsDirectory = null, int maxDimension = 1920)
     {
         ValidatePdfFile(pdfPath);
 
-        var directory = Path.GetDirectoryName(pdfPath)!;
+        if (string.IsNullOrEmpty(artifactsDirectory))
+        {
+            throw new InvalidOperationException("Artifacts directory must be configured before converting PDFs. Please set the Project Artifacts directory in Settings.");
+        }
+
+        var directory = artifactsDirectory;
         var fileNameWithoutExt = Path.GetFileNameWithoutExtension(pdfPath);
+
+        // Ensure the output directory exists
+        if (!Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
         var outputPaths = new List<string>();
 
         int pageCount;

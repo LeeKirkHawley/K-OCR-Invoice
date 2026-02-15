@@ -13,6 +13,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace K_OCRDesktop;
 
@@ -82,6 +84,12 @@ public partial class App : Application
             var databaseService = Services?.GetService(typeof(DatabaseService)) as DatabaseService 
                 ?? throw new InvalidOperationException("DatabaseService is required but not registered in DI container");
 
+            // Auto-create project directories if configured
+            if (configurationService != null)
+            {
+                _ = EnsureProjectDirectoriesExistAsync(configurationService);
+            }
+
             desktop.MainWindow = new MainWindow(fileService, ocrService, invoiceService, invoiceProcessingService, configurationService, databaseService)
             {
                 DataContext = new MainWindowViewModel(),
@@ -101,6 +109,29 @@ public partial class App : Application
         foreach (var plugin in dataValidationPluginsToRemove)
         {
             BindingPlugins.DataValidators.Remove(plugin);
+        }
+    }
+
+    private async Task EnsureProjectDirectoriesExistAsync(IConfigurationService configurationService)
+    {
+        try
+        {
+            var settings = await configurationService.LoadSettingsAsync();
+            
+            if (!string.IsNullOrEmpty(settings.ProjectDirectory) && !Directory.Exists(settings.ProjectDirectory))
+            {
+                Directory.CreateDirectory(settings.ProjectDirectory);
+            }
+            
+            if (!string.IsNullOrEmpty(settings.ProjectArtifacts) && !Directory.Exists(settings.ProjectArtifacts))
+            {
+                Directory.CreateDirectory(settings.ProjectArtifacts);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't crash the app
+            Console.WriteLine($"Error creating project directories: {ex.Message}");
         }
     }
 }
