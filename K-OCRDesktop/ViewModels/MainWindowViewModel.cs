@@ -52,6 +52,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private double _canvasHeight = 600;
 
     private double _availableWidth;
+    
+    // For multi-page PDFs - stores height of each page for coordinate calculations
+    public List<int> PageHeights { get; set; } = new();
 
     [ObservableProperty]
     private ObservableCollection<FileListItem> _imageFiles = new();

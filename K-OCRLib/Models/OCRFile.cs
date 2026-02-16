@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace K_OCR.Models
@@ -17,11 +18,20 @@ namespace K_OCR.Models
 
         public string? ValidatedOcrText { get; set; }
 
+        public int TotalPages { get; set; } = 1;
+
+        public string? MergedJsonData { get; set; }
+
+        public bool IsFullyProcessed { get; set; } = false;
+
         // Navigation properties for related OCR blocks (not stored in DB)
         [NotMapped]
         public List<OcrBlock> LineBlocks { get; set; } = new List<OcrBlock>();
         
         [NotMapped]
         public List<OcrBlock> TableBlocks { get; set; } = new List<OcrBlock>();
+
+        // Navigation property for multi-page documents
+        public virtual ICollection<DocumentPage> Pages { get; set; } = new List<DocumentPage>();
     }
 }

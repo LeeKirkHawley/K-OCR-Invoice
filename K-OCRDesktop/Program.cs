@@ -15,35 +15,11 @@ sealed class Program
         // Let Avalonia pick the best platform backend automatically (do not force GTK3 here).
         // To force a backend for troubleshooting, set the AVALONIA_BACKEND environment variable externally.
 
-        // SESSION_MANAGER guard: clear if it references a missing /tmp/.ICE-unix socket
-        // (prevents native libICE/libSM exit when the session manager socket is stale)
-        var sessionManager = Environment.GetEnvironmentVariable("SESSION_MANAGER");
-        if (!string.IsNullOrEmpty(sessionManager))
-        {
-            const string marker = "/tmp/.ICE-unix/";
-            var idx = sessionManager.IndexOf(marker, StringComparison.Ordinal);
-            if (idx >= 0)
-            {
-                var start = idx + marker.Length;
-                var idBuilder = new System.Text.StringBuilder();
-                for (var i = start; i < sessionManager.Length; i++)
-                {
-                    var ch = sessionManager[i];
-                    if (char.IsDigit(ch)) idBuilder.Append(ch);
-                    else break;
-                }
-
-                if (idBuilder.Length > 0)
-                {
-                    var sockPath = marker + idBuilder.ToString();
-                    if (!File.Exists(sockPath))
-                    {
-                        // clear silently so native libICE won't call exit()
-                        Environment.SetEnvironmentVariable("SESSION_MANAGER", "");
-                    }
-                }
-            }
-        }
+        // SESSION_MANAGER guard: clear it to prevent ICE errors
+        // The X11 session manager can cause "ICE default IO error handler" crashes
+        // when the socket is stale or unreachable. Since Avalonia doesn't require it,
+        // we clear it preventively.
+        Environment.SetEnvironmentVariable("SESSION_MANAGER", "");
 
         // WAYLAND_DISPLAY guard: if WAYLAND_DISPLAY is set but the runtime socket is missing,
         // clear it so Avalonia/GTK won't select a broken Wayland backend.

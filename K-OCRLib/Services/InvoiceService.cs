@@ -185,9 +185,9 @@ namespace K_OCR.Services
 
             AnalyzeResult result = operation!.Value;
 
-            
-
-            System.Console.WriteLine($"[Azure OCR] Received result: {Path.GetFileName(imagePath)}");
+            // Debug: Log page count from Azure
+            int pageCount = result.Pages?.Count ?? 0;
+            System.Console.WriteLine($"[Azure OCR] Received result: {Path.GetFileName(imagePath)} - Pages: {pageCount}, Documents: {result.Documents?.Count ?? 0}");
 
             List<InvoiceDto> invoices = AnalyzeOCR(result);
 
@@ -399,7 +399,8 @@ namespace K_OCR.Services
                     Items = items,
                     FieldBoundingBoxes = fieldBoundingBoxes,
                     OriginalPageWidth = pageWidth,
-                    OriginalPageHeight = pageHeight
+                    OriginalPageHeight = pageHeight,
+                    PageCount = result.Pages?.Count ?? 1
                 };
             }).ToList();
         }

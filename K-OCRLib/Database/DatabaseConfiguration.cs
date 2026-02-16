@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using K_OCR.Configuration;
 using K_OCR.Data;
 using K_OCR.Services;
+using Microsoft.Data.Sqlite;
 
 namespace K_OCR.Database
 {
@@ -26,7 +27,15 @@ namespace K_OCR.Database
             // Configure DbContext with SQLite
             services.AddDbContext<KOCRDbContext>(options =>
             {
-                options.UseSqlite(databaseSettings.ConnectionString);
+                var sqliteOptions = new SqliteConnectionStringBuilder(databaseSettings.ConnectionString ?? "Data Source=kocr.db");
+                
+                // Disable WAL mode if specified (helps with external drives)
+                if (!databaseSettings.UseWalMode)
+                {
+                    sqliteOptions.Cache = SqliteCacheMode.Shared;
+                }
+                
+                options.UseSqlite(sqliteOptions.ToString());
 
                 // Configure logging based on settings
                 if (databaseSettings.EnableSensitiveDataLogging)

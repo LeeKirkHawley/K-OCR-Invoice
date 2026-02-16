@@ -35,5 +35,8 @@ namespace K_OCR.Models
         // Original page dimensions from Azure OCR (in inches)
         public double OriginalPageWidth { get; init; }
         public double OriginalPageHeight { get; init; }
+        
+        // Number of pages in the source document (from Azure result.Pages.Count)
+        public int PageCount { get; init; } = 1;
     }
 }

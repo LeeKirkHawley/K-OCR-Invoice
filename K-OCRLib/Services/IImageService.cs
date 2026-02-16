@@ -36,4 +36,14 @@ public interface IImageService
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     Task<List<string>> ConvertPdfToAllPngsAsync(string pdfPath, string? artifactsDirectory = null, int maxDimension = 1920);
+    
+    /// <summary>
+    /// Combines multiple image files vertically into a single composite image.
+    /// </summary>
+    /// <param name="imagePaths">List of image file paths to combine (in order from top to bottom).</param>
+    /// <param name="outputPath">Path where the combined image will be saved.</param>
+    /// <returns>Tuple of (combined image path, list of individual page heights in pixels).</returns>
+    [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("linux")]
+    Task<(string filePath, List<int> pageHeights)> CombineImagesVerticallyAsync(List<string> imagePaths, string outputPath);
 }

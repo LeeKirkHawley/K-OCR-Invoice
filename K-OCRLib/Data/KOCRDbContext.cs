@@ -15,6 +15,7 @@ namespace K_OCR.Data
         public DbSet<InvoiceItem> InvoiceItems { get; set; }
         public DbSet<DocumentField> DocumentFields { get; set; }
         public DbSet<OCRFile> OCRFiles { get; set; }
+        public DbSet<DocumentPage> DocumentPages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -30,6 +31,16 @@ namespace K_OCR.Data
                 .HasMany(i => i.DocumentFields)
                 .WithOne(df => df.Invoice)
                 .HasForeignKey(df => df.InvoiceId);
+
+            modelBuilder.Entity<OCRFile>()
+                .HasMany(o => o.Pages)
+                .WithOne(p => p.OCRFile)
+                .HasForeignKey(p => p.OCRFileId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<DocumentPage>()
+                .HasIndex(p => new { p.OCRFileId, p.PageNumber })
+                .IsUnique();
         }
     }
 }

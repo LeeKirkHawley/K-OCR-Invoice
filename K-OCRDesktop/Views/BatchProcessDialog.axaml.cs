@@ -270,20 +270,9 @@ public partial class BatchProcessDialog : Window
                 
                 if (Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Convert PDF to PNG using ImageService
-                    try
-                    {
-                        var pngPath = await _imageService.ConvertPdfToPngAsync(filePath, artifactsDirectory);
-                        if (pngPath != null)
-                        {
-                            processablePaths.Add(pngPath);
-                            pdfMappings[pngPath] = filePath; // Remember the original PDF path
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[PDF Conversion] Error converting {Path.GetFileName(filePath)}: {ex.Message}");
-                    }
+                    // For PDFs, send the original PDF to Azure (not PNG) so it can detect multiple pages
+                    // PNG conversion is only needed for display in the UI
+                    processablePaths.Add(filePath);
                 }
                 else
                 {
@@ -307,36 +296,74 @@ public partial class BatchProcessDialog : Window
                 {
                     try
                     {
-                        // Use original PDF path if this was converted from PDF
-                        var originalPath = pdfMappings.TryGetValue(filePath, out var pdfPath) ? pdfPath : filePath;
+                        // Check if this is a multi-page document based on Azure's page count
+                        int pageCount = (invoices.Count > 0) ? invoices[0].PageCount : 1;
                         
-                        var pipelineContext = new PipelineContext
+                        if (pageCount > 1)
                         {
-                            InputPath = originalPath,
-                            Layout = invoices
-                        };
-
-                        var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
-                        
-                        // Validate data before saving
-                        if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(originalPath))
-                        {
-                            System.Console.WriteLine($"[Batch DB] Skipping save for {Path.GetFileName(originalPath)} - invalid data");
-                            continue;
+                            // Multi-page document - save with DocumentPages
+                            System.Console.WriteLine($"[Batch DB] Saving multi-page document: {Path.GetFileName(filePath)} ({pageCount} pages)");
+                            
+                            // Create JSON for each page
+                            // Note: Azure returns 1 invoice for multi-page invoices, so we create page records with same invoice
+                            var pageJsonData = new List<string>();
+                            for (int i = 0; i < pageCount; i++)
+                            {
+                                var pageContext = new PipelineContext
+                                {
+                                    InputPath = $"{filePath}#page{i + 1}",
+                                    Layout = invoices  // Use the full invoice list (usually just 1 invoice)
+                                };
+                                var pageJson = Newtonsoft.Json.JsonConvert.SerializeObject(pageContext, Newtonsoft.Json.Formatting.Indented);
+                                pageJsonData.Add(pageJson);
+                            }
+                            
+                            // Create merged JSON with all pages
+                            var mergedContext = new PipelineContext
+                            {
+                                InputPath = filePath,
+                                Layout = invoices
+                            };
+                            var mergedJson = Newtonsoft.Json.JsonConvert.SerializeObject(mergedContext, Newtonsoft.Json.Formatting.Indented);
+                            
+                            // Save to database
+                            await _databaseService.SaveMultiPageDocumentAsync(filePath, pageJsonData, mergedJson);
+                            System.Console.WriteLine($"[Batch DB] Saved multi-page document with {pageCount} pages");
                         }
-                        
-                        var ocrFile = new OCRFile
+                        else
                         {
-                            FilePath = originalPath,
-                            OcrText = json
-                        };
+                            // Single-page document - use existing logic
+                            var pipelineContext = new PipelineContext
+                            {
+                                InputPath = filePath,
+                                Layout = invoices
+                            };
 
-                        await _databaseService.SaveOCRFileAsync(ocrFile);
-                        System.Console.WriteLine($"[Batch DB] Saved OCR result for: {Path.GetFileName(originalPath)}");
+                            var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                            
+                            // Validate data before saving
+                            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(filePath))
+                            {
+                                System.Console.WriteLine($"[Batch DB] Skipping save for {Path.GetFileName(filePath)} - invalid data");
+                                continue;
+                            }
+                            
+                            var ocrFile = new OCRFile
+                            {
+                                FilePath = filePath,
+                                OcrText = json,
+                                TotalPages = 1,
+                                MergedJsonData = json,
+                                IsFullyProcessed = true
+                            };
+
+                            await _databaseService.SaveOCRFileAsync(ocrFile);
+                            System.Console.WriteLine($"[Batch DB] Saved single-page OCR result for: {Path.GetFileName(filePath)}");
+                        }
                     }
                     catch (Exception ex)
                     {
-                        System.Console.WriteLine($"[Batch DB] Failed to save {Path.GetFileName(filePath)}: {ex.Message}");
+                        System.Console.WriteLine($"[Batch DB] Error saving OCR result for {Path.GetFileName(filePath)}: {ex.Message}");
                         // Continue processing other files instead of failing completely
                     }
                 }

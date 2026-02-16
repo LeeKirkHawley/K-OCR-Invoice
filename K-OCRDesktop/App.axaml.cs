@@ -84,6 +84,9 @@ public partial class App : Application
             var databaseService = Services?.GetService(typeof(DatabaseService)) as DatabaseService 
                 ?? throw new InvalidOperationException("DatabaseService is required but not registered in DI container");
 
+            // Initialize database
+            databaseService.Initialize();
+
             // Auto-create project directories if configured
             if (configurationService != null)
             {

@@ -22,4 +22,5 @@ public class DatabaseSettings
     public string? Provider { get; set; } = "SQLite"; // SQLite, SQLServer, PostgreSQL, etc.
     public bool EnableSensitiveDataLogging { get; set; } = false;
     public bool EnableDetailedErrors { get; set; } = false;
+    public bool UseWalMode { get; set; } = false; // WAL mode can cause issues on external drives
 }

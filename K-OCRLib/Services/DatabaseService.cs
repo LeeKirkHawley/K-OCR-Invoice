@@ -13,23 +13,43 @@ namespace K_OCR.Services
     {
         private readonly KOCRDbContext _context;
         private readonly ILogger<DatabaseService> _logger;
+        private bool _isInitialized = false;
+        private readonly object _initLock = new object();
 
         public DatabaseService(KOCRDbContext context, ILogger<DatabaseService> logger)
         {
             _context = context;
             _logger = logger;
-            
-            // Initialize database synchronously on first use
-            try
+        }
+
+        /// <summary>
+        /// Initialize the database with migrations. Call this explicitly after construction.
+        /// </summary>
+        public void Initialize()
+        {
+            if (_isInitialized) return;
+
+            lock (_initLock)
             {
-                _logger.LogInformation("Ensuring database exists...");
-                _context.Database.EnsureCreated();
-                _logger.LogInformation("Database ready.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error ensuring database exists");
-                throw;
+                if (_isInitialized) return;
+
+                try
+                {
+                    _logger.LogInformation("Applying database migrations...");
+                    
+                    // Get database path for logging
+                    var connectionString = _context.Database.GetConnectionString();
+                    _logger.LogInformation($"Database connection: {connectionString}");
+                    
+                    _context.Database.Migrate();
+                    _logger.LogInformation("Database migrations applied successfully.");
+                    _isInitialized = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error applying database migrations");
+                    throw;
+                }
             }
         }
 
@@ -191,6 +211,93 @@ namespace K_OCR.Services
                 _logger.LogError(ex, $"Error deleting OCR file with ID: {id}");
                 throw;
             }
+        }
+
+        // Multi-page document operations
+        public async Task<OCRFile> SaveMultiPageDocumentAsync(
+            string filePath,
+            List<string> pageJsonData,
+            string mergedJsonData)
+        {
+            if (string.IsNullOrEmpty(filePath))
+                throw new ArgumentException("FilePath cannot be null or empty", nameof(filePath));
+
+            if (pageJsonData == null || pageJsonData.Count == 0)
+                throw new ArgumentException("Page data cannot be null or empty", nameof(pageJsonData));
+
+            try
+            {
+                // Check if document already exists
+                var existingOcrFile = await _context.OCRFiles
+                    .Include(o => o.Pages)
+                    .FirstOrDefaultAsync(o => o.FilePath == filePath);
+
+                if (existingOcrFile != null)
+                {
+                    // Update existing document
+                    existingOcrFile.TotalPages = pageJsonData.Count;
+                    existingOcrFile.MergedJsonData = mergedJsonData;
+                    existingOcrFile.OcrText = mergedJsonData; // Also store in OcrText for compatibility
+                    existingOcrFile.IsFullyProcessed = true;
+
+                    // Remove old pages
+                    _context.DocumentPages.RemoveRange(existingOcrFile.Pages);
+                }
+                else
+                {
+                    // Create new document
+                    existingOcrFile = new OCRFile
+                    {
+                        FilePath = filePath,
+                        TotalPages = pageJsonData.Count,
+                        MergedJsonData = mergedJsonData,
+                        OcrText = mergedJsonData, // Also store in OcrText for compatibility
+                        IsFullyProcessed = true
+                    };
+
+                    _context.OCRFiles.Add(existingOcrFile);
+                }
+
+                // Save to get the ID
+                await _context.SaveChangesAsync();
+
+                // Add page records
+                for (int i = 0; i < pageJsonData.Count; i++)
+                {
+                    var page = new DocumentPage
+                    {
+                        OCRFileId = existingOcrFile.Id,
+                        PageNumber = i + 1, // 1-based page numbering
+                        PageFilePath = $"{filePath}#page{i + 1}",
+                        JsonData = pageJsonData[i],
+                        OcrText = pageJsonData[i],
+                        IsProcessed = true,
+                        ProcessedDate = DateTime.UtcNow
+                    };
+
+                    _context.DocumentPages.Add(page);
+                }
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    $"Saved multi-page document: {filePath} ({pageJsonData.Count} pages)");
+
+                return existingOcrFile;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error saving multi-page document: {filePath}");
+                throw;
+            }
+        }
+
+        public async Task<List<DocumentPage>> GetDocumentPagesAsync(int ocrFileId)
+        {
+            return await _context.DocumentPages
+                .Where(p => p.OCRFileId == ocrFileId)
+                .OrderBy(p => p.PageNumber)
+                .ToListAsync();
         }
     }
 }

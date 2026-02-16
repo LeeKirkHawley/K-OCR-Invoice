@@ -201,4 +201,67 @@ public class ImageService : IImageService
             data.SaveTo(stream);
         });
     }
+    
+    /// <inheritdoc />
+    public async Task<(string filePath, List<int> pageHeights)> CombineImagesVerticallyAsync(List<string> imagePaths, string outputPath)
+    {
+        return await Task.Run(() =>
+        {
+            if (imagePaths == null || imagePaths.Count == 0)
+                throw new ArgumentException("No images provided to combine");
+            
+            // Load all images and get total height
+            var bitmaps = new List<SKBitmap>();
+            var pageHeights = new List<int>();
+            int maxWidth = 0;
+            int totalHeight = 0;
+            
+            try
+            {
+                foreach (var path in imagePaths)
+                {
+                    var bitmap = SKBitmap.Decode(path);
+                    if (bitmap != null)
+                    {
+                        bitmaps.Add(bitmap);
+                        pageHeights.Add(bitmap.Height);
+                        maxWidth = Math.Max(maxWidth, bitmap.Width);
+                        totalHeight += bitmap.Height;
+                    }
+                }
+                
+                if (bitmaps.Count == 0)
+                    throw new InvalidOperationException("No valid images found");
+                
+                // Create combined bitmap
+                using var combined = new SKBitmap(maxWidth, totalHeight);
+                using var canvas = new SKCanvas(combined);
+                canvas.Clear(SKColors.White);
+                
+                // Draw each bitmap
+                int currentY = 0;
+                foreach (var bitmap in bitmaps)
+                {
+                    canvas.DrawBitmap(bitmap, 0, currentY);
+                    currentY += bitmap.Height;
+                }
+                
+                // Save combined image
+                using var image = SKImage.FromBitmap(combined);
+                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                using var stream = File.OpenWrite(outputPath);
+                data.SaveTo(stream);
+                
+                return (outputPath, pageHeights);
+            }
+            finally
+            {
+                // Dispose all bitmaps
+                foreach (var bitmap in bitmaps)
+                {
+                    bitmap.Dispose();
+                }
+            }
+        });
+    }
 }

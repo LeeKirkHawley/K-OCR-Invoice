@@ -877,42 +877,124 @@ public partial class MainWindow : Window
             }
             
             var fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
-            var pngPath = System.IO.Path.Combine(artifactsDirectory, $"{fileNameWithoutExt}.png");
             
-            if (!System.IO.File.Exists(pngPath))
+            // Check if this is a multi-page PDF by looking at database
+            var ocrFile = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
+            int pageCount = ocrFile?.TotalPages ?? 1;
+            
+            if (pageCount > 1)
             {
-                // Convert PDF to PNG on-the-fly
-                try
+                // Multi-page PDF - convert all pages and combine them vertically
+                var combinedPath = System.IO.Path.Combine(artifactsDirectory, $"{fileNameWithoutExt}_combined.png");
+                
+                if (!System.IO.File.Exists(combinedPath))
                 {
-                    var convertedPath = await ConvertPdfToPngAsync(filePath);
-                    if (convertedPath != null)
+                    try
                     {
-                        pngPath = convertedPath;
+                        // Convert all pages to individual PNGs
+                        var pagePaths = await _imageService.ConvertPdfToAllPngsAsync(filePath, artifactsDirectory);
+                        if (pagePaths != null && pagePaths.Count > 0)
+                        {
+                            // Combine pages vertically
+                            var (combinedFilePath, pageHeights) = await _imageService.CombineImagesVerticallyAsync(pagePaths, combinedPath);
+                            filePath = combinedFilePath;
+                            viewModel.PageHeights = pageHeights;
+                            System.Console.WriteLine($"[MainWindow] Combined {pageHeights.Count} pages, heights: {string.Join(", ", pageHeights)}");
+                        }
+                        else
+                        {
+                            viewModel.OriginalImageSource = null;
+                            viewModel.FileCaption = "Failed to convert multi-page PDF.";
+                            viewModel.SetOcrJson(string.Empty);
+                            viewModel.DocumentFields.Clear();
+                            viewModel.CurrentInvoice = null;
+                            return;
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        // Conversion failed
                         viewModel.OriginalImageSource = null;
-                        viewModel.FileCaption = "Failed to convert PDF for display.";
+                        viewModel.FileCaption = $"Error converting multi-page PDF: {ex.Message}";
                         viewModel.SetOcrJson(string.Empty);
                         viewModel.DocumentFields.Clear();
                         viewModel.CurrentInvoice = null;
                         return;
                     }
                 }
-                catch (Exception ex)
+                else
                 {
-                    viewModel.OriginalImageSource = null;
-                    viewModel.FileCaption = $"Error converting PDF: {ex.Message}";
-                    viewModel.SetOcrJson(string.Empty);
-                    viewModel.DocumentFields.Clear();
-                    viewModel.CurrentInvoice = null;
-                    return;
+                    // Combined image already exists - load page heights from database
+                    if (ocrFile != null)
+                    {
+                        var pages = await _databaseService.GetDocumentPagesAsync(ocrFile.Id);
+                        viewModel.PageHeights = new List<int>();
+                        // We need to load actual heights from the PNG files since they're not in database
+                        try
+                        {
+                            var pagePaths = await _imageService.ConvertPdfToAllPngsAsync(filePath, artifactsDirectory);
+                            foreach (var pagePath in pagePaths)
+                            {
+                                if (System.IO.File.Exists(pagePath))
+                                {
+                                    using var bitmap = new Avalonia.Media.Imaging.Bitmap(pagePath);
+                                    viewModel.PageHeights.Add(bitmap.PixelSize.Height);
+                                }
+                            }
+                            System.Console.WriteLine($"[MainWindow] Loaded {viewModel.PageHeights.Count} page heights: {string.Join(", ", viewModel.PageHeights)}");
+                        }
+                        catch
+                        {
+                            // Fallback - assume single page
+                            viewModel.PageHeights = new List<int>();
+                        }
+                    }
+                    filePath = combinedPath;
                 }
             }
-
-            // Use the PNG for display
-            filePath = pngPath;
+            else
+            {
+                // Single-page PDF - use existing logic
+                var pngPath = System.IO.Path.Combine(artifactsDirectory, $"{fileNameWithoutExt}.png");
+                
+                if (!System.IO.File.Exists(pngPath))
+                {
+                    // Convert PDF to PNG on-the-fly
+                    try
+                    {
+                        var convertedPath = await ConvertPdfToPngAsync(filePath);
+                        if (convertedPath != null)
+                        {
+                            pngPath = convertedPath;
+                        }
+                        else
+                        {
+                            // Conversion failed
+                            viewModel.OriginalImageSource = null;
+                            viewModel.FileCaption = "Failed to convert PDF for display.";
+                            viewModel.SetOcrJson(string.Empty);
+                            viewModel.DocumentFields.Clear();
+                            viewModel.CurrentInvoice = null;
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        viewModel.OriginalImageSource = null;
+                        viewModel.FileCaption = $"Error converting PDF: {ex.Message}";
+                        viewModel.SetOcrJson(string.Empty);
+                        viewModel.DocumentFields.Clear();
+                        viewModel.CurrentInvoice = null;
+                        return;
+                    }
+                }
+                
+                filePath = pngPath;
+                viewModel.PageHeights = new List<int>(); // Clear for single-page
+            }
+        }
+        else
+        {
+            viewModel.PageHeights = new List<int>(); // Clear for non-PDF files
         }
         
         // Load and display the image
@@ -950,19 +1032,19 @@ public partial class MainWindow : Window
         string json = string.Empty;
 
         // Load from database only
-        var ocrFile = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
-        if (ocrFile != null)
+        var dbOcrFile = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
+        if (dbOcrFile != null)
         {
             PipelineContext? context = null;
             string jsonToUse = string.Empty;
 
             // Try ValidatedOcrText first if it exists
-            if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+            if (!string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText))
             {
                 try
                 {
-                    context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.ValidatedOcrText);
-                    jsonToUse = ocrFile.ValidatedOcrText;
+                    context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(dbOcrFile.ValidatedOcrText);
+                    jsonToUse = dbOcrFile.ValidatedOcrText;
                 }
                 catch
                 {
@@ -971,12 +1053,12 @@ public partial class MainWindow : Window
             }
 
             // If ValidatedOcrText didn't work or doesn't exist, try OcrText
-            if (context == null && !string.IsNullOrEmpty(ocrFile.OcrText))
+            if (context == null && !string.IsNullOrEmpty(dbOcrFile.OcrText))
             {
                 try
                 {
-                    context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.OcrText);
-                    jsonToUse = ocrFile.OcrText;
+                    context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(dbOcrFile.OcrText);
+                    jsonToUse = dbOcrFile.OcrText;
                 }
                 catch
                 {
@@ -987,11 +1069,11 @@ public partial class MainWindow : Window
             if (context != null && !string.IsNullOrEmpty(jsonToUse))
             {
                 // Set both original and validated text in the view model
-                viewModel.SetOriginalOcrText(ocrFile.OcrText ?? string.Empty);
-                viewModel.SetValidatedOcrText(ocrFile.ValidatedOcrText ?? string.Empty);
+                viewModel.SetOriginalOcrText(dbOcrFile.OcrText ?? string.Empty);
+                viewModel.SetValidatedOcrText(dbOcrFile.ValidatedOcrText ?? string.Empty);
                 
                 // If we have validated text, switch to showing it by default
-                if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+                if (!string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText))
                 {
                     viewModel.ShowOriginalOcr = false;
                 }
@@ -1863,10 +1945,24 @@ public partial class MainWindow : Window
         double canvasWidth = viewModel.CanvasWidth;
         double canvasHeight = viewModel.CanvasHeight;
         
-        // Calculate scale factors to convert from Azure's inch-based coordinates to pixel coordinates
-        // If original page dimensions are 0 (meaning coordinates are already in pixels), use scale of 1
-        double scaleX = originalPageWidth > 0 ? canvasWidth / originalPageWidth : 1.0;
-        double scaleY = originalPageHeight > 0 ? canvasHeight / originalPageHeight : 1.0;
+        // For multi-page documents, we need to calculate scale differently
+        // The canvas contains all pages stacked vertically, but Azure coordinates are per-page
+        double scaleX, scaleY;
+        
+        if (viewModel.PageHeights.Count > 0)
+        {
+            // Multi-page: scale based on single page dimensions
+            // Each page uses the same scale factor
+            var firstPageHeight = viewModel.PageHeights[0];
+            scaleX = originalPageWidth > 0 ? canvasWidth / originalPageWidth : 1.0;
+            scaleY = originalPageHeight > 0 ? firstPageHeight / originalPageHeight : 1.0;
+        }
+        else
+        {
+            // Single-page: scale to full canvas
+            scaleX = originalPageWidth > 0 ? canvasWidth / originalPageWidth : 1.0;
+            scaleY = originalPageHeight > 0 ? canvasHeight / originalPageHeight : 1.0;
+        }
 
         // Track the bounds of all highlights to calculate the center
         double minX = double.MaxValue, minY = double.MaxValue;
@@ -1876,6 +1972,17 @@ public partial class MainWindow : Window
         {
             if (box.Points == null || box.Points.Count < 8)
                 continue;
+
+            // Calculate Y offset for this page
+            double pageYOffset = 0;
+            if (viewModel.PageHeights.Count > 0 && box.PageNumber > 0)
+            {
+                // Sum heights of all previous pages (PageNumber is 1-based)
+                for (int i = 0; i < box.PageNumber - 1 && i < viewModel.PageHeights.Count; i++)
+                {
+                    pageYOffset += viewModel.PageHeights[i];
+                }
+            }
 
             var polygon = new Avalonia.Controls.Shapes.Polygon
             {
@@ -1889,9 +1996,9 @@ public partial class MainWindow : Window
             {
                 if (i + 1 < box.Points.Count)
                 {
-                    // Azure coordinates are in inches, convert to pixels
+                    // Azure coordinates are in inches, convert to pixels and add page offset
                     double x = box.Points[i] * scaleX;
-                    double y = box.Points[i + 1] * scaleY;
+                    double y = (box.Points[i + 1] * scaleY) + pageYOffset;
                     points.Add(new Avalonia.Point(x, y));
                     
                     // Track bounds
@@ -2069,33 +2176,75 @@ public partial class MainWindow : Window
                 {
                     try
                     {
-                        var pipelineContext = new PipelineContext
-                        {
-                            InputPath = filePath,
-                            Layout = invoices
-                        };
-
-                        var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                        // Check if this is a multi-page document based on Azure's page count
+                        int pageCount = (invoices.Count > 0) ? invoices[0].PageCount : 1;
+                        System.Console.WriteLine($"[Main Window DB] File: {System.IO.Path.GetFileName(filePath)}, InvoiceCount: {invoices.Count}, PageCount: {pageCount}");
                         
-                        // Validate data before saving
-                        if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(filePath))
+                        if (pageCount > 1)
                         {
-                            System.Console.WriteLine($"[Batch DB] Skipping save for {System.IO.Path.GetFileName(filePath)} - invalid data");
-                            continue;
+                            // Multi-page document - save with DocumentPages
+                            System.Console.WriteLine($"[Main Window DB] Saving multi-page document: {System.IO.Path.GetFileName(filePath)} ({pageCount} pages)");
+                            
+                            // Create JSON for each page
+                            // Note: Azure returns 1 invoice for multi-page invoices, so we create page records with same invoice
+                            var pageJsonData = new List<string>();
+                            for (int i = 0; i < pageCount; i++)
+                            {
+                                var pageContext = new PipelineContext
+                                {
+                                    InputPath = $"{filePath}#page{i + 1}",
+                                    Layout = invoices  // Use the full invoice list (usually just 1 invoice)
+                                };
+                                var pageJson = Newtonsoft.Json.JsonConvert.SerializeObject(pageContext, Newtonsoft.Json.Formatting.Indented);
+                                pageJsonData.Add(pageJson);
+                            }
+                            
+                            // Create merged JSON with all pages
+                            var mergedContext = new PipelineContext
+                            {
+                                InputPath = filePath,
+                                Layout = invoices
+                            };
+                            var mergedJson = Newtonsoft.Json.JsonConvert.SerializeObject(mergedContext, Newtonsoft.Json.Formatting.Indented);
+                            
+                            // Save to database
+                            await _databaseService.SaveMultiPageDocumentAsync(filePath, pageJsonData, mergedJson);
+                            System.Console.WriteLine($"[Main Window DB] Saved multi-page document with {pageCount} pages");
                         }
-                        
-                        var ocrFile = new OCRFile
+                        else
                         {
-                            FilePath = filePath,
-                            OcrText = json
-                        };
+                            // Single-page document
+                            var pipelineContext = new PipelineContext
+                            {
+                                InputPath = filePath,
+                                Layout = invoices
+                            };
 
-                        await _databaseService.SaveOCRFileAsync(ocrFile);
-                        System.Console.WriteLine($"[Batch DB] Saved OCR result for: {System.IO.Path.GetFileName(filePath)}");
+                            var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+                            
+                            // Validate data before saving
+                            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(filePath))
+                            {
+                                System.Console.WriteLine($"[Main Window DB] Skipping save for {System.IO.Path.GetFileName(filePath)} - invalid data");
+                                continue;
+                            }
+                            
+                            var ocrFile = new OCRFile
+                            {
+                                FilePath = filePath,
+                                OcrText = json,
+                                TotalPages = 1,
+                                MergedJsonData = json,
+                                IsFullyProcessed = true
+                            };
+
+                            await _databaseService.SaveOCRFileAsync(ocrFile);
+                            System.Console.WriteLine($"[Main Window DB] Saved single-page OCR result for: {System.IO.Path.GetFileName(filePath)}");
+                        }
                     }
                     catch (Exception ex)
                     {
-                        System.Console.WriteLine($"[Batch DB] Failed to save {System.IO.Path.GetFileName(filePath)}: {ex.Message}");
+                        System.Console.WriteLine($"[Main Window DB] Failed to save {System.IO.Path.GetFileName(filePath)}: {ex.Message}");
                         // Continue processing other files instead of failing completely
                     }
                 }
