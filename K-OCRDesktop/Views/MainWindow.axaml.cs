@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -154,47 +153,6 @@ public partial class MainWindow : Window
             };
         }
     }
-
-    // protected override void OnOpened(EventArgs e)
-    // {
-    //     base.OnOpened(e);
-
-    //     _mainContentGrid = this.FindControl<Grid>("MainContentGrid");
-        
-    //     // Find the canvas in the visual tree - will need to be given a name in AXAML
-    //     // _ocrCanvas = this.FindControl<Canvas>("OcrCanvas");
-        
-    //     // Find the highlight canvas
-    //     _highlightCanvas = this.FindControl<Canvas>("HighlightCanvas");
-        
-    //     // Find the image scroll viewer
-    //     _imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
-        
-    //     // Add mouse wheel zoom support
-    //     var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
-    //     if (imageScrollViewer != null)
-    //     {
-    //         imageScrollViewer.PointerWheelChanged += OnImageMouseWheel;
-    //         // Keep available width updated when the scroll viewer resizes
-    //         imageScrollViewer.SizeChanged += (s, args) =>
-    //         {
-    //             if (DataContext is MainWindowViewModel vm)
-    //             {
-    //                 // Use Viewport width which is the actual visible area minus scrollbars
-    //                 var viewportWidth = imageScrollViewer.Viewport.Width;
-    //                 if (viewportWidth > 0)
-    //                     vm.UpdateAvailableWidth(viewportWidth);
-    //             }
-    //         };
-    //     }
-        
-    //     // Auto-show folder picker dialog on startup
-    //     Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
-    //     {
-    //         await LoadSplitterPositionsAsync();
-    //         await SelectFolderAsync();
-    //     }, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
-    // }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
@@ -762,56 +720,6 @@ public partial class MainWindow : Window
         await SelectFolderAsync();
     }
 
-    // private async Task<string?> SelectFolderWithZenityAsync()
-    // {
-    //     try
-    //     {
-    //         return await Task.Run(() =>
-    //         {
-    //             var psi = new ProcessStartInfo
-    //             {
-    //                 FileName = "zenity",
-    //                 Arguments = "--file-selection --directory --title=\"Select Folder with Images\"",
-    //                 RedirectStandardOutput = true,
-    //                 RedirectStandardError = true,
-    //                 UseShellExecute = false,
-    //                 CreateNoWindow = true
-    //             };
-
-    //             using var process = Process.Start(psi);
-    //             if (process == null)
-    //             {
-    //                 return null;
-    //             }
-
-    //             // Wait for exit with 30 second timeout
-    //             if (!process.WaitForExit(30000))
-    //             {
-    //                 Console.WriteLine("Zenity process did not exit within 30 seconds, killing it");
-    //                 process.Kill();
-    //                 return null;
-    //             }
-
-    //             Console.WriteLine($"Zenity process exited with code {process.ExitCode}");
-
-    //             if (process.ExitCode == 0)
-    //             {
-    //                 var output = process.StandardOutput.ReadToEnd();
-    //                 if (!string.IsNullOrWhiteSpace(output))
-    //                 {
-    //                     return output.Trim();
-    //                 }
-    //             }
-
-    //             return null;
-    //         });
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         Console.WriteLine($"Zenity fallback failed: {ex}");
-    //         return null;
-    //     }
-    // }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
@@ -1141,21 +1049,6 @@ public partial class MainWindow : Window
         };
         aboutWindow.ShowDialog(this);
     }
-
-    // private void OnProcessingCompleted(List<OCRFile> completed)
-    // {
-    //     var first = completed.FirstOrDefault();
-    //     if (first != null && System.IO.File.Exists(first.filePath) && DataContext is MainWindowViewModel viewModel)
-    //     {
-    //         // Get the ScrollViewer dimensions for initial zoom calculation
-    //         var imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
-    //         double availableWidth = imageScrollViewer?.Viewport.Width ?? 0;
-    //         double availableHeight = imageScrollViewer?.Viewport.Height ?? 0;
-            
-    //         viewModel.LoadImage(first.filePath, availableWidth, availableHeight);
-    //         DrawOCROverlay(first);
-    //     }
-    // }
 
     public void DrawOCROverlay(OCRFile ocrFile)
     {
