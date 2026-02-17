@@ -11,13 +11,12 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
-using DocumentFormat.OpenXml;
-using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Wordprocessing;
+
 using K_OCR.Models;
 using K_OCR.PipelineService;
 using K_OCR.Services;
 using K_OCRDesktop.ViewModels;
+using K_OCRDesktop.Services;
 using Microsoft.Extensions.Configuration;
 
 namespace K_OCRDesktop.Views;
@@ -36,19 +35,30 @@ public partial class MainWindow : Window
     private readonly IInvoiceProcessingService? _invoiceProcessingService;
     private readonly IConfigurationService? _configurationService;
     private readonly IOCRService? _ocrService;
-    private readonly IImageService? _imageService;
+    private readonly IImageService _imageService;
     private readonly DatabaseService _databaseService;
+    
+    // Strategy B Services
+    private BoundingBoxHighlightService? _boundingBoxHighlightService;
+    private FieldSelectionService? _fieldSelectionService;
+    private ValidationPanelService? _validationPanelService;
+    private ImageViewService? _imageViewService;
+    private OcrDataService? _ocrDataService;
+    private PdfProcessingService? _pdfProcessingService;
+    private KeyboardNavigationService? _keyboardNavigationService;
+    private K_OCR.Services.IDocumentExportService? _documentExportService;
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    public MainWindow() : this(null, null, null, null, null, null!)
+    public MainWindow() : this(null, null, null, null, null, null!, null)
     {
     }
     
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     public MainWindow(IFileService? fileService, IOCRService? ocrService, IInvoiceService? invoiceService,
-        IInvoiceProcessingService? invoiceProcessingService, IConfigurationService? configurationService, DatabaseService databaseService)
+        IInvoiceProcessingService? invoiceProcessingService, IConfigurationService? configurationService, DatabaseService databaseService,
+        K_OCR.Services.IDocumentExportService? documentExportService)
     {
         InitializeComponent();
         
@@ -56,6 +66,7 @@ public partial class MainWindow : Window
         _mainContentGrid = this.FindControl<Grid>("MainContentGrid");
         _highlightCanvas = this.FindControl<Canvas>("HighlightCanvas");
         _imageScrollViewer = this.FindControl<ScrollViewer>("ImageScrollViewer");
+        _ocrCanvas = this.FindControl<Canvas>("OcrCanvas");
         
         // Add mouse wheel zoom support to image scroll viewer
         if (_imageScrollViewer != null)
@@ -86,6 +97,12 @@ public partial class MainWindow : Window
         _configurationService = configurationService ?? new ConfigurationService();
         _imageService = new ImageService();
 
+        // Initialize Strategy B Services
+        InitializeServices();
+
+        // Assign injected document export service (if provided)
+        _documentExportService = documentExportService;
+
         // Load configuration
         var basePath = AppDomain.CurrentDomain.BaseDirectory;
         _config = new ConfigurationBuilder()
@@ -98,6 +115,40 @@ public partial class MainWindow : Window
         
         // Load splitter positions
         _ = LoadSplitterPositionsAsync();
+    }
+
+    private void InitializeServices()
+    {
+        if (_highlightCanvas != null && _imageScrollViewer != null)
+        {
+            _boundingBoxHighlightService = new BoundingBoxHighlightService(_highlightCanvas, _imageScrollViewer);
+            _fieldSelectionService = new FieldSelectionService(_boundingBoxHighlightService);
+        }
+
+        var validationScrollViewer = this.FindControl<ScrollViewer>("ValidationScrollViewer");
+        if (validationScrollViewer != null)
+        {
+            _validationPanelService = new ValidationPanelService(validationScrollViewer);
+        }
+
+        var displayImage = this.FindControl<Image>("DisplayImage");
+        if (displayImage != null && _imageScrollViewer != null)
+        {
+            _imageViewService = new ImageViewService(displayImage, _imageScrollViewer);
+        }
+
+        _ocrDataService = new OcrDataService();
+        _pdfProcessingService = new PdfProcessingService();
+        _keyboardNavigationService = new KeyboardNavigationService();
+        // document export service is injected via constructor
+
+        // Subscribe to keyboard navigation events
+        if (_keyboardNavigationService != null)
+        {
+            _keyboardNavigationService.SaveRequested += () =>
+                OnSaveValidatedData(null, new Avalonia.Interactivity.RoutedEventArgs());
+            _keyboardNavigationService.ExportRequested += async () => await ExportDocxAsync();
+        }
     }
 
     private async void LoadProjectDirectory()
@@ -305,68 +356,140 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Get the DisplayImage control to get position relative to the actual image
+        // Use FieldSelectionService to find the clicked field
         var displayImage = this.FindControl<Image>("DisplayImage");
-        if (displayImage == null)
+        if (displayImage == null || _fieldSelectionService == null || _boundingBoxHighlightService == null)
         {
             return;
         }
 
-        // Get the click position relative to the actual image (not the scrollviewer)
-        // Because the Image has Stretch="None" and uses RenderTransform for zoom,
-        // the position we get is already in the original image coordinate space!
         var position = e.GetPosition(displayImage);
 
-        // Find the field whose bounding box contains this point (using LINQ - no explicit loops)
-        // Scale bounding boxes from inches to pixels to match click coordinates
-        var clickedField = viewModel.DocumentFields
-            .Where(field => field.BoundingBoxes != null && field.BoundingBoxes.Any())
-            .FirstOrDefault(field => field.BoundingBoxes!.Any(box => 
-                box.Points != null && 
-                box.Points.Count >= 8 && 
-                IsPointInPolygon((float)position.X, (float)position.Y, ScaleBoundingBoxToPixels(box))));
+        // Update service dimensions first
+        _boundingBoxHighlightService.SetDimensions(
+            (int)viewModel.CanvasWidth,
+            (int)viewModel.CanvasHeight,
+            viewModel.CurrentInvoice?.OriginalPageWidth ?? 8.5,
+            viewModel.CurrentInvoice?.OriginalPageHeight ?? 11.0,
+            viewModel.PageHeights);
+        _boundingBoxHighlightService.SetZoom(viewModel.ImageZoom);
+
+        // Find the clicked field (try both raw and unzoomed coordinates to be robust)
+        var clickedField = _fieldSelectionService.FindFieldAtPosition(
+            viewModel.DocumentFields.ToList(), position.X, position.Y);
+
+        // If not found, try converting position into image coordinate space using ImageZoom
+        if (clickedField == null && viewModel.ImageZoom > 0)
+        {
+            var unzoomedX = position.X / viewModel.ImageZoom;
+            var unzoomedY = position.Y / viewModel.ImageZoom;
+            clickedField = _fieldSelectionService.FindFieldAtPosition(viewModel.DocumentFields.ToList(), unzoomedX, unzoomedY);
+        }
+
+        if (clickedField == null)
+        {
+            // Debug output to help diagnose why clicks don't hit any field
+            try
+            {
+                System.Console.WriteLine($"[OnImageClick] No field hit. pos={{X={position.X:F1},Y={position.Y:F1}}}, zoom={viewModel.ImageZoom:F2}, canvas={{W={viewModel.CanvasWidth},H={viewModel.CanvasHeight}}}");
+
+                int shown = 0;
+                foreach (var field in viewModel.DocumentFields)
+                {
+                    if (field.BoundingBoxes == null || field.BoundingBoxes.Count == 0)
+                        continue;
+
+                    foreach (var box in field.BoundingBoxes)
+                    {
+                        var scaled = _boundingBoxHighlightService.ScaleBoundingBoxToPixels(box);
+                        double minX = scaled.Where((p, i) => i % 2 == 0).Min();
+                        double maxX = scaled.Where((p, i) => i % 2 == 0).Max();
+                        double minY = scaled.Where((p, i) => i % 2 == 1).Min();
+                        double maxY = scaled.Where((p, i) => i % 2 == 1).Max();
+                        System.Console.WriteLine($"  Field='{field.Name}' box=[{minX:F0},{minY:F0}]-[{maxX:F0},{maxY:F0}]");
+                        shown++;
+                        if (shown >= 6) break;
+                    }
+                    if (shown >= 6) break;
+                }
+
+                // Also show up to 6 invoice line item bounding boxes for diagnosis
+                if (viewModel.CurrentInvoice?.Items != null)
+                {
+                    System.Console.WriteLine("  Line items:");
+                    int shownItems = 0;
+                    foreach (var item in viewModel.CurrentInvoice.Items)
+                    {
+                        if (item.BoundingBoxes == null || item.BoundingBoxes.Count == 0)
+                            continue;
+
+                        foreach (var box in item.BoundingBoxes)
+                        {
+                            var scaled = _boundingBoxHighlightService.ScaleBoundingBoxToPixels(box);
+                            double minX = scaled.Where((p, i) => i % 2 == 0).Min();
+                            double maxX = scaled.Where((p, i) => i % 2 == 0).Max();
+                            double minY = scaled.Where((p, i) => i % 2 == 1).Min();
+                            double maxY = scaled.Where((p, i) => i % 2 == 1).Max();
+                            System.Console.WriteLine($"    Item box=[{minX:F0},{minY:F0}]-[{maxX:F0},{maxY:F0}]");
+                            shownItems++;
+                            if (shownItems >= 6) break;
+                        }
+                        if (shownItems >= 6) break;
+                    }
+                }
+            }
+            catch { /* swallow debug errors */ }
+        }
 
         if (clickedField != null)
         {
-            // Select the field
             var fieldIndex = viewModel.DocumentFields.IndexOf(clickedField);
             if (fieldIndex >= 0)
             {
                 viewModel.CurrentFieldIndex = fieldIndex;
+                _fieldSelectionService.SelectField(clickedField, viewModel.DocumentFields.ToList());
                 
-                // Explicitly highlight the bounding boxes for this field
-                if (clickedField.BoundingBoxes != null && clickedField.BoundingBoxes.Count > 0)
+                if (_validationPanelService != null)
                 {
-                    HighlightBoundingBoxes(clickedField.BoundingBoxes);
+                    _validationPanelService.ScrollToField(fieldIndex);
+                    // Try immediate focus; if that fails, retry via dispatcher
+                    bool focused = _validationPanelService.FocusFieldTextBox(clickedField);
+                    if (!focused)
+                    {
+                        var validationScrollViewer = this.FindControl<ScrollViewer>("ValidationScrollViewer");
+                        if (validationScrollViewer != null)
+                        {
+                            TryFocusFirstTextBox(validationScrollViewer, 0);
+                        }
+                    }
                 }
-                
-                // Scroll the validation panel to make the field visible
-                ScrollValidationToField(fieldIndex);
-                
-                // Focus the TextBox for this field to trigger the yellow highlight
-                FocusFieldTextBox(clickedField);
             }
         }
         else
         {
-            // Not a regular field, check if it's a line item
-            var clickedLineItem = viewModel.CurrentInvoice?.Items
-                .Where(item => item.BoundingBoxes != null && item.BoundingBoxes.Any())
-                .FirstOrDefault(item => item.BoundingBoxes!.Any(box =>
-                    box.Points != null &&
-                    box.Points.Count >= 8 &&
-                    IsPointInPolygon((float)position.X, (float)position.Y, ScaleBoundingBoxToPixels(box))));
-
-            if (clickedLineItem != null)
+            // Check for line items
+            if (viewModel.CurrentInvoice?.Items != null)
             {
-                // Highlight the bounding boxes for this line item
-                if (clickedLineItem.BoundingBoxes != null && clickedLineItem.BoundingBoxes.Count > 0)
+                var clickedLineItem = _fieldSelectionService.FindLineItemAtPosition(
+                    viewModel.CurrentInvoice.Items, position.X, position.Y);
+
+                // If not found, try unzoomed coordinates (same fix as for regular fields)
+                if (clickedLineItem == null && viewModel.ImageZoom > 0)
                 {
-                    HighlightBoundingBoxes(clickedLineItem.BoundingBoxes);
+                    var unzoomedX = position.X / viewModel.ImageZoom;
+                    var unzoomedY = position.Y / viewModel.ImageZoom;
+                    clickedLineItem = _fieldSelectionService.FindLineItemAtPosition(viewModel.CurrentInvoice.Items, unzoomedX, unzoomedY);
                 }
-                
-                // Focus the first TextBox for this line item
-                FocusLineItemTextBox(clickedLineItem);
+
+                if (clickedLineItem != null)
+                {
+                    _fieldSelectionService.SelectLineItem(clickedLineItem);
+                    
+                    if (_validationPanelService != null)
+                    {
+                        _validationPanelService.FocusLineItemTextBox(clickedLineItem);
+                    }
+                }
             }
         }
     }
@@ -1127,7 +1250,9 @@ public partial class MainWindow : Window
         {
             try
             {
-                ExportAsDocx(ocrFile, saveDialog.Path.LocalPath);
+                var exporter = _documentExportService ?? new K_OCR.Services.DocumentExportService();
+                await exporter.ExportToDocxAsync(ocrFile, saveDialog.Path.LocalPath);
+
                 await ShowMessageAsync("Export Success", "DOCX saved successfully.");
             }
             catch (Exception ex)
@@ -1137,103 +1262,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ExportAsDocx(OCRFile ocrFile, string outputPath)
-    {
-        using var wordDoc = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document);
-        var mainPart = wordDoc.AddMainDocumentPart();
-        mainPart.Document = new Document(new Body());
-        var body = mainPart.Document.Body;
 
-        if (body == null)
-            return;
 
-        // Combine and sort all blocks by position
-        var allBlocks = new List<OcrBlock>();
-        if (ocrFile.LineBlocks != null)
-            allBlocks.AddRange(ocrFile.LineBlocks);
-        if (ocrFile.TableBlocks != null)
-            allBlocks.AddRange(ocrFile.TableBlocks);
 
-        // Filter out text blocks that overlap with tables (same logic as WPF version)
-        var tables = ocrFile.TableBlocks ?? new List<OcrBlock>();
-        var lines = ocrFile.LineBlocks ?? new List<OcrBlock>();
-        
-        var filteredLines = lines.Where(l => !tables.Any(t => Overlaps(l.BoundingBox, t.BoundingBox))).ToList();
-
-        var finalBlocks = new List<OcrBlock>();
-        finalBlocks.AddRange(filteredLines);
-        finalBlocks.AddRange(tables);
-
-        // Sort by Y position first, then X position
-        foreach (var block in finalBlocks.OrderBy(b => b.BoundingBox.Y1).ThenBy(b => b.BoundingBox.X1))
-        {
-            if (block.Type == OcrBlockType.Text && !string.IsNullOrWhiteSpace(block.Text))
-            {
-                // Add text paragraph
-                var paragraph = new Paragraph(
-                    new Run(
-                        new Text(block.Text)
-                        {
-                            Space = SpaceProcessingModeValues.Preserve
-                        }
-                    )
-                );
-                body.AppendChild(paragraph);
-            }
-            else if (block.Type == OcrBlockType.Table && block.RowData != null && block.RowData.Length > 0)
-            {
-                // Add table
-                var table = new Table();
-
-                // Add table borders
-                var tblProps = new TableProperties(
-                    new TableBorders(
-                        new TopBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                        new LeftBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                        new BottomBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                        new RightBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                        new InsideHorizontalBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                        new InsideVerticalBorder { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
-                    )
-                );
-                table.AppendChild(tblProps);
-
-                // Add table row
-                var row = new TableRow();
-                foreach (var cellText in block.RowData)
-                {
-                    var cell = new TableCell(
-                        new Paragraph(
-                            new Run(
-                                new Text(cellText ?? string.Empty)
-                                {
-                                    Space = SpaceProcessingModeValues.Preserve
-                                }
-                            )
-                        )
-                    );
-                    row.AppendChild(cell);
-                }
-                table.AppendChild(row);
-                body.AppendChild(table);
-            }
-        }
-
-        mainPart.Document.Save();
-    }
-
-    private static bool Overlaps(Tesseract.Rect a, Tesseract.Rect b, int tol = 4)
-    {
-        var ax1 = a.X1 - tol;
-        var ay1 = a.Y1 - tol;
-        var ax2 = a.X2 + tol;
-        var ay2 = a.Y2 + tol;
-        var bx1 = b.X1 - tol;
-        var by1 = b.Y1 - tol;
-        var bx2 = b.X2 + tol;
-        var by2 = b.Y2 + tol;
-        return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
-    }
 
     private void ExtractAndDisplayInvoiceData(PipelineContext? context, MainWindowViewModel viewModel)
     {
@@ -2183,7 +2214,7 @@ public partial class MainWindow : Window
                 viewModel.LoadImage(firstFile, availableWidth, availableHeight);
 
                 // Load the OCR data from database
-                var ocrFile = await _databaseService.GetOCRFileByPathAsync(firstFile);
+                var ocrFile = await _databaseService!.GetOCRFileByPathAsync(firstFile!);
                 if (ocrFile != null)
                 {
                     PipelineContext? context = null;
@@ -2246,7 +2277,11 @@ public partial class MainWindow : Window
 public class AsyncRelayCommand : ICommand
 {
     private readonly Func<Task> _execute;
-    public event EventHandler? CanExecuteChanged;
+    public event EventHandler? CanExecuteChanged
+    {
+        add { }
+        remove { }
+    }
 
     public AsyncRelayCommand(Func<Task> execute)
     {
@@ -2264,7 +2299,11 @@ public class AsyncRelayCommand : ICommand
 public class RelayCommand : ICommand
 {
     private readonly Action _execute;
-    public event EventHandler? CanExecuteChanged;
+    public event EventHandler? CanExecuteChanged
+    {
+        add { }
+        remove { }
+    }
 
     public RelayCommand(Action execute)
     {

@@ -11,7 +11,12 @@
             "args": [],
             "cwd": "${workspaceFolder}/K-OCRDesktop",
             "stopAtEntry": false,
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "SESSION_MANAGER": "",
+                "WAYLAND_DISPLAY": "",
+                "AVALONIA_LOG_LEVEL": "Trace"
+            }
         },
         {
             "name": "Launch K-OCR-API",

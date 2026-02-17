@@ -1,0 +1,2 @@
+# Suppress CA1416 warnings for platform-specific code
+dotnet_diagnostic.CA1416.severity = none

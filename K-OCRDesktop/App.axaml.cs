@@ -61,6 +61,9 @@ public partial class App : Application
         services.AddSingleton<IInvoiceProcessingService, InvoiceProcessingService>();
         services.AddSingleton<IConfigurationService, ConfigurationService>();
 
+        // Register shared document export service so both desktop and web can reuse it
+        services.AddSingleton<K_OCR.Services.IDocumentExportService, K_OCR.Services.DocumentExportService>();
+
         Services = services.BuildServiceProvider();
     }
 
@@ -84,6 +87,9 @@ public partial class App : Application
             var databaseService = Services?.GetService(typeof(DatabaseService)) as DatabaseService 
                 ?? throw new InvalidOperationException("DatabaseService is required but not registered in DI container");
 
+            // Get document export service from DI (shared implementation in K-OCRLib)
+            var documentExportService = Services?.GetService(typeof(K_OCR.Services.IDocumentExportService)) as K_OCR.Services.IDocumentExportService;
+
             // Initialize database
             databaseService.Initialize();
 
@@ -93,7 +99,7 @@ public partial class App : Application
                 _ = EnsureProjectDirectoriesExistAsync(configurationService);
             }
 
-            desktop.MainWindow = new MainWindow(fileService, ocrService, invoiceService, invoiceProcessingService, configurationService, databaseService)
+            desktop.MainWindow = new MainWindow(fileService, ocrService, invoiceService, invoiceProcessingService, configurationService, databaseService, documentExportService)
             {
                 DataContext = new MainWindowViewModel(),
             };
