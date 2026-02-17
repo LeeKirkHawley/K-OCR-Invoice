@@ -88,7 +88,7 @@ public partial class App : Application
                 ?? throw new InvalidOperationException("DatabaseService is required but not registered in DI container");
 
             // Get document export service from DI (shared implementation in K-OCRLib)
-            var documentExportService = Services?.GetService(typeof(K_OCR.Services.IDocumentExportService)) as K_OCR.Services.IDocumentExportService;
+            var documentExportService = Services!.GetRequiredService<K_OCR.Services.IDocumentExportService>();
 
             // Initialize database
             databaseService.Initialize();

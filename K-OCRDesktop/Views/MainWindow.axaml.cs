@@ -46,11 +46,11 @@ public partial class MainWindow : Window
     private OcrDataService? _ocrDataService;
     private PdfProcessingService? _pdfProcessingService;
     private KeyboardNavigationService? _keyboardNavigationService;
-    private K_OCR.Services.IDocumentExportService? _documentExportService;
+    private K_OCR.Services.IDocumentExportService _documentExportService;
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    public MainWindow() : this(null, null, null, null, null, null!, null)
+    public MainWindow() : this(null, null, null, null, null, null!, new K_OCR.Services.DocumentExportService())
     {
     }
     
@@ -58,7 +58,7 @@ public partial class MainWindow : Window
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     public MainWindow(IFileService? fileService, IOCRService? ocrService, IInvoiceService? invoiceService,
         IInvoiceProcessingService? invoiceProcessingService, IConfigurationService? configurationService, DatabaseService databaseService,
-        K_OCR.Services.IDocumentExportService? documentExportService)
+        K_OCR.Services.IDocumentExportService documentExportService)
     {
         InitializeComponent();
         
@@ -100,8 +100,8 @@ public partial class MainWindow : Window
         // Initialize Strategy B Services
         InitializeServices();
 
-        // Assign injected document export service (if provided)
-        _documentExportService = documentExportService;
+        // Assign injected document export service
+        _documentExportService = documentExportService ?? throw new ArgumentNullException(nameof(documentExportService));
 
         // Load configuration
         var basePath = AppDomain.CurrentDomain.BaseDirectory;
@@ -386,60 +386,6 @@ public partial class MainWindow : Window
             clickedField = _fieldSelectionService.FindFieldAtPosition(viewModel.DocumentFields.ToList(), unzoomedX, unzoomedY);
         }
 
-        if (clickedField == null)
-        {
-            // Debug output to help diagnose why clicks don't hit any field
-            try
-            {
-                System.Console.WriteLine($"[OnImageClick] No field hit. pos={{X={position.X:F1},Y={position.Y:F1}}}, zoom={viewModel.ImageZoom:F2}, canvas={{W={viewModel.CanvasWidth},H={viewModel.CanvasHeight}}}");
-
-                int shown = 0;
-                foreach (var field in viewModel.DocumentFields)
-                {
-                    if (field.BoundingBoxes == null || field.BoundingBoxes.Count == 0)
-                        continue;
-
-                    foreach (var box in field.BoundingBoxes)
-                    {
-                        var scaled = _boundingBoxHighlightService.ScaleBoundingBoxToPixels(box);
-                        double minX = scaled.Where((p, i) => i % 2 == 0).Min();
-                        double maxX = scaled.Where((p, i) => i % 2 == 0).Max();
-                        double minY = scaled.Where((p, i) => i % 2 == 1).Min();
-                        double maxY = scaled.Where((p, i) => i % 2 == 1).Max();
-                        System.Console.WriteLine($"  Field='{field.Name}' box=[{minX:F0},{minY:F0}]-[{maxX:F0},{maxY:F0}]");
-                        shown++;
-                        if (shown >= 6) break;
-                    }
-                    if (shown >= 6) break;
-                }
-
-                // Also show up to 6 invoice line item bounding boxes for diagnosis
-                if (viewModel.CurrentInvoice?.Items != null)
-                {
-                    System.Console.WriteLine("  Line items:");
-                    int shownItems = 0;
-                    foreach (var item in viewModel.CurrentInvoice.Items)
-                    {
-                        if (item.BoundingBoxes == null || item.BoundingBoxes.Count == 0)
-                            continue;
-
-                        foreach (var box in item.BoundingBoxes)
-                        {
-                            var scaled = _boundingBoxHighlightService.ScaleBoundingBoxToPixels(box);
-                            double minX = scaled.Where((p, i) => i % 2 == 0).Min();
-                            double maxX = scaled.Where((p, i) => i % 2 == 0).Max();
-                            double minY = scaled.Where((p, i) => i % 2 == 1).Min();
-                            double maxY = scaled.Where((p, i) => i % 2 == 1).Max();
-                            System.Console.WriteLine($"    Item box=[{minX:F0},{minY:F0}]-[{maxX:F0},{maxY:F0}]");
-                            shownItems++;
-                            if (shownItems >= 6) break;
-                        }
-                        if (shownItems >= 6) break;
-                    }
-                }
-            }
-            catch { /* swallow debug errors */ }
-        }
 
         if (clickedField != null)
         {
@@ -954,7 +900,6 @@ public partial class MainWindow : Window
                             var (combinedFilePath, pageHeights) = await _imageService.CombineImagesVerticallyAsync(pagePaths, combinedPath);
                             filePath = combinedFilePath;
                             viewModel.PageHeights = pageHeights;
-                            System.Console.WriteLine($"[MainWindow] Combined {pageHeights.Count} pages, heights: {string.Join(", ", pageHeights)}");
                         }
                         else
                         {
@@ -1250,8 +1195,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                var exporter = _documentExportService ?? new K_OCR.Services.DocumentExportService();
-                await exporter.ExportToDocxAsync(ocrFile, saveDialog.Path.LocalPath);
+                await _documentExportService.ExportToDocxAsync(ocrFile, saveDialog.Path.LocalPath);
 
                 await ShowMessageAsync("Export Success", "DOCX saved successfully.");
             }

@@ -26,8 +26,6 @@ namespace K_OCRDesktop.Services
 
         public InvoiceItemDto? FindLineItemAtPosition(List<InvoiceItemDto> items, double x, double y)
         {
-            // Diagnostic logging: report incoming coordinates
-            System.Console.WriteLine($"[FindLineItemAtPosition] Testing point X={x:F1}, Y={y:F1}");
 
             foreach (var item in items.Where(item => item.BoundingBoxes != null && item.BoundingBoxes.Any()))
             {
@@ -43,7 +41,6 @@ namespace K_OCRDesktop.Services
                     double maxY = scaled.Where((p, i) => i % 2 == 1).Max();
 
                     bool hit = _highlightService.IsPointInPolygon((float)x, (float)y, scaled);
-                    System.Console.WriteLine($"  Testing item box=[{minX:F0},{minY:F0}]-[{maxX:F0},{maxY:F0}] -> hit={hit}");
                     if (hit)
                         return item;
                 }
