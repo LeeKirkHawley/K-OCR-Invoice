@@ -29,20 +29,16 @@ public partial class BatchProcessDialog : Window
     public bool ProcessingCompleted { get; private set; }
     public int FilesProcessed { get; private set; }
 
-    public BatchProcessDialog() : this(null, null, null!, string.Empty, null)
-    {
-    }
-
-    public BatchProcessDialog(IInvoiceService? invoiceService, IConfiguration? config, DatabaseService databaseService, string currentDirectory, IConfigurationService? configurationService = null)
+    public BatchProcessDialog(IInvoiceService invoiceService, IConfiguration config, DatabaseService databaseService, string currentDirectory, IConfigurationService configurationService, IImageService imageService, IFileService fileService)
     {
         InitializeComponent();
-        _invoiceService = invoiceService;
-        _config = config;
-        _databaseService = databaseService;
-        _currentDirectory = currentDirectory;
-        _configurationService = configurationService;
-        _imageService = new ImageService();
-        _fileService = new FileService(databaseService);
+        _invoiceService = invoiceService ?? throw new ArgumentNullException(nameof(invoiceService));
+        _config = config ?? throw new ArgumentNullException(nameof(config));
+        _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+        _currentDirectory = currentDirectory ?? throw new ArgumentNullException(nameof(currentDirectory));
+        _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
+        _imageService = imageService ?? throw new ArgumentNullException(nameof(imageService));
+        _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
         
         // Set current directory text in UI
         var currentDirText = this.FindControl<TextBlock>("CurrentDirectoryText");

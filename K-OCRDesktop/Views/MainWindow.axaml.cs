@@ -29,12 +29,12 @@ public partial class MainWindow : Window
     private ScrollViewer? _imageScrollViewer;
     private readonly List<OCRFile> _filesToProcess = new();
     private int _currentIndex = -1;
-    private readonly IConfiguration? _config;
-    private readonly IFileService? _fileService;
-    private readonly IInvoiceService? _invoiceService;
-    private readonly IInvoiceProcessingService? _invoiceProcessingService;
-    private readonly IConfigurationService? _configurationService;
-    private readonly IOCRService? _ocrService;
+    private readonly IConfiguration _config;
+    private readonly IFileService _fileService;
+    private readonly IInvoiceService _invoiceService;
+    private readonly IInvoiceProcessingService _invoiceProcessingService;
+    private readonly IConfigurationService _configurationService;
+    private readonly IOCRService _ocrService;
     private readonly IImageService _imageService;
     private readonly DatabaseService _databaseService;
     
@@ -46,19 +46,13 @@ public partial class MainWindow : Window
     private OcrDataService? _ocrDataService;
     private PdfProcessingService? _pdfProcessingService;
     private KeyboardNavigationService? _keyboardNavigationService;
-    private K_OCR.Services.IDocumentExportService _documentExportService;
+    private readonly K_OCR.Services.IDocumentExportService _documentExportService;
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    public MainWindow() : this(null, null, null, null, null, null!, new K_OCR.Services.DocumentExportService())
-    {
-    }
-    
-    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-    public MainWindow(IFileService? fileService, IOCRService? ocrService, IInvoiceService? invoiceService,
-        IInvoiceProcessingService? invoiceProcessingService, IConfigurationService? configurationService, DatabaseService databaseService,
-        K_OCR.Services.IDocumentExportService documentExportService)
+    public MainWindow(IFileService fileService, IOCRService ocrService, IInvoiceService invoiceService,
+        IInvoiceProcessingService invoiceProcessingService, IConfigurationService configurationService, DatabaseService databaseService,
+        IImageService imageService, K_OCR.Services.IDocumentExportService documentExportService)
     {
         InitializeComponent();
         
@@ -90,19 +84,18 @@ public partial class MainWindow : Window
         Closing += OnClosing;
 
         _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
-        _fileService = fileService ?? new FileService(_databaseService);
-        _invoiceService = invoiceService;
-        _invoiceProcessingService = invoiceProcessingService;
-        _ocrService = ocrService;
-        _configurationService = configurationService ?? new ConfigurationService();
-        _imageService = new ImageService();
+        _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
+        _invoiceService = invoiceService ?? throw new ArgumentNullException(nameof(invoiceService));
+        _invoiceProcessingService = invoiceProcessingService ?? throw new ArgumentNullException(nameof(invoiceProcessingService));
+        _ocrService = ocrService ?? throw new ArgumentNullException(nameof(ocrService));
+        _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
+        _imageService = imageService ?? throw new ArgumentNullException(nameof(imageService));
 
         // Initialize Strategy B Services
         InitializeServices();
 
         // Assign injected document export service
         _documentExportService = documentExportService ?? throw new ArgumentNullException(nameof(documentExportService));
-
         // Load configuration
         var basePath = AppDomain.CurrentDomain.BaseDirectory;
         _config = new ConfigurationBuilder()
@@ -155,9 +148,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            if (_configurationService != null)
-            {
-                var settings = await _configurationService.LoadSettingsAsync();
+            var settings = await _configurationService.LoadSettingsAsync();
                 if (!string.IsNullOrEmpty(settings.ProjectDirectory) && 
                     System.IO.Directory.Exists(settings.ProjectDirectory) &&
                     DataContext is MainWindowViewModel viewModel)
@@ -166,7 +157,6 @@ public partial class MainWindow : Window
                     viewModel.CurrentDirectory = settings.ProjectDirectory;
                     viewModel.LoadImageFilesFromFolder(settings.ProjectDirectory, _databaseService);
                 }
-            }
         }
         catch
         {
@@ -229,7 +219,7 @@ public partial class MainWindow : Window
 
     private async Task LoadSplitterPositionsAsync()
     {
-        if (_mainContentGrid == null || _configurationService == null)
+        if (_mainContentGrid == null)
             return;
 
         try
@@ -644,12 +634,7 @@ public partial class MainWindow : Window
                     try
                     {
                         // Get artifacts directory from configuration
-                        var artifactsDirectory = string.Empty;
-                        if (_configurationService != null)
-                        {
-                            var settings = await _configurationService.LoadSettingsAsync();
-                            artifactsDirectory = settings.ProjectArtifacts;
-                        }
+                        var artifactsDirectory = (await _configurationService.LoadSettingsAsync()).ProjectArtifacts ?? string.Empty;
                         
                         var result = await _invoiceProcessingService.ProcessFileAsync(filePath, useCache: true, artifactsDirectory);
                         
@@ -721,7 +706,7 @@ public partial class MainWindow : Window
 
     private async void OnSettings(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var settingsDialog = new SettingsDialog();
+        var settingsDialog = new SettingsDialog(_configurationService);
         await settingsDialog.ShowDialog(this);
         
         // If settings were saved and project directory changed, reload it
@@ -743,7 +728,7 @@ public partial class MainWindow : Window
             return;
         }
         
-        var batchDialog = new BatchProcessDialog(_invoiceService, _config, _databaseService, viewModel.CurrentDirectory, _configurationService);
+        var batchDialog = new BatchProcessDialog(_invoiceService, _config, _databaseService, viewModel.CurrentDirectory, _configurationService, _imageService, _fileService);
         await batchDialog.ShowDialog(this);
         
         // If processing completed, reload the current folder to show new results
@@ -756,9 +741,7 @@ public partial class MainWindow : Window
     private async Task SelectFolderAsync()
     {
         string? initialDirectory = null;
-        if (_configurationService != null)
-        {
-            try
+try
             {
                 var settings = await _configurationService.LoadSettingsAsync();
                 initialDirectory = settings.ProjectDirectory;
@@ -766,7 +749,6 @@ public partial class MainWindow : Window
             catch
             {
                 // Ignore
-            }
         }
 
         var dialog = new FolderPickerDialog(initialDirectory);
@@ -794,21 +776,12 @@ public partial class MainWindow : Window
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     private async Task<string?> ConvertPdfToPngAsync(string pdfPath)
     {
-        if (_imageService == null)
-        {
-            await ShowMessageAsync("Error", "ImageService is not available.");
-            return null;
-        }
-
+        
         try
         {
             // Get artifacts directory from configuration
-            string? artifactsDirectory = null;
-            if (_configurationService != null)
-            {
-                var settings = await _configurationService.LoadSettingsAsync();
-                artifactsDirectory = settings.ProjectArtifacts;
-            }
+            var settings = await _configurationService.LoadSettingsAsync();
+            string? artifactsDirectory = settings.ProjectArtifacts;
 
             return await _imageService.ConvertPdfToPngAsync(pdfPath, artifactsDirectory);
         }
@@ -864,12 +837,8 @@ public partial class MainWindow : Window
         if (System.IO.Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
             // Get artifacts directory from configuration
-            string? artifactsDirectory = null;
-            if (_configurationService != null)
-            {
-                var settings = await _configurationService.LoadSettingsAsync();
-                artifactsDirectory = settings.ProjectArtifacts;
-            }
+            var settings = await _configurationService.LoadSettingsAsync();
+            string? artifactsDirectory = settings.ProjectArtifacts;
             
             if (string.IsNullOrEmpty(artifactsDirectory))
             {
@@ -1993,23 +1962,18 @@ public partial class MainWindow : Window
 
     private async Task ProcessMultipleFilesAsync(List<string> filePaths)
     {
-        if (_invoiceService == null || DataContext is not MainWindowViewModel viewModel)
+        if (DataContext is not MainWindowViewModel viewModel)
         {
             await ShowMessageAsync("Error", "Invoice service not available.");
             return;
         }
 
         // Get artifacts directory from configuration
-        var artifactsDirectory = string.Empty;
-        if (_configurationService != null)
-        {
-            var settings = await _configurationService.LoadSettingsAsync();
-            artifactsDirectory = settings.ProjectArtifacts;
-        }
+        var artifactsDirectory = (await _configurationService.LoadSettingsAsync()).ProjectArtifacts ?? string.Empty;
 
         // Get max concurrent requests from config
         var maxConcurrent = 3;
-        if (_config != null && int.TryParse(_config["MaxConcurrentRequests"], out var parsedValue))
+        if (int.TryParse(_config["MaxConcurrentRequests"], out var parsedValue))
         {
             maxConcurrent = parsedValue;
         }

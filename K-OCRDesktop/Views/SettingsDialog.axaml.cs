@@ -19,10 +19,10 @@ public partial class SettingsDialog : Window
     public int MaxConcurrentRequests { get; private set; } = 3;
     public bool SettingsSaved { get; private set; }
 
-    public SettingsDialog()
+    public SettingsDialog(IConfigurationService configService)
     {
         InitializeComponent();
-        _configService = new ConfigurationService();
+        _configService = configService ?? throw new ArgumentNullException(nameof(configService));
         _currentSettings = new AppSettings();
         _ = LoadSettingsAsync(); // Fire and forget
     }

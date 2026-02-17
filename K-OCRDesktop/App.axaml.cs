@@ -60,6 +60,8 @@ public partial class App : Application
         services.AddSingleton<IInvoiceService, InvoiceService>();
         services.AddSingleton<IInvoiceProcessingService, InvoiceProcessingService>();
         services.AddSingleton<IConfigurationService, ConfigurationService>();
+        // ImageService is in K-OCRLib and should be resolved from DI for desktop; register here so other front-ends can reuse the same implementation
+        services.AddSingleton<IImageService, ImageService>();
 
         // Register shared document export service so both desktop and web can reuse it
         services.AddSingleton<K_OCR.Services.IDocumentExportService, K_OCR.Services.DocumentExportService>();
@@ -78,17 +80,19 @@ public partial class App : Application
             // More info: https://docs.avaloniaui.net/docs/guides/development-guides/data-validation#manage-validationplugins
             DisableAvaloniaDataAnnotationValidation();
             
-            // Get services
-            var fileService = Services?.GetService(typeof(IFileService)) as IFileService;
-            var ocrService = Services?.GetService(typeof(IOCRService)) as IOCRService;
-            var invoiceService = Services?.GetService(typeof(IInvoiceService)) as IInvoiceService;
-            var invoiceProcessingService = Services?.GetService(typeof(IInvoiceProcessingService)) as IInvoiceProcessingService;
-            var configurationService = Services?.GetService(typeof(IConfigurationService)) as IConfigurationService;
-            var databaseService = Services?.GetService(typeof(DatabaseService)) as DatabaseService 
-                ?? throw new InvalidOperationException("DatabaseService is required but not registered in DI container");
+            // Get services (required)
+            var fileService = Services!.GetRequiredService<IFileService>();
+            var ocrService = Services!.GetRequiredService<IOCRService>();
+            var invoiceService = Services!.GetRequiredService<IInvoiceService>();
+            var invoiceProcessingService = Services!.GetRequiredService<IInvoiceProcessingService>();
+            var configurationService = Services!.GetRequiredService<IConfigurationService>();
+            var databaseService = Services!.GetRequiredService<DatabaseService>();
 
             // Get document export service from DI (shared implementation in K-OCRLib)
             var documentExportService = Services!.GetRequiredService<K_OCR.Services.IDocumentExportService>();
+
+            // Get image service from DI
+            var imageService = Services!.GetRequiredService<IImageService>();
 
             // Initialize database
             databaseService.Initialize();
@@ -99,7 +103,7 @@ public partial class App : Application
                 _ = EnsureProjectDirectoriesExistAsync(configurationService);
             }
 
-            desktop.MainWindow = new MainWindow(fileService, ocrService, invoiceService, invoiceProcessingService, configurationService, databaseService, documentExportService)
+            desktop.MainWindow = new MainWindow(fileService, ocrService, invoiceService, invoiceProcessingService, configurationService, databaseService, imageService, documentExportService)
             {
                 DataContext = new MainWindowViewModel(),
             };
