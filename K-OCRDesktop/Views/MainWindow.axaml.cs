@@ -366,7 +366,7 @@ public partial class MainWindow : Window
             .FirstOrDefault(field => field.BoundingBoxes!.Any(box => 
                 box.Points != null && 
                 box.Points.Count >= 8 && 
-                IsPointInPolygon((float)position.X, (float)position.Y, ScaleBoundingBoxToPixels(box.Points))));
+                IsPointInPolygon((float)position.X, (float)position.Y, ScaleBoundingBoxToPixels(box))));
 
         if (clickedField != null)
         {
@@ -397,7 +397,7 @@ public partial class MainWindow : Window
                 .FirstOrDefault(item => item.BoundingBoxes!.Any(box =>
                     box.Points != null &&
                     box.Points.Count >= 8 &&
-                    IsPointInPolygon((float)position.X, (float)position.Y, ScaleBoundingBoxToPixels(box.Points))));
+                    IsPointInPolygon((float)position.X, (float)position.Y, ScaleBoundingBoxToPixels(box))));
 
             if (clickedLineItem != null)
             {
@@ -413,10 +413,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private List<float> ScaleBoundingBoxToPixels(List<float> inchPoints)
+    private List<float> ScaleBoundingBoxToPixels(BoundingBoxDto box)
     {
         if (DataContext is not MainWindowViewModel viewModel)
-            return inchPoints;
+            return box.Points;
 
         // Get original page dimensions from the invoice (Azure coordinates are in inches)
         double originalPageWidth = viewModel.CurrentInvoice?.OriginalPageWidth ?? 8.5;
@@ -426,18 +426,42 @@ public partial class MainWindow : Window
         double canvasWidth = viewModel.CanvasWidth;
         double canvasHeight = viewModel.CanvasHeight;
         
-        // Calculate scale factors
-        double scaleX = canvasWidth / originalPageWidth;
-        double scaleY = canvasHeight / originalPageHeight;
+        // For multi-page documents, calculate scale based on individual page dimensions
+        double scaleX, scaleY;
         
-        // Scale all points from inches to pixels
+        if (viewModel.PageHeights.Count > 0)
+        {
+            // Multi-page: scale based on single page dimensions
+            var firstPageHeight = viewModel.PageHeights[0];
+            scaleX = originalPageWidth > 0 ? canvasWidth / originalPageWidth : 1.0;
+            scaleY = originalPageHeight > 0 ? firstPageHeight / originalPageHeight : 1.0;
+        }
+        else
+        {
+            // Single-page: scale to full canvas
+            scaleX = canvasWidth / originalPageWidth;
+            scaleY = canvasHeight / originalPageHeight;
+        }
+        
+        // Calculate Y offset for this page (for multi-page PDFs)
+        double pageYOffset = 0;
+        if (viewModel.PageHeights.Count > 0 && box.PageNumber > 0)
+        {
+            // Sum heights of all previous pages (PageNumber is 1-based)
+            for (int i = 0; i < box.PageNumber - 1 && i < viewModel.PageHeights.Count; i++)
+            {
+                pageYOffset += viewModel.PageHeights[i];
+            }
+        }
+        
+        // Scale all points from inches to pixels and apply page offset
         var pixelPoints = new List<float>();
-        for (int i = 0; i < inchPoints.Count; i++)
+        for (int i = 0; i < box.Points.Count; i++)
         {
             if (i % 2 == 0)
-                pixelPoints.Add((float)(inchPoints[i] * scaleX)); // x coordinate
+                pixelPoints.Add((float)(box.Points[i] * scaleX)); // x coordinate
             else
-                pixelPoints.Add((float)(inchPoints[i] * scaleY)); // y coordinate
+                pixelPoints.Add((float)(box.Points[i] * scaleY + pageYOffset)); // y coordinate with page offset
         }
         
         return pixelPoints;
@@ -1549,7 +1573,7 @@ public partial class MainWindow : Window
             return;
 
         // Get the scaled points
-        var scaledPoints = ScaleBoundingBoxToPixels(boundingBox.Points);
+        var scaledPoints = ScaleBoundingBoxToPixels(boundingBox);
 
         if (scaledPoints.Count >= 8)
         {
