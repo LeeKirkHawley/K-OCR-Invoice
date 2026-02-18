@@ -13,6 +13,15 @@ namespace K_OCR.Models
         public decimal? UnitPrice { get; set; }
         public decimal? LineTotal { get; set; }
         public List<BoundingBoxDto> BoundingBoxes { get; init; } = new();
+
+        /// <summary>
+        /// Per-field Tesseract cross-validation result.
+        /// Key = property name of the field (e.g. nameof(Description)).
+        /// Value = true if the field value was found in the Tesseract OCR text (confirmed);
+        ///         false if it was not found and is therefore flagged as suspect.
+        /// Fields absent from this dictionary were not checked (Azure returned no value).
+        /// </summary>
+        public Dictionary<string, bool> TesseractConfirmed { get; set; } = new();
     }
 
     public sealed class InvoiceDto
@@ -38,5 +47,14 @@ namespace K_OCR.Models
         
         // Number of pages in the source document (from Azure result.Pages.Count)
         public int PageCount { get; init; } = 1;
+
+        /// <summary>
+        /// Per-field Tesseract cross-validation result.
+        /// Key = property name of the field (e.g. nameof(InvoiceDto.VendorName)).
+        /// Value = true if the field value was found in the Tesseract OCR text (confirmed);
+        ///         false if it was not found and is therefore flagged as suspect.
+        /// Fields absent from this dictionary were not checked (Azure returned no value).
+        /// </summary>
+        public Dictionary<string, bool> TesseractConfirmed { get; set; } = new();
     }
 }

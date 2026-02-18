@@ -14,6 +14,10 @@ namespace K_OCR.PipelineService
         public object Table { get; set; }
         public object LineItems { get; set; }
 
-        // Add anything else your project needs
+        /// <summary>
+        /// Raw text extracted by Tesseract (local secondary OCR) for validation
+        /// against the primary Azure OCR result.
+        /// </summary>
+        public string? TesseractOcrText { get; set; }
     }
 }

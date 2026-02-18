@@ -62,6 +62,9 @@ public partial class App : Application
         services.AddSingleton<IConfigurationService, ConfigurationService>();
         // ImageService is in K-OCRLib and should be resolved from DI for desktop; register here so other front-ends can reuse the same implementation
         services.AddSingleton<IImageService, ImageService>();
+        services.AddSingleton<ITesseractValidationService>(sp =>
+            new TesseractValidationService(sp.GetRequiredService<IImageService>()));
+        services.AddSingleton<IInvoiceValidationService, InvoiceValidationService>();
 
         // Register shared document export service so both desktop and web can reuse it
         services.AddSingleton<K_OCR.Services.IDocumentExportService, K_OCR.Services.DocumentExportService>();

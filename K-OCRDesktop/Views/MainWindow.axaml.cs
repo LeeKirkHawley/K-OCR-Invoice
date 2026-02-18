@@ -17,12 +17,15 @@ using K_OCR.PipelineService;
 using K_OCR.Services;
 using K_OCRDesktop.ViewModels;
 using K_OCRDesktop.Services;
+using K_OCRDesktop.Models;
 using Microsoft.Extensions.Configuration;
 
 namespace K_OCRDesktop.Views;
 
 public partial class MainWindow : Window
 {
+    public MainWindowViewModel? MainViewModel => DataContext as MainWindowViewModel;
+
     private Grid? _mainContentGrid;
     private Canvas? _ocrCanvas;
     private Canvas? _highlightCanvas;
@@ -108,6 +111,26 @@ public partial class MainWindow : Window
         
         // Load splitter positions
         _ = LoadSplitterPositionsAsync();
+
+    }
+
+    private async Task ShowErrorDialog(string message)
+    {
+        var errorWindow = new Window
+        {
+            Title = "Error",
+            Width = 400,
+            Height = 200,
+            Content = new TextBlock
+            {
+                Text = message,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                Padding = new Thickness(10)
+            }
+        };
+        await errorWindow.ShowDialog(this);
     }
 
     private void InitializeServices()
@@ -156,6 +179,8 @@ public partial class MainWindow : Window
                     // Set the current directory and load files automatically
                     viewModel.CurrentDirectory = settings.ProjectDirectory;
                     viewModel.LoadImageFilesFromFolder(settings.ProjectDirectory, _databaseService);
+                    // Validate any processed files after loading
+                    _ = ValidateProcessedFilesAsync(viewModel);
                 }
         }
         catch
@@ -178,6 +203,72 @@ public partial class MainWindow : Window
             viewModel.ZoomOutCommand = new RelayCommand(viewModel.ZoomOut);
             viewModel.ZoomFitCommand = new RelayCommand(viewModel.ZoomFit);
             viewModel.AboutCommand = new RelayCommand(ShowAbout);
+
+            // OCR Now context-menu command — run processing for a single file on demand
+            viewModel.OcrNowCommand = new CommunityToolkit.Mvvm.Input.AsyncRelayCommand<object>(async (param) =>
+            {
+                var fileItem = param as FileListItem;
+                if (fileItem == null) return;
+                var filePath = fileItem.FileName;
+                var fullPath = string.IsNullOrEmpty(viewModel.CurrentDirectory) ? filePath : System.IO.Path.Combine(viewModel.CurrentDirectory, filePath);
+                try
+                {
+                    var artifactsDirectory = (await _configurationService.LoadSettingsAsync()).ProjectArtifacts ?? string.Empty;
+                    var result = await _invoiceProcessingService.ProcessFileAsync(fullPath, useCache: false, artifactsDirectory);
+                    if (result.IsSuccess && result.Context != null)
+                    {
+                        var ocrFile = await _databaseService.GetOCRFileByPathAsync(fullPath);
+                        if (ocrFile != null)
+                        {
+                            ocrFile.OcrText = result.Context.Text ?? string.Empty;
+                            await _databaseService.SaveOCRFileAsync(ocrFile);
+                        }
+                        fileItem.IsProcessed = true;
+                        
+                        // Update validation status based on database results
+                        var updatedOcrFile = await _databaseService.GetOCRFileByPathAsync(fullPath);
+                        if (updatedOcrFile != null && !string.IsNullOrEmpty(updatedOcrFile.ValidatedOcrText))
+                        {
+                            try
+                            {
+                                // Handle both single invoice and array format
+                                K_OCR.Models.InvoiceDto? invoice = null;
+                                try
+                                {
+                                    invoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(updatedOcrFile.ValidatedOcrText);
+                                }
+                                catch
+                                {
+                                    var invoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(updatedOcrFile.ValidatedOcrText);
+                                    invoice = invoices?.FirstOrDefault();
+                                }
+                                
+                                if (invoice != null && invoice.TesseractConfirmed != null && invoice.TesseractConfirmed.Count > 0)
+                                {
+                                    fileItem.HasSuspectFields = invoice.TesseractConfirmed.Values.Any(v => v == false);
+                                    fileItem.IsValidated = !fileItem.HasSuspectFields;
+                                    System.Console.WriteLine($"[OcrNow] Updated validation: HasSuspect={fileItem.HasSuspectFields}, IsValidated={fileItem.IsValidated}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Console.WriteLine($"[OcrNow] Error parsing validation: {ex.Message}");
+                            }
+                        }
+                        
+                        viewModel.SetOcrJson(result.Json);
+                        ExtractAndDisplayInvoiceData(result.Context, viewModel);
+                    }
+                    else if (result.Error != null)
+                    {
+                        await ShowErrorDialog($"Error processing {filePath}:\n{result.Error.Message}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await ShowErrorDialog($"Error processing {filePath}:\n{ex.Message}");
+                }
+            });
             
             // Handle file selection changes
             viewModel.PropertyChanged += (s, e) =>
@@ -192,6 +283,121 @@ public partial class MainWindow : Window
                     HighlightCurrentField();
                 }
             };
+        }
+    }
+
+    private async Task ValidateProcessedFilesAsync(MainWindowViewModel viewModel)
+    {
+        System.Console.WriteLine($"[ValidateProcessedFiles] Starting validation for directory: {viewModel.CurrentDirectory}");
+        if (string.IsNullOrEmpty(viewModel.CurrentDirectory))
+            return;
+
+        // Debug: Check what's actually in the database
+        var allDbFiles = await _databaseService.GetAllOCRFilesAsync();
+        System.Console.WriteLine($"[ValidateProcessedFiles] Database contains {allDbFiles.Count} OCR files:");
+        foreach (var dbFile in allDbFiles.Take(5))
+        {
+            System.Console.WriteLine($"  DB: {dbFile.FilePath} (IsFullyProcessed={dbFile.IsFullyProcessed})");
+        }
+
+        var artifactsDirectory = (await _configurationService.LoadSettingsAsync()).ProjectArtifacts ?? string.Empty;
+        System.Console.WriteLine($"[ValidateProcessedFiles] Found {viewModel.ImageFiles.Count} files to check");
+
+        foreach (var fileItem in viewModel.ImageFiles.ToList())
+        {
+            var fullPath = System.IO.Path.Combine(viewModel.CurrentDirectory, fileItem.FileName);
+            System.Console.WriteLine($"[ValidateProcessedFiles] Checking {fileItem.FileName}: IsProcessed={fileItem.IsProcessed}, QueryPath={fullPath}");
+            if (!fileItem.IsProcessed)
+                continue;
+
+            var ocrFile = await _databaseService.GetOCRFileByPathAsync(fullPath);
+            System.Console.WriteLine($"[ValidateProcessedFiles] {fileItem.FileName}: OcrFile={ocrFile != null}, HasValidatedText={!string.IsNullOrEmpty(ocrFile?.ValidatedOcrText)}");
+
+            // If processed but no validated text, run validation
+            if (ocrFile != null && string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+            {
+                try
+                {
+                    System.Console.WriteLine($"[ValidateProcessedFiles] Running validation for {fileItem.FileName}...");
+                    var result = await _invoiceProcessingService.ProcessFileAsync(fullPath, useCache: true, artifactsDirectory);
+                    if (result.IsSuccess && result.Context != null)
+                    {
+                        System.Console.WriteLine($"[ValidateProcessedFiles] Validation succeeded for {fileItem.FileName}");
+                        // Update the database
+                        var updatedOcrFile = await _databaseService.GetOCRFileByPathAsync(fullPath);
+                        System.Console.WriteLine($"[ValidateProcessedFiles] {fileItem.FileName}: UpdatedOcrFile={updatedOcrFile != null}, ValidatedTextLength={updatedOcrFile?.ValidatedOcrText?.Length ?? 0}");
+                        
+                        if (updatedOcrFile != null && !string.IsNullOrEmpty(updatedOcrFile.ValidatedOcrText))
+                        {
+                            // Parse and update UI status - handle both single invoice and array
+                            K_OCR.Models.InvoiceDto? validatedInvoice = null;
+                            try
+                            {
+                                validatedInvoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(updatedOcrFile.ValidatedOcrText);
+                            }
+                            catch
+                            {
+                                // Try parsing as array and take first element
+                                var invoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(updatedOcrFile.ValidatedOcrText);
+                                validatedInvoice = invoices?.FirstOrDefault();
+                            }
+                            
+                            System.Console.WriteLine($"[ValidateProcessedFiles] {fileItem.FileName}: Parsed invoice={validatedInvoice != null}, TesseractConfirmed count={validatedInvoice?.TesseractConfirmed?.Count ?? 0}");
+                            if (validatedInvoice != null && validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
+                            {
+                                var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false);
+                                fileItem.HasSuspectFields = hasSuspectFields;
+                                fileItem.IsValidated = !hasSuspectFields;
+                                System.Console.WriteLine($"[ValidateProcessedFiles] {fileItem.FileName}: HasSuspect={hasSuspectFields}, IsValidated={fileItem.IsValidated}, FailedFields={string.Join(", ", validatedInvoice.TesseractConfirmed.Where(kv => !kv.Value).Select(kv => kv.Key))}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        System.Console.WriteLine($"[ValidateProcessedFiles] Validation failed for {fileItem.FileName}: {result.Error?.Message}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Console.WriteLine($"[ValidateProcessedFiles] Exception validating {fileItem.FileName}: {ex.Message}");
+                }
+            }
+            else if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+            {
+                // Already has validation - just update the UI from DB
+                try
+                {
+                    System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] Parsing validation for {fileItem.FileName}");
+                    // ValidatedOcrText can be either a single InvoiceDto or a List<InvoiceDto>
+                    K_OCR.Models.InvoiceDto? validatedInvoice = null;
+                    try
+                    {
+                        validatedInvoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(ocrFile.ValidatedOcrText);
+                    }
+                    catch
+                    {
+                        // Try parsing as array and take first element
+                        var invoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(ocrFile.ValidatedOcrText);
+                        validatedInvoice = invoices?.FirstOrDefault();
+                    }
+                    
+                    if (validatedInvoice != null && validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
+                    {
+                        var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false);
+                        fileItem.HasSuspectFields = hasSuspectFields;
+                        fileItem.IsValidated = !hasSuspectFields;
+                        System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] {fileItem.FileName}: HasSuspect={hasSuspectFields}, IsValidated={fileItem.IsValidated}, FailedFields={string.Join(", ", validatedInvoice.TesseractConfirmed.Where(kv => !kv.Value).Select(kv => kv.Key))}");
+                    }
+                    else
+                    {
+                        System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] {fileItem.FileName}: Invoice or TesseractConfirmed is null/empty");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] Error parsing {fileItem.FileName}: {ex.Message}");
+                }
+            }
         }
     }
 
@@ -716,6 +922,81 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void OnClearAllData(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // Confirmation dialog
+        bool confirmed = false;
+        var confirmWindow = new Window
+        {
+            Title = "Clear All Data",
+            Width = 450,
+            Height = 180,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false
+        };
+
+        var yesButton = new Button { Content = "Yes, clear everything", Margin = new Thickness(0, 0, 8, 0) };
+        var noButton  = new Button { Content = "Cancel" };
+
+        yesButton.Click += (_, _) => { confirmed = true;  confirmWindow.Close(); };
+        noButton.Click  += (_, _) => { confirmed = false; confirmWindow.Close(); };
+
+        confirmWindow.Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Spacing = 16,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "This will remove all invoices from the database and delete every file in the artifacts folder. This cannot be undone.",
+                    TextWrapping = TextWrapping.Wrap
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { yesButton, noButton }
+                }
+            }
+        };
+
+        await confirmWindow.ShowDialog(this);
+
+        if (!confirmed)
+            return;
+
+        try
+        {
+            // 1. Clear the database
+            await _databaseService.ClearAllDataAsync();
+
+            // 2. Delete all files in the artifacts directory
+            var settings = await _configurationService.LoadSettingsAsync();
+            var artifactsDir = settings.ProjectArtifacts;
+            if (!string.IsNullOrEmpty(artifactsDir) && Directory.Exists(artifactsDir))
+            {
+                foreach (var file in Directory.GetFiles(artifactsDir, "*", SearchOption.AllDirectories))
+                {
+                    try { File.Delete(file); } catch { /* skip locked files */ }
+                }
+            }
+
+            // 3. Reload the file list so everything shows as unprocessed
+            if (DataContext is MainWindowViewModel viewModel && !string.IsNullOrEmpty(viewModel.CurrentDirectory))
+            {
+                viewModel.LoadImageFilesFromFolder(viewModel.CurrentDirectory, _databaseService);
+                _ = ValidateProcessedFilesAsync(viewModel);
+            }
+
+            await ShowMessageAsync("Done", "All data cleared. Invoices will be treated as unprocessed on next batch run.");
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageAsync("Error", $"Failed to clear data: {ex.Message}");
+        }
+    }
+
     private async void OnBatchProcess(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel viewModel)
@@ -728,13 +1009,14 @@ public partial class MainWindow : Window
             return;
         }
         
-        var batchDialog = new BatchProcessDialog(_invoiceService, _config, _databaseService, viewModel.CurrentDirectory, _configurationService, _imageService, _fileService);
+        var batchDialog = new BatchProcessDialog(_invoiceService, _config, _databaseService, viewModel.CurrentDirectory, _configurationService, _imageService, _fileService, _invoiceProcessingService);
         await batchDialog.ShowDialog(this);
         
         // If processing completed, reload the current folder to show new results
         if (batchDialog.ProcessingCompleted)
         {
             viewModel.LoadImageFilesFromFolder(viewModel.CurrentDirectory, _databaseService);
+            _ = ValidateProcessedFilesAsync(viewModel);
         }
     }
 
@@ -763,6 +1045,7 @@ try
         if (!string.IsNullOrEmpty(selectedPath) && DataContext is MainWindowViewModel viewModel)
         {
             viewModel.LoadImageFilesFromFolder(selectedPath, _databaseService);
+            _ = ValidateProcessedFilesAsync(viewModel);
         }
     }
 
@@ -996,75 +1279,56 @@ try
             return;
         }
 
-        // Check if cached OCR data exists in database
-        PipelineContext? pipelineContext = null;
-        string json = string.Empty;
+        // Route through InvoiceProcessingService so Tesseract validation always runs.
+        // useCache:true returns instantly from DB when fully processed (Azure+Tesseract);
+        // falls through to full reprocessing only when data is absent or incomplete.
+        var processingSettings = await _configurationService.LoadSettingsAsync();
+        var processingArtifactsDir = processingSettings.ProjectArtifacts ?? string.Empty;
 
-        // Load from database only
-        var dbOcrFile = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
-        if (dbOcrFile != null)
+        var processingResult = await _invoiceProcessingService.ProcessFileAsync(
+            originalFilePath, useCache: true, processingArtifactsDir);
+
+        if (processingResult.IsSuccess && processingResult.Context != null)
         {
-            PipelineContext? context = null;
-            string jsonToUse = string.Empty;
+            viewModel.SetOcrJson(processingResult.Json);
 
-            // Try ValidatedOcrText first if it exists
-            if (!string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText))
+            // Also surface raw text columns for the OCR text panel.
+            var dbOcrFile2 = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
+            viewModel.SetOriginalOcrText(dbOcrFile2?.OcrText ?? string.Empty);
+            viewModel.SetValidatedOcrText(dbOcrFile2?.ValidatedOcrText ?? string.Empty);
+            if (!string.IsNullOrEmpty(dbOcrFile2?.ValidatedOcrText))
+                viewModel.ShowOriginalOcr = false;
+
+            ExtractAndDisplayInvoiceData(processingResult.Context, viewModel);
+
+            // Update the FileListItem status indicators based on validation results
+            if (viewModel.SelectedImageFile != null && dbOcrFile2 != null && !string.IsNullOrEmpty(dbOcrFile2.ValidatedOcrText))
             {
                 try
                 {
-                    context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(dbOcrFile.ValidatedOcrText);
-                    jsonToUse = dbOcrFile.ValidatedOcrText;
+                    var validatedInvoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(dbOcrFile2.ValidatedOcrText);
+                    if (validatedInvoice != null && validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
+                    {
+                        var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false);
+                        viewModel.SelectedImageFile.HasSuspectFields = hasSuspectFields;
+                        viewModel.SelectedImageFile.IsValidated = !hasSuspectFields;
+                        System.Console.WriteLine($"[OnFileSelected] {viewModel.SelectedImageFile.FileName}: HasSuspect={hasSuspectFields}, IsValidated={viewModel.SelectedImageFile.IsValidated}, FailedFields={string.Join(", ", validatedInvoice.TesseractConfirmed.Where(kv => !kv.Value).Select(kv => kv.Key))}");
+                    }
                 }
-                catch
-                {
-                    // ValidatedOcrText is invalid, fall through to try OcrText
-                }
-            }
-
-            // If ValidatedOcrText didn't work or doesn't exist, try OcrText
-            if (context == null && !string.IsNullOrEmpty(dbOcrFile.OcrText))
-            {
-                try
-                {
-                    context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(dbOcrFile.OcrText);
-                    jsonToUse = dbOcrFile.OcrText;
-                }
-                catch
-                {
-                    // OcrText is also invalid
-                }
-            }
-
-            if (context != null && !string.IsNullOrEmpty(jsonToUse))
-            {
-                // Set both original and validated text in the view model
-                viewModel.SetOriginalOcrText(dbOcrFile.OcrText ?? string.Empty);
-                viewModel.SetValidatedOcrText(dbOcrFile.ValidatedOcrText ?? string.Empty);
-                
-                // If we have validated text, switch to showing it by default
-                if (!string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText))
-                {
-                    viewModel.ShowOriginalOcr = false;
-                }
-                
-                // Extract and display invoice data in validation tab
-                ExtractAndDisplayInvoiceData(context, viewModel);
-                pipelineContext = context; // Set pipelineContext so the final check knows data was loaded
-            }
-            else
-            {
-                // No valid data found
-                pipelineContext = null;
+                catch { /* ignore parse errors */ }
             }
         }
-
-        if (pipelineContext == null)
+        else
         {
-            // No cached results in database - clear the panels and show message
-            viewModel.FileCaption = "This file has not been processed yet. Please use Batch Process to run OCR on this file.";
+            viewModel.FileCaption = processingResult.Error != null
+                ? $"Error processing file: {processingResult.Error.Message}"
+                : "This file has not been processed yet. Please use Batch Process to run OCR on this file.";
             viewModel.SetOcrJson(string.Empty);
+            viewModel.ValidatedOcrText = string.Empty;
+            viewModel.OriginalOcrText = string.Empty;
             viewModel.DocumentFields.Clear();
             viewModel.CurrentInvoice = null;
+            viewModel.UpdateDisplayedOcrText();
         }
     }
 
@@ -1218,25 +1482,25 @@ try
         
         if (invoiceDto != null)
         {
-            // Add header fields
-            AddField(viewModel, "VendorName", "Vendor Name", invoiceDto.VendorName);
-            AddField(viewModel, "CustomerName", "Customer Name", invoiceDto.CustomerName);
-            AddField(viewModel, "InvoiceId", "Invoice ID", invoiceDto.InvoiceId);
-            AddField(viewModel, "InvoiceDate", "Invoice Date", invoiceDto.InvoiceDate, "Date");
-            AddField(viewModel, "DueDate", "Due Date", invoiceDto.DueDate, "Date");
-            AddField(viewModel, "PurchaseOrder", "Purchase Order", invoiceDto.PurchaseOrder);
+            // Add header fields - pass invoiceDto to check validation status
+            AddField(viewModel, invoiceDto, "VendorName", "Vendor Name", invoiceDto.VendorName);
+            AddField(viewModel, invoiceDto, "CustomerName", "Customer Name", invoiceDto.CustomerName);
+            AddField(viewModel, invoiceDto, "InvoiceId", "Invoice ID", invoiceDto.InvoiceId);
+            AddField(viewModel, invoiceDto, "InvoiceDate", "Invoice Date", invoiceDto.InvoiceDate, "Date");
+            AddField(viewModel, invoiceDto, "DueDate", "Due Date", invoiceDto.DueDate, "Date");
+            AddField(viewModel, invoiceDto, "PurchaseOrder", "Purchase Order", invoiceDto.PurchaseOrder);
             
             if (invoiceDto.Subtotal.HasValue)
-                AddField(viewModel, "Subtotal", "Subtotal", invoiceDto.Subtotal.Value.ToString("C"), "Currency", invoiceDto.Subtotal);
+                AddField(viewModel, invoiceDto, "Subtotal", "Subtotal", invoiceDto.Subtotal.Value.ToString("C"), "Currency", invoiceDto.Subtotal);
             
             if (invoiceDto.TotalTax.HasValue)
-                AddField(viewModel, "TotalTax", "Total Tax", invoiceDto.TotalTax.Value.ToString("C"), "Currency", invoiceDto.TotalTax);
+                AddField(viewModel, invoiceDto, "TotalTax", "Total Tax", invoiceDto.TotalTax.Value.ToString("C"), "Currency", invoiceDto.TotalTax);
             
             if (invoiceDto.Shipping.HasValue)
-                AddField(viewModel, "Shipping", "Shipping", invoiceDto.Shipping.Value.ToString("C"), "Currency", invoiceDto.Shipping);
+                AddField(viewModel, invoiceDto, "Shipping", "Shipping", invoiceDto.Shipping.Value.ToString("C"), "Currency", invoiceDto.Shipping);
             
             if (invoiceDto.Total.HasValue)
-                AddField(viewModel, "Total", "Total", invoiceDto.Total.Value.ToString("C"), "Currency", invoiceDto.Total);
+                AddField(viewModel, invoiceDto, "Total", "Total", invoiceDto.Total.Value.ToString("C"), "Currency", invoiceDto.Total);
             
             // Reset navigation and highlight first field
             viewModel.ResetFieldNavigation();
@@ -1384,13 +1648,20 @@ try
         return null;
     }
 
-    private void AddField(MainWindowViewModel viewModel, string name, string displayName, string value, string fieldType = "Text", object? rawValue = null)
+    private void AddField(MainWindowViewModel viewModel, InvoiceDto invoice, string name, string displayName, string value, string fieldType = "Text", object? rawValue = null)
     {
         // Get bounding boxes from the invoice if available
         List<BoundingBoxDto>? boundingBoxes = null;
         if (viewModel.CurrentInvoice?.FieldBoundingBoxes.TryGetValue(name, out var boxes) == true)
         {
             boundingBoxes = boxes;
+        }
+        
+        // Check if validation failed for this field
+        bool validationFailed = false;
+        if (invoice.TesseractConfirmed != null && invoice.TesseractConfirmed.TryGetValue(name, out bool confirmed))
+        {
+            validationFailed = !confirmed;  // Failed if not confirmed
         }
         
         viewModel.DocumentFields.Add(new K_OCR.Models.DocumentField
@@ -1400,7 +1671,8 @@ try
             Value = value ?? string.Empty,
             FieldType = fieldType,
             RawValue = rawValue,
-            BoundingBoxes = boundingBoxes
+            BoundingBoxes = boundingBoxes,
+            IsValidationFailed = validationFailed
         });
     }
 

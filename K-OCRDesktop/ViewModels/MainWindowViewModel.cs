@@ -86,6 +86,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public ICommand? SelectFolderCommand { get; set; }
     public ICommand? ExportDocxCommand { get; set; }
     public ICommand? AboutCommand { get; set; }
+    public ICommand? OcrNowCommand { get; set; }
     public ICommand? ZoomInCommand { get; set; }
     public ICommand? ZoomOutCommand { get; set; }
     public ICommand? ZoomFitCommand { get; set; }
@@ -222,7 +223,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private void UpdateDisplayedOcrText()
+    public void UpdateDisplayedOcrText()
     {
         OcrJsonText = ShowOriginalOcr ? OriginalOcrText : ValidatedOcrText;
     }
@@ -242,6 +243,17 @@ public partial class MainWindowViewModel : ViewModelBase
             ImageFiles.Clear();
             CurrentDirectory = folderPath;
             
+            // Debug: Show what's in the database
+            if (databaseService != null)
+            {
+                var allDbFiles = databaseService.GetAllOCRFilesAsync().GetAwaiter().GetResult();
+                System.Console.WriteLine($"[LoadImageFiles] Database contains {allDbFiles.Count} files");
+                foreach (var dbFile in allDbFiles.Take(5))
+                {
+                    System.Console.WriteLine($"  DB: {dbFile.FilePath}");
+                }
+            }
+            
             var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
             var files = System.IO.Directory.GetFiles(folderPath)
                 .Where(f => extensions.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))
@@ -259,27 +271,57 @@ public partial class MainWindowViewModel : ViewModelBase
             var fileName = System.IO.Path.GetFileName(filePath);
             var extension = System.IO.Path.GetExtension(filePath);
             var baseNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
-            
+
             if (fileName != null && baseNameWithoutExt != null)
             {
                 // Skip PNG files that have a corresponding PDF
                 // (these are generated PNG files from PDF conversion)
-                if (extension.Equals(".png", StringComparison.OrdinalIgnoreCase) && 
+                if (extension.Equals(".png", StringComparison.OrdinalIgnoreCase) &&
                     pdfBaseNames.Contains(baseNameWithoutExt))
                 {
                     continue; // Don't show the PNG, the PDF will be shown instead
                 }
+
+                var ocrFile = databaseService?.GetOCRFileByPathAsync(filePath).GetAwaiter().GetResult();
+                var isProcessed = ocrFile != null;
+                var isValidated = false;
+                var hasSuspectFields = false;
                 
-                var isProcessed = databaseService?.GetOCRFileByPathAsync(filePath).GetAwaiter().GetResult() != null;
-                // For now, we'll consider a file validated if it's processed
-                // In the future, we could track this separately
-                var isValidated = false; // Will be set to true when user saves validated data
-                
+                System.Console.WriteLine($"[LoadImageFiles] {fileName}: QueryPath={filePath}, OcrFile={ocrFile != null}, IsProcessed={isProcessed}");
+
+                // If processed, check for Tesseract validation results
+                if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+                {
+                    try
+                    {
+                        // Try to parse the validated OCR JSON to get TesseractConfirmed - handle both formats
+                        K_OCR.Models.InvoiceDto? invoice = null;
+                        try
+                        {
+                            invoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(ocrFile.ValidatedOcrText);
+                        }
+                        catch
+                        {
+                            var invoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(ocrFile.ValidatedOcrText);
+                            invoice = invoices?.FirstOrDefault();
+                        }
+                        
+                        if (invoice != null && invoice.TesseractConfirmed != null && invoice.TesseractConfirmed.Count > 0)
+                        {
+                            // If any field is false, mark as suspect
+                            hasSuspectFields = invoice.TesseractConfirmed.Values.Any(v => v == false);
+                            isValidated = !hasSuspectFields;
+                        }
+                    }
+                    catch { /* ignore parse errors */ }
+                }
+
                 ImageFiles.Add(new FileListItem
                 {
                     FileName = fileName,
                     IsProcessed = isProcessed,
-                    IsValidated = isValidated
+                    IsValidated = isValidated,
+                    HasSuspectFields = hasSuspectFields
                 });
             }
         }

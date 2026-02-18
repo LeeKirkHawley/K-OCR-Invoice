@@ -36,4 +36,7 @@ public class DocumentField
 
     [NotMapped]
     public List<BoundingBoxDto>? BoundingBoxes { get; set; }
+    
+    [NotMapped]
+    public bool IsValidationFailed { get; set; }
 }

@@ -8,6 +8,7 @@ public class FileListItem : INotifyPropertyChanged
     private string _fileName = string.Empty;
     private bool _isProcessed;
     private bool _isValidated;
+    private bool _hasSuspectFields;
 
     public string FileName
     {
@@ -43,6 +44,19 @@ public class FileListItem : INotifyPropertyChanged
             if (_isValidated != value)
             {
                 _isValidated = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool HasSuspectFields
+    {
+        get => _hasSuspectFields;
+        set
+        {
+            if (_hasSuspectFields != value)
+            {
+                _hasSuspectFields = value;
                 OnPropertyChanged();
             }
         }

@@ -6,6 +6,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1800" d:DesignHeight="800"
         x:Class="K_OCRDesktop.Views.MainWindow"
+        x:Name="RootWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="K-OCR Desktop"
@@ -20,7 +21,9 @@
 
     <Window.Resources>
         <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
+        <converters:ValidatedStatusToColorConverter x:Key="ValidatedStatusToColorConverter"/>
         <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+        <converters:ValidationTextColorConverter x:Key="ValidationTextColorConverter"/>
     </Window.Resources>
 
     <Window.Styles>
@@ -54,6 +57,8 @@
             </MenuItem>
             <MenuItem Header="_Tools">
                 <MenuItem Header="_Settings" Click="OnSettings"/>
+                <Separator/>
+                <MenuItem Header="_Clear All Data..." Click="OnClearAllData"/>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_About" Command="{Binding AboutCommand}"/>
@@ -123,6 +128,13 @@
                                 ItemsSource="{Binding ImageFiles}"
                                 SelectedItem="{Binding SelectedImageFile}"
                                 Background="White">
+                            <ListBox.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="OCR Now"
+                                              Command="{Binding DataContext.OcrNowCommand, ElementName=RootWindow}"
+                                              CommandParameter="{Binding}"/>
+                                </ContextMenu>
+                            </ListBox.ContextMenu>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -136,8 +148,13 @@
                                         </Ellipse>
                                         <!-- Status indicator circle (Validated) -->
                                         <Ellipse Width="10" Height="10" 
-                                                VerticalAlignment="Center"
-                                                Fill="{Binding IsValidated, Converter={StaticResource BoolToColorConverter}}">
+                                                VerticalAlignment="Center">
+                                            <Ellipse.Fill>
+                                                <MultiBinding Converter="{StaticResource ValidatedStatusToColorConverter}">
+                                                    <Binding Path="IsValidated"/>
+                                                    <Binding Path="HasSuspectFields"/>
+                                                </MultiBinding>
+                                            </Ellipse.Fill>
                                             <ToolTip.Tip>
                                                 <TextBlock Text="Validated" IsVisible="{Binding IsValidated}"/>
                                             </ToolTip.Tip>
@@ -269,7 +286,8 @@
                                                         <TextBlock Grid.Column="0" 
                                                                   Text="{Binding DisplayName, StringFormat={}{0}:}" 
                                                                   FontWeight="Bold" 
-                                                                  VerticalAlignment="Center"/>
+                                                                  VerticalAlignment="Center"
+                                                                  Foreground="{Binding IsValidationFailed, Converter={StaticResource ValidationTextColorConverter}}"/>
                                                         
                                                         <!-- Field Value (Editable TextBox) -->
                                                         <TextBox Grid.Column="1" 
@@ -279,7 +297,8 @@
                                                                 Margin="5,0"
                                                                 GotFocus="OnFieldGotFocus"
                                                                 KeyDown="OnFieldTextBoxKeyDown"
-                                                                Tag="{Binding Name}"/>
+                                                                Tag="{Binding Name}"
+                                                                Foreground="{Binding IsValidationFailed, Converter={StaticResource ValidationTextColorConverter}}"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

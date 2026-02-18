@@ -19,6 +19,7 @@ public partial class BatchProcessDialog : Window
 {
     private readonly List<string> _filePaths = new();
     private readonly IInvoiceService? _invoiceService;
+    private readonly IInvoiceProcessingService _invoiceProcessingService;
     private readonly IConfiguration? _config;
     private readonly string _currentDirectory;
     private readonly IImageService _imageService;
@@ -29,7 +30,7 @@ public partial class BatchProcessDialog : Window
     public bool ProcessingCompleted { get; private set; }
     public int FilesProcessed { get; private set; }
 
-    public BatchProcessDialog(IInvoiceService invoiceService, IConfiguration config, DatabaseService databaseService, string currentDirectory, IConfigurationService configurationService, IImageService imageService, IFileService fileService)
+    public BatchProcessDialog(IInvoiceService invoiceService, IConfiguration config, DatabaseService databaseService, string currentDirectory, IConfigurationService configurationService, IImageService imageService, IFileService fileService, IInvoiceProcessingService invoiceProcessingService)
     {
         InitializeComponent();
         _invoiceService = invoiceService ?? throw new ArgumentNullException(nameof(invoiceService));
@@ -39,6 +40,7 @@ public partial class BatchProcessDialog : Window
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _imageService = imageService ?? throw new ArgumentNullException(nameof(imageService));
         _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
+        _invoiceProcessingService = invoiceProcessingService ?? throw new ArgumentNullException(nameof(invoiceProcessingService));
         
         // Set current directory text in UI
         var currentDirText = this.FindControl<TextBlock>("CurrentDirectoryText");
@@ -172,49 +174,36 @@ public partial class BatchProcessDialog : Window
         {
             try
             {
-                // Test database connectivity
                 bool isDbAvailable = await _databaseService.IsDatabaseAvailableAsync();
                 if (!isDbAvailable)
                 {
                     await ShowMessageAsync("Error", "Database is not available. Please check your database configuration before processing files.");
                     return;
                 }
-                System.Console.WriteLine("[Batch DB] Database validation successful");
             }
             catch (Exception ex)
             {
-                System.Console.WriteLine($"[Batch DB] Database validation failed: {ex.Message}");
-                await ShowMessageAsync("Error", "Database is not available. Please check your database configuration before processing files.");
+                await ShowMessageAsync("Error", $"Database is not available: {ex.Message}");
                 return;
             }
         }
 
-        // Validate artifacts directory before expensive OCR processing
         var artifactsDirectory = string.Empty;
         if (_configurationService != null)
         {
             var settings = await _configurationService.LoadSettingsAsync();
             artifactsDirectory = settings.ProjectArtifacts;
         }
-        
+
         if (string.IsNullOrEmpty(artifactsDirectory))
         {
             await ShowMessageAsync("Configuration Error", "Artifacts directory is not configured. Please set the artifacts directory in settings before processing files.");
             return;
         }
 
-        // Get max concurrent requests from config
-        var maxConcurrent = 3;
-        if (_config != null && int.TryParse(_config["MaxConcurrentRequests"], out var parsedValue))
-        {
-            maxConcurrent = parsedValue;
-        }
-
-        // Disable buttons during processing
         var runButton = this.FindControl<Button>("RunButton");
         if (runButton != null) runButton.IsEnabled = false;
 
-        // Create a progress window
         var progressWindow = new Window
         {
             Title = "Processing Invoices",
@@ -239,153 +228,49 @@ public partial class BatchProcessDialog : Window
             TextWrapping = Avalonia.Media.TextWrapping.Wrap
         };
 
-        progressWindow.Content = new StackPanel
-        {
-            Children = { progressText, currentFileText }
-        };
-
-        // Show progress window non-blocking
+        progressWindow.Content = new StackPanel { Children = { progressText, currentFileText } };
         _ = progressWindow.ShowDialog(this);
 
         try
         {
-            // Create new invoice service with configured concurrency
-            var invoiceService = new InvoiceService(maxConcurrent);
-            
-            // Convert PDFs to PNG first
-            var processablePaths = new List<string>();
-            var pdfMappings = new Dictionary<string, string>(); // PNG path -> original PDF path
-            
-            for (int i = 0; i < filePaths.Count; i++)
-            {
-                var filePath = filePaths[i];
-                var fileName = Path.GetFileName(filePath);
-                
-                progressText.Text = $"Preparing {i + 1} of {filePaths.Count}";
-                currentFileText.Text = $"Current: {fileName}";
-                
-                if (Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
-                {
-                    // For PDFs, send the original PDF to Azure (not PNG) so it can detect multiple pages
-                    // PNG conversion is only needed for display in the UI
-                    processablePaths.Add(filePath);
-                }
-                else
-                {
-                    processablePaths.Add(filePath);
-                }
-            }
-
-            // Process all files with progress updates
             var progress = new Progress<(int completed, int total, string currentFile)>(p =>
             {
                 progressText.Text = $"Processed: {p.completed} of {p.total}";
                 currentFileText.Text = $"Current: {p.currentFile}";
             });
 
-            var results = await invoiceService.ProcessInvoiceBatchAsync(processablePaths, progress);
-
-            // Save results to database
-            if (_databaseService != null)
-            {
-                foreach (var (filePath, invoices) in results)
-                {
-                    try
-                    {
-                        // Check if this is a multi-page document based on Azure's page count
-                        int pageCount = (invoices.Count > 0) ? invoices[0].PageCount : 1;
-                        
-                        if (pageCount > 1)
-                        {
-                            // Multi-page document - save with DocumentPages
-                            System.Console.WriteLine($"[Batch DB] Saving multi-page document: {Path.GetFileName(filePath)} ({pageCount} pages)");
-                            
-                            // Create JSON for each page
-                            // Note: Azure returns 1 invoice for multi-page invoices, so we create page records with same invoice
-                            var pageJsonData = new List<string>();
-                            for (int i = 0; i < pageCount; i++)
-                            {
-                                var pageContext = new PipelineContext
-                                {
-                                    InputPath = $"{filePath}#page{i + 1}",
-                                    Layout = invoices  // Use the full invoice list (usually just 1 invoice)
-                                };
-                                var pageJson = Newtonsoft.Json.JsonConvert.SerializeObject(pageContext, Newtonsoft.Json.Formatting.Indented);
-                                pageJsonData.Add(pageJson);
-                            }
-                            
-                            // Create merged JSON with all pages
-                            var mergedContext = new PipelineContext
-                            {
-                                InputPath = filePath,
-                                Layout = invoices
-                            };
-                            var mergedJson = Newtonsoft.Json.JsonConvert.SerializeObject(mergedContext, Newtonsoft.Json.Formatting.Indented);
-                            
-                            // Save to database
-                            await _databaseService.SaveMultiPageDocumentAsync(filePath, pageJsonData, mergedJson);
-                            System.Console.WriteLine($"[Batch DB] Saved multi-page document with {pageCount} pages");
-                        }
-                        else
-                        {
-                            // Single-page document - use existing logic
-                            var pipelineContext = new PipelineContext
-                            {
-                                InputPath = filePath,
-                                Layout = invoices
-                            };
-
-                            var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
-                            
-                            // Validate data before saving
-                            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(filePath))
-                            {
-                                System.Console.WriteLine($"[Batch DB] Skipping save for {Path.GetFileName(filePath)} - invalid data");
-                                continue;
-                            }
-                            
-                            var ocrFile = new OCRFile
-                            {
-                                FilePath = filePath,
-                                OcrText = json,
-                                TotalPages = 1,
-                                MergedJsonData = json,
-                                IsFullyProcessed = true
-                            };
-
-                            await _databaseService.SaveOCRFileAsync(ocrFile);
-                            System.Console.WriteLine($"[Batch DB] Saved single-page OCR result for: {Path.GetFileName(filePath)}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Console.WriteLine($"[Batch DB] Error saving OCR result for {Path.GetFileName(filePath)}: {ex.Message}");
-                        // Continue processing other files instead of failing completely
-                    }
-                }
-            }
+            // ProcessBatchAsync runs Azure OCR + Tesseract validation concurrently for every
+            // file and persists results via FileService (upsert — no duplicates).
+            var results = await _invoiceProcessingService.ProcessBatchAsync(
+                filePaths,
+                useCache: false,
+                progress,
+                artifactsDirectory);
 
             progressWindow.Close();
 
-            // Update status
-            FilesProcessed = results.Count;
+            var failed = results.Values.Count(r => !r.IsSuccess);
+            var succeeded = results.Values.Count(r => r.IsSuccess);
+
+            FilesProcessed = succeeded;
             ProcessingCompleted = true;
 
-            // Show completion message
-            await ShowMessageAsync("Success", $"Successfully processed {results.Count} invoice(s).\n\nYou can now use the main window to validate the results.");
+            var message = failed == 0
+                ? $"Successfully processed {succeeded} invoice(s).\n\nYou can now use the main window to validate the results."
+                : $"Processed {succeeded} invoice(s) successfully. {failed} failed.\n\nYou can now use the main window to validate the results.";
 
-            // Close this dialog
+            await ShowMessageAsync("Complete", message);
             Close();
         }
         catch (Exception ex)
         {
             progressWindow.Close();
             await ShowMessageAsync("Error", $"Error processing batch: {ex.Message}");
-            
-            // Re-enable button
             if (runButton != null) runButton.IsEnabled = true;
         }
     }
+
+
 
     private void OnCancel(object? sender, RoutedEventArgs e)
     {

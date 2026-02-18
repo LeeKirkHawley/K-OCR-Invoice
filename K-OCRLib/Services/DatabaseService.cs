@@ -160,15 +160,11 @@ namespace K_OCR.Services
 
         public async Task<OCRFile> SaveOCRFileAsync(OCRFile ocrFile)
         {
-            // Validate input
             if (ocrFile == null)
                 throw new ArgumentNullException(nameof(ocrFile));
             
             if (string.IsNullOrEmpty(ocrFile.FilePath))
                 throw new ArgumentException("FilePath cannot be null or empty", nameof(ocrFile.FilePath));
-            
-            if (string.IsNullOrEmpty(ocrFile.OcrText))
-                throw new ArgumentException("OcrText cannot be null or empty", nameof(ocrFile.OcrText));
 
             try
             {
@@ -209,6 +205,26 @@ namespace K_OCR.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Error deleting OCR file with ID: {id}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Deletes all invoices, OCR files, and every related record (items, fields,
+        /// pages) from the database. Cascade-delete handles child records automatically.
+        /// </summary>
+        public async Task ClearAllDataAsync()
+        {
+            try
+            {
+                _context.OCRFiles.RemoveRange(_context.OCRFiles);
+                _context.Invoices.RemoveRange(_context.Invoices);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("All invoice and OCR data cleared from database.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error clearing all data from database");
                 throw;
             }
         }

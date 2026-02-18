@@ -8,12 +8,20 @@ public class InvoiceProcessingService : IInvoiceProcessingService
 {
     private readonly IFileService _fileService;
     private readonly IInvoiceService _invoiceService;
+    private readonly ITesseractValidationService _tesseractValidation;
+    private readonly IInvoiceValidationService _invoiceValidation;
     private readonly string _defaultPipelineConfigPath;
     
-    public InvoiceProcessingService(IFileService fileService, IInvoiceService invoiceService)
+    public InvoiceProcessingService(
+        IFileService fileService,
+        IInvoiceService invoiceService,
+        ITesseractValidationService tesseractValidation,
+        IInvoiceValidationService invoiceValidation)
     {
         _fileService = fileService;
         _invoiceService = invoiceService;
+        _tesseractValidation = tesseractValidation;
+        _invoiceValidation = invoiceValidation;
         _defaultPipelineConfigPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, 
             "PipelineService", 
@@ -31,29 +39,60 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         
         try
         {
-            // Try to load from cache if enabled
+            // Try to load from cache if enabled.
+            // A cache entry is only usable if it already contains Tesseract text;
+            // older entries (created before Tesseract validation was added) will
+            // fall through so the full reprocessing path runs and the cache is updated.
             if (useCache)
             {
                 var cachedContext = await _fileService.LoadCachedContextAsync(filePath, artifactsDirectory);
-                if (cachedContext != null)
+                if (cachedContext != null && !string.IsNullOrWhiteSpace(cachedContext.TesseractOcrText))
                 {
+                    // Re-run validation in memory — cheap, and guarantees the flags
+                    // always reflect the current validation logic rather than stale cache.
+                    RunValidation(cachedContext);
                     result.Context = cachedContext;
                     result.Json = Newtonsoft.Json.JsonConvert.SerializeObject(cachedContext, Newtonsoft.Json.Formatting.Indented);
                     result.WasCached = true;
                     return result;
                 }
+                // Cache absent or predates Tesseract validation — fall through to full reprocessing.
             }
             
-            // No cache or cache disabled - run pipeline
+            // No usable cache — run pipeline
             var config = PipelineConfigLoader.Load(_defaultPipelineConfigPath);
             var executor = new PipelineExecutor(_invoiceService);
             var context = new PipelineContext
             {
                 InputPath = filePath
             };
-            
-            var processedContext = await executor.RunAsync(config, context);
-            
+
+            // Run Azure OCR pipeline and local Tesseract validation concurrently.
+            var azureTask = executor.RunAsync(config, context);
+            var tesseractTask = _tesseractValidation.ExtractTextAsync(filePath, artifactsDirectory);
+
+            // Await both tasks. A Tesseract failure must NOT abort the Azure result —
+            // we capture any Tesseract exception and continue with an empty string so
+            // validation can still flag all fields as unconfirmed.
+            await Task.WhenAll(
+                azureTask,
+                tesseractTask.ContinueWith(_ => { }, TaskContinuationOptions.None));
+
+            var processedContext = azureTask.Result;
+
+            if (tesseractTask.IsCompletedSuccessfully)
+            {
+                processedContext.TesseractOcrText = tesseractTask.Result;
+            }
+            else
+            {
+                processedContext.TesseractOcrText = string.Empty;
+                Console.WriteLine($"[TesseractValidation] Failed for {Path.GetFileName(filePath)}: {tesseractTask.Exception?.GetBaseException().Message}");
+            }
+
+            // Cross-validate every Azure-extracted field against the Tesseract text.
+            RunValidation(processedContext);
+
             // Save to cache
             await _fileService.SaveContextAsync(filePath, processedContext, artifactsDirectory);
             
@@ -177,5 +216,34 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         }
         
         return null;
+    }
+
+    /// <summary>
+    /// Runs cross-validation of all Azure-extracted invoice fields against the
+    /// Tesseract text stored in <paramref name="context"/>.
+    /// Handles both freshly-processed and cache-reloaded contexts.
+    /// When the Layout is a <see cref="JArray"/> (Newtonsoft deserialised from cache),
+    /// it is converted to <see cref="List{InvoiceDto}"/> before validation so the
+    /// same code path is exercised regardless of how the context was loaded.
+    /// </summary>
+    private void RunValidation(PipelineContext context)
+    {
+        var tesseractText = context.TesseractOcrText ?? string.Empty;
+
+        List<InvoiceDto>? invoices = null;
+
+        if (context.Layout is List<InvoiceDto> list)
+        {
+            invoices = list;
+        }
+        else if (context.Layout is JArray jArray)
+        {
+            try { invoices = jArray.ToObject<List<InvoiceDto>>(); } catch { }
+        }
+
+        if (invoices == null) return;
+
+        foreach (var invoice in invoices)
+            _invoiceValidation.ValidateAgainstTesseract(invoice, tesseractText);
     }
 }

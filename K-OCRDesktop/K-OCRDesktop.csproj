@@ -45,4 +45,23 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <!-- Recreate Tesseract/Leptonica native library symlinks after build on Linux -->
+  <!-- InteropDotNet searches the output root AND the x64 subdirectory.        -->
+  <!-- libdl.so is required by InteropDotNet itself (merged into libc on       -->
+  <!-- Ubuntu 22.04+, so no unversioned symlink exists by default).            -->
+  <Target Name="CreateNativeLibSymlinks" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Exec Command="mkdir -p '$(OutputPath)x64'" />
+    <!-- libdl (needed by InteropDotNet to call dlopen/dlerror) -->
+    <Exec Command="ln -sf /lib/x86_64-linux-gnu/libdl.so.2 '$(OutputPath)libdl.so'" />
+    <Exec Command="ln -sf /lib/x86_64-linux-gnu/libdl.so.2 '$(OutputPath)x64/libdl.so'" />
+    <!-- Leptonica -->
+    <Exec Command="ln -sf /usr/lib/x86_64-linux-gnu/liblept.so.5.0.4 '$(OutputPath)libleptonica-1.82.0.so'" />
+    <Exec Command="ln -sf /usr/lib/x86_64-linux-gnu/liblept.so.5.0.4 '$(OutputPath)x64/libleptonica-1.82.0.so'" />
+    <!-- Tesseract -->
+    <Exec Command="ln -sf /usr/lib/x86_64-linux-gnu/libtesseract.so.5 '$(OutputPath)libtesseract50.so'" />
+    <Exec Command="ln -sf /usr/lib/x86_64-linux-gnu/libtesseract.so.5 '$(OutputPath)x64/libtesseract50.so'" />
+    <Message Text="Native library symlinks created in $(OutputPath) and $(OutputPath)x64" Importance="normal" />
+  </Target>
+
 </Project>

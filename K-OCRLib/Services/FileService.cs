@@ -22,21 +22,8 @@ namespace K_OCR.Services
             {
                 PipelineContext? context = null;
 
-                // Try ValidatedOcrText first if it exists
-                if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
-                {
-                    try
-                    {
-                        context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.ValidatedOcrText);
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Console.WriteLine($"[Database Cache] Failed to deserialize ValidatedOcrText for {Path.GetFileName(imagePath)}: {ex.Message}");
-                    }
-                }
-
-                // If ValidatedOcrText didn't work or doesn't exist, try OcrText
-                if (context == null && !string.IsNullOrEmpty(ocrFile.OcrText))
+                // Load the main context from OcrText
+                if (!string.IsNullOrEmpty(ocrFile.OcrText))
                 {
                     try
                     {
@@ -48,6 +35,33 @@ namespace K_OCR.Services
                     }
                 }
 
+                // If we have a context and ValidatedOcrText exists, replace the Layout with validated data
+                if (context != null && !string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+                {
+                    try
+                    {
+                        // ValidatedOcrText contains the validated invoice array
+                        var validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(ocrFile.ValidatedOcrText);
+                        if (validatedInvoices != null)
+                        {
+                            context.Layout = validatedInvoices;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Console.WriteLine($"[Database Cache] Failed to deserialize ValidatedOcrText for {Path.GetFileName(imagePath)}: {ex.Message}");
+                    }
+                }
+
+                // Restore TesseractOcrText from dedicated DB column when loading a context
+                // written before the column existed (backward compatibility).
+                if (context != null
+                    && string.IsNullOrWhiteSpace(context.TesseractOcrText)
+                    && !string.IsNullOrWhiteSpace(ocrFile.TesseractOcrText))
+                {
+                    context.TesseractOcrText = ocrFile.TesseractOcrText;
+                }
+
                 return context;
             }
 
@@ -56,21 +70,48 @@ namespace K_OCR.Services
         
         public async Task SaveContextAsync(string imagePath, PipelineContext context, string? artifactsDirectory = null)
         {
-            if (_databaseService == null)
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
+            var isFullyProcessed = context.Layout != null && !string.IsNullOrWhiteSpace(context.TesseractOcrText);
+
+            // Serialize validated invoice with TesseractConfirmed for database storage
+            string? validatedJson = null;
+            if (context.Layout != null)
             {
-                throw new InvalidOperationException("Database service is required for saving OCR context");
+                try
+                {
+                    validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(context.Layout, Newtonsoft.Json.Formatting.Indented);
+                }
+                catch (Exception ex)
+                {
+                    System.Console.WriteLine($"[SaveContext] Error serializing validated invoice: {ex.Message}");
+                }
             }
 
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
-            
-            var ocrFile = new OCRFile
+            // Upsert: load existing row so we never create duplicate entries for the same file.
+            var existing = await _databaseService.GetOCRFileByPathAsync(imagePath);
+
+            if (existing != null)
             {
-                FilePath = imagePath,
-                OcrText = json
-            };
-            
-            await _databaseService.SaveOCRFileAsync(ocrFile);
-            System.Console.WriteLine($"[Database Cache] Saved OCR data for: {Path.GetFileName(imagePath)}");
+                existing.OcrText = json;
+                existing.TesseractOcrText = context.TesseractOcrText;
+                existing.ValidatedOcrText = validatedJson;
+                existing.IsFullyProcessed = isFullyProcessed;
+                await _databaseService.SaveOCRFileAsync(existing);
+                System.Console.WriteLine($"[Database Cache] Updated OCR data for: {Path.GetFileName(imagePath)}");
+            }
+            else
+            {
+                var ocrFile = new OCRFile
+                {
+                    FilePath = imagePath,
+                    OcrText = json,
+                    TesseractOcrText = context.TesseractOcrText,
+                    ValidatedOcrText = validatedJson,
+                    IsFullyProcessed = isFullyProcessed
+                };
+                await _databaseService.SaveOCRFileAsync(ocrFile);
+                System.Console.WriteLine($"[Database Cache] Saved OCR data for: {Path.GetFileName(imagePath)}");
+            }
         }
         
         public bool HasCachedJson(string imagePath)

@@ -18,6 +18,11 @@ namespace K_OCR.Models
 
         public string? ValidatedOcrText { get; set; }
 
+        /// <summary>
+        /// Secondary OCR text produced by Tesseract for validation / cross-referencing with Azure results.
+        /// </summary>
+        public string? TesseractOcrText { get; set; }
+
         public int TotalPages { get; set; } = 1;
 
         public string? MergedJsonData { get; set; }
