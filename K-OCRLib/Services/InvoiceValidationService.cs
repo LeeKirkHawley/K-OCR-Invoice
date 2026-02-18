@@ -100,16 +100,19 @@ public class InvoiceValidationService : IInvoiceValidationService
             CheckDecimalField(invoice.TesseractConfirmed, name, value, normalizedTess);
 
         // ── Line items ──────────────────────────────────────────────────────
-        foreach (var item in invoice.Items)
+        if (invoice.Items != null)
         {
-            CheckStringField(item.TesseractConfirmed, nameof(InvoiceItemDto.Description),
-                item.Description, normalizedTess);
-            CheckDecimalField(item.TesseractConfirmed, nameof(InvoiceItemDto.Quantity),
-                item.Quantity, normalizedTess);
-            CheckDecimalField(item.TesseractConfirmed, nameof(InvoiceItemDto.UnitPrice),
-                item.UnitPrice, normalizedTess);
-            CheckDecimalField(item.TesseractConfirmed, nameof(InvoiceItemDto.LineTotal),
-                item.LineTotal, normalizedTess);
+            foreach (var item in invoice.Items)
+            {
+                CheckStringField(item.TesseractConfirmed, nameof(InvoiceItemDto.Description),
+                    item.Description, normalizedTess);
+                CheckDecimalField(item.TesseractConfirmed, nameof(InvoiceItemDto.Quantity),
+                    item.Quantity, normalizedTess);
+                CheckDecimalField(item.TesseractConfirmed, nameof(InvoiceItemDto.UnitPrice),
+                    item.UnitPrice, normalizedTess);
+                CheckDecimalField(item.TesseractConfirmed, nameof(InvoiceItemDto.Amount),
+                    item.Amount, normalizedTess);
+            }
         }
     }
 
@@ -202,7 +205,7 @@ public class InvoiceValidationService : IInvoiceValidationService
             Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.Description), !string.IsNullOrWhiteSpace(item.Description));
             Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.Quantity),    item.Quantity.HasValue);
             Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.UnitPrice),   item.UnitPrice.HasValue);
-            Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.LineTotal),   item.LineTotal.HasValue);
+            Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.Amount),   item.Amount.HasValue);
         }
     }
 

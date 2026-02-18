@@ -211,6 +211,8 @@ public partial class MainWindow : Window
                 if (fileItem == null) return;
                 var filePath = fileItem.FileName;
                 var fullPath = string.IsNullOrEmpty(viewModel.CurrentDirectory) ? filePath : System.IO.Path.Combine(viewModel.CurrentDirectory, filePath);
+                viewModel.IsOcrRunning = true;
+                viewModel.OcrStatusMessage = $"Running OCR on {filePath}…";
                 try
                 {
                     var artifactsDirectory = (await _configurationService.LoadSettingsAsync()).ProjectArtifacts ?? string.Empty;
@@ -223,8 +225,9 @@ public partial class MainWindow : Window
                             ocrFile.OcrText = result.Context.Text ?? string.Empty;
                             await _databaseService.SaveOCRFileAsync(ocrFile);
                         }
+                        // Set IsProcessed to true as soon as OCR is done and data is saved
                         fileItem.IsProcessed = true;
-                        
+                        // ...existing code...
                         // Update validation status based on database results
                         var updatedOcrFile = await _databaseService.GetOCRFileByPathAsync(fullPath);
                         if (updatedOcrFile != null && !string.IsNullOrEmpty(updatedOcrFile.ValidatedOcrText))
@@ -242,12 +245,11 @@ public partial class MainWindow : Window
                                     var invoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(updatedOcrFile.ValidatedOcrText);
                                     invoice = invoices?.FirstOrDefault();
                                 }
-                                
                                 if (invoice != null && invoice.TesseractConfirmed != null && invoice.TesseractConfirmed.Count > 0)
                                 {
                                     fileItem.HasSuspectFields = invoice.TesseractConfirmed.Values.Any(v => v == false);
                                     fileItem.IsValidated = !fileItem.HasSuspectFields;
-                                    System.Console.WriteLine($"[OcrNow] Updated validation: HasSuspect={fileItem.HasSuspectFields}, IsValidated={fileItem.IsValidated}");
+                                    System.Console.WriteLine($"[OcrNow] Updated validation (Secondary): HasSuspect={fileItem.HasSuspectFields}, IsValidated={fileItem.IsValidated}");
                                 }
                             }
                             catch (Exception ex)
@@ -255,7 +257,6 @@ public partial class MainWindow : Window
                                 System.Console.WriteLine($"[OcrNow] Error parsing validation: {ex.Message}");
                             }
                         }
-                        
                         viewModel.SetOcrJson(result.Json);
                         ExtractAndDisplayInvoiceData(result.Context, viewModel);
                     }
@@ -267,6 +268,10 @@ public partial class MainWindow : Window
                 catch (Exception ex)
                 {
                     await ShowErrorDialog($"Error processing {filePath}:\n{ex.Message}");
+                }
+                finally
+                {
+                    viewModel.IsOcrRunning = false;
                 }
             });
             
@@ -313,62 +318,14 @@ public partial class MainWindow : Window
             var ocrFile = await _databaseService.GetOCRFileByPathAsync(fullPath);
             System.Console.WriteLine($"[ValidateProcessedFiles] {fileItem.FileName}: OcrFile={ocrFile != null}, HasValidatedText={!string.IsNullOrEmpty(ocrFile?.ValidatedOcrText)}");
 
-            // If processed but no validated text, run validation
-            if (ocrFile != null && string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+            // Only read validation state from the database. OCR is never triggered here;
+            // use Batch Process or OCR Now for that.
+            if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
             {
-                try
-                {
-                    System.Console.WriteLine($"[ValidateProcessedFiles] Running validation for {fileItem.FileName}...");
-                    var result = await _invoiceProcessingService.ProcessFileAsync(fullPath, useCache: true, artifactsDirectory);
-                    if (result.IsSuccess && result.Context != null)
-                    {
-                        System.Console.WriteLine($"[ValidateProcessedFiles] Validation succeeded for {fileItem.FileName}");
-                        // Update the database
-                        var updatedOcrFile = await _databaseService.GetOCRFileByPathAsync(fullPath);
-                        System.Console.WriteLine($"[ValidateProcessedFiles] {fileItem.FileName}: UpdatedOcrFile={updatedOcrFile != null}, ValidatedTextLength={updatedOcrFile?.ValidatedOcrText?.Length ?? 0}");
-                        
-                        if (updatedOcrFile != null && !string.IsNullOrEmpty(updatedOcrFile.ValidatedOcrText))
-                        {
-                            // Parse and update UI status - handle both single invoice and array
-                            K_OCR.Models.InvoiceDto? validatedInvoice = null;
-                            try
-                            {
-                                validatedInvoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(updatedOcrFile.ValidatedOcrText);
-                            }
-                            catch
-                            {
-                                // Try parsing as array and take first element
-                                var invoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(updatedOcrFile.ValidatedOcrText);
-                                validatedInvoice = invoices?.FirstOrDefault();
-                            }
-                            
-                            System.Console.WriteLine($"[ValidateProcessedFiles] {fileItem.FileName}: Parsed invoice={validatedInvoice != null}, TesseractConfirmed count={validatedInvoice?.TesseractConfirmed?.Count ?? 0}");
-                            if (validatedInvoice != null && validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
-                            {
-                                var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false);
-                                fileItem.HasSuspectFields = hasSuspectFields;
-                                fileItem.IsValidated = !hasSuspectFields;
-                                System.Console.WriteLine($"[ValidateProcessedFiles] {fileItem.FileName}: HasSuspect={hasSuspectFields}, IsValidated={fileItem.IsValidated}, FailedFields={string.Join(", ", validatedInvoice.TesseractConfirmed.Where(kv => !kv.Value).Select(kv => kv.Key))}");
-                            }
-                        }
-                    }
-                    else
-                    {
-                        System.Console.WriteLine($"[ValidateProcessedFiles] Validation failed for {fileItem.FileName}: {result.Error?.Message}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Console.WriteLine($"[ValidateProcessedFiles] Exception validating {fileItem.FileName}: {ex.Message}");
-                }
-            }
-            else if (ocrFile != null && !string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
-            {
-                // Already has validation - just update the UI from DB
+                // Update the UI status indicators from stored validation data
                 try
                 {
                     System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] Parsing validation for {fileItem.FileName}");
-                    // ValidatedOcrText can be either a single InvoiceDto or a List<InvoiceDto>
                     K_OCR.Models.InvoiceDto? validatedInvoice = null;
                     try
                     {
@@ -376,21 +333,30 @@ public partial class MainWindow : Window
                     }
                     catch
                     {
-                        // Try parsing as array and take first element
                         var invoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(ocrFile.ValidatedOcrText);
                         validatedInvoice = invoices?.FirstOrDefault();
                     }
                     
-                    if (validatedInvoice != null && validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
+                    if (validatedInvoice != null)
                     {
-                        var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false);
-                        fileItem.HasSuspectFields = hasSuspectFields;
-                        fileItem.IsValidated = !hasSuspectFields;
-                        System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] {fileItem.FileName}: HasSuspect={hasSuspectFields}, IsValidated={fileItem.IsValidated}, FailedFields={string.Join(", ", validatedInvoice.TesseractConfirmed.Where(kv => !kv.Value).Select(kv => kv.Key))}");
-                    }
-                    else
-                    {
-                        System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] {fileItem.FileName}: Invoice or TesseractConfirmed is null/empty");
+                        if (validatedInvoice.IsValidationAccepted)
+                        {
+                            fileItem.HasSuspectFields = false;
+                            fileItem.IsValidated = true;
+                            System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] {fileItem.FileName}: Validation accepted - marked as validated");
+                        }
+                        else if (validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
+                        {
+                            var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false) ||
+                                                  (validatedInvoice.MathConfirmed != null && validatedInvoice.MathConfirmed.Values.Any(v => v == false));
+                            fileItem.HasSuspectFields = hasSuspectFields;
+                            fileItem.IsValidated = !hasSuspectFields;
+                            System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] {fileItem.FileName}: HasSuspect={hasSuspectFields}, IsValidated={fileItem.IsValidated}, FailedFields={string.Join(", ", validatedInvoice.TesseractConfirmed.Where(kv => !kv.Value).Select(kv => kv.Key))}");
+                        }
+                        else
+                        {
+                            System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] {fileItem.FileName}: Invoice or SecondaryConfirmed is null/empty");
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -548,18 +514,55 @@ public partial class MainWindow : Window
     private void OnImageClick(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel viewModel || viewModel.DocumentFields.Count == 0)
-        {
             return;
-        }
 
         // Use FieldSelectionService to find the clicked field
         var displayImage = this.FindControl<Image>("DisplayImage");
         if (displayImage == null || _fieldSelectionService == null || _boundingBoxHighlightService == null)
-        {
             return;
-        }
 
         var position = e.GetPosition(displayImage);
+        HandleImageClickAtCanvasPosition(position, viewModel);
+    }
+
+    /// <summary>
+    /// Handles a click on any individual page image inside the multi-page ItemsControl.
+    /// The position is relative to that page's Image; we translate it to the full-document
+    /// canvas coordinate space (accounting for preceding page heights + label gaps) before
+    /// delegating to HandleImageClickAtCanvasPosition.
+    /// </summary>
+    private void OnPageImageClick(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel || viewModel.DocumentFields.Count == 0)
+            return;
+        if (sender is not Image img)
+            return;
+        if (img.DataContext is not PageItem pageItem)
+            return;
+        if (_fieldSelectionService == null || _boundingBoxHighlightService == null)
+            return;
+
+        var position = e.GetPosition(img);
+
+        // Add y-offset for all preceding pages: sum of their heights + one label gap each
+        double yOffset = 0;
+        for (int i = 0; i < pageItem.PageNumber - 1 && i < viewModel.PageHeights.Count; i++)
+        {
+            yOffset += viewModel.PageHeights[i] + MainWindowViewModel.PageLabelHeight;
+        }
+
+        var canvasPosition = new Point(position.X, position.Y + yOffset);
+        HandleImageClickAtCanvasPosition(canvasPosition, viewModel);
+    }
+
+    /// <summary>
+    /// Core click-handling logic. <paramref name="canvasPosition"/> is in un-scaled canvas
+    /// pixel coordinates (i.e. the same space as bounding-box coordinates after scaling).
+    /// </summary>
+    private void HandleImageClickAtCanvasPosition(Point canvasPosition, MainWindowViewModel viewModel)
+    {
+        if (_fieldSelectionService == null || _boundingBoxHighlightService == null)
+            return;
 
         // Update service dimensions first
         _boundingBoxHighlightService.SetDimensions(
@@ -569,6 +572,8 @@ public partial class MainWindow : Window
             viewModel.CurrentInvoice?.OriginalPageHeight ?? 11.0,
             viewModel.PageHeights);
         _boundingBoxHighlightService.SetZoom(viewModel.ImageZoom);
+
+        var position = canvasPosition;
 
         // Find the clicked field (try both raw and unzoomed coordinates to be robust)
         var clickedField = _fieldSelectionService.FindFieldAtPosition(
@@ -670,10 +675,11 @@ public partial class MainWindow : Window
         double pageYOffset = 0;
         if (viewModel.PageHeights.Count > 0 && box.PageNumber > 0)
         {
-            // Sum heights of all previous pages (PageNumber is 1-based)
+            // Sum heights of all previous pages (PageNumber is 1-based) plus the separator label
+            // that is rendered below each page in the ItemsControl.
             for (int i = 0; i < box.PageNumber - 1 && i < viewModel.PageHeights.Count; i++)
             {
-                pageYOffset += viewModel.PageHeights[i];
+                pageYOffset += viewModel.PageHeights[i] + MainWindowViewModel.PageLabelHeight;
             }
         }
         
@@ -834,76 +840,39 @@ public partial class MainWindow : Window
                     _currentIndex = 0;
                 }
 
-                // Use InvoiceProcessingService to process the file
-                if (_invoiceProcessingService != null)
+                // Only read data that is already in the database; never trigger OCR silently.
+                if (_databaseService != null)
                 {
                     try
                     {
-                        // Get artifacts directory from configuration
-                        var artifactsDirectory = (await _configurationService.LoadSettingsAsync()).ProjectArtifacts ?? string.Empty;
-                        
-                        var result = await _invoiceProcessingService.ProcessFileAsync(filePath, useCache: true, artifactsDirectory);
-                        
-                        if (result.IsSuccess && result.Context != null)
+                        var dbOcrFile = await _databaseService.GetOCRFileByPathAsync(filePath);
+                        if (dbOcrFile != null && (!string.IsNullOrEmpty(dbOcrFile.OcrText) || !string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText)))
                         {
-                            // Display JSON in right panel
-                            viewModel.SetOcrJson(result.Json);
-                            
-                            // Process the PipelineContext
-                            var pipelineContext = result.Context;
-                            
-                            // Create an OCRFile for display
-                            var ocrFile = new OCRFile
+                            viewModel.SetOriginalOcrText(dbOcrFile.OcrText ?? string.Empty);
+                            viewModel.SetValidatedOcrText(dbOcrFile.ValidatedOcrText ?? string.Empty);
+                            if (!string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText))
+                                viewModel.ShowOriginalOcr = false;
+
+                            PipelineContext? displayContext = null;
+                            if (!string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText))
                             {
-                                FilePath = filePath,
-                                OcrText = pipelineContext.Text ?? string.Empty,
-                                LineBlocks = new List<OcrBlock>(),
-                                TableBlocks = new List<OcrBlock>()
-                            };
-                            
-                            _filesToProcess.Add(ocrFile);
-                            
-                            // Extract and display invoice data
-                            ExtractAndDisplayInvoiceData(pipelineContext, viewModel);
+                                try { displayContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(dbOcrFile.ValidatedOcrText); } catch { }
+                            }
+                            if (displayContext == null && !string.IsNullOrEmpty(dbOcrFile.OcrText))
+                            {
+                                try { displayContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(dbOcrFile.OcrText); } catch { }
+                            }
+                            if (displayContext != null)
+                                ExtractAndDisplayInvoiceData(displayContext, viewModel);
                         }
-                        else if (result.Error != null)
+                        else
                         {
-                            // Handle error
-                            var errorWindow = new Window
-                            {
-                                Title = "Error",
-                                Width = 400,
-                                Height = 200,
-                                Content = new TextBlock
-                                {
-                                    Text = $"Error processing {filePath}:\n{result.Error.Message}",
-                                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-                                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                                    TextWrapping = TextWrapping.Wrap,
-                                    Padding = new Thickness(10)
-                                }
-                            };
-                            await errorWindow.ShowDialog(this);
+                            viewModel.FileCaption = "This file has not been processed yet. Use Batch Process or right-click OCR Now.";
                         }
                     }
                     catch (Exception ex)
                     {
-                        // Handle error
-                        var errorWindow = new Window
-                        {
-                            Title = "Error",
-                            Width = 400,
-                            Height = 200,
-                            Content = new TextBlock
-                            {
-                                Text = $"Error processing {filePath}:\n{ex.Message}",
-                                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-                                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                                TextWrapping = TextWrapping.Wrap,
-                                Padding = new Thickness(10)
-                            }
-                        };
-                        await errorWindow.ShowDialog(this);
+                        System.Console.WriteLine($"[OpenFileAsync] Error reading DB for {filePath}: {ex.Message}");
                     }
                 }
             }
@@ -995,6 +964,16 @@ public partial class MainWindow : Window
         {
             await ShowMessageAsync("Error", $"Failed to clear data: {ex.Message}");
         }
+    }
+
+    private async void OnOcrNowMenuClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel) return;
+        // The ListBox SelectedItem is updated before the context menu opens
+        var fileItem = viewModel.SelectedImageFile;
+        if (fileItem == null) return;
+        if (viewModel.OcrNowCommand != null)
+            await ((CommunityToolkit.Mvvm.Input.IAsyncRelayCommand)viewModel.OcrNowCommand).ExecuteAsync(fileItem);
     }
 
     private async void OnBatchProcess(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1105,6 +1084,15 @@ try
         if (!System.IO.File.Exists(filePath))
             return;
 
+        // Immediately clear previous invoice data so the validation panel is blank
+        // while the new file loads (or if the new file has no data).
+        viewModel.DocumentFields.Clear();
+        viewModel.CurrentInvoice = null;
+        viewModel.SetOcrJson(string.Empty);
+        viewModel.ValidatedOcrText = string.Empty;
+        viewModel.OriginalOcrText = string.Empty;
+        viewModel.UpdateDisplayedOcrText();
+
         // Clear any existing highlights
         ClearHighlights();
 
@@ -1117,6 +1105,7 @@ try
         var originalFilePath = filePath;
         
         // If the file is a PDF, check if it has already been converted to PNG
+        bool multiPageLoaded = false; // set to true when LoadPages handles the display
         if (System.IO.Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
             // Get artifacts directory from configuration
@@ -1131,28 +1120,34 @@ try
             
             var fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(filePath);
             
-            // Check if this is a multi-page PDF by looking at database
-            var ocrFile = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
-            int pageCount = ocrFile?.TotalPages ?? 1;
+            // Detect multi-page by the presence of a _page2.png artifact.
+            // TotalPages in the DB is unreliable (often saved as 1), so we use the file system.
+            var page1Path = System.IO.Path.Combine(artifactsDirectory, $"{fileNameWithoutExt}_page1.png");
+            var page2Path = System.IO.Path.Combine(artifactsDirectory, $"{fileNameWithoutExt}_page2.png");
+            var ocrDbEntry = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
+            bool isMultiPage = System.IO.File.Exists(page2Path) || (ocrDbEntry?.TotalPages ?? 1) > 1;
             
-            if (pageCount > 1)
+            if (isMultiPage)
             {
-                // Multi-page PDF - convert all pages and combine them vertically
-                var combinedPath = System.IO.Path.Combine(artifactsDirectory, $"{fileNameWithoutExt}_combined.png");
-                
-                if (!System.IO.File.Exists(combinedPath))
+                // Collect existing individual page PNGs (_page1.png, _page2.png, …)
+                var pagePaths = new List<string>();
+                for (int page = 1; ; page++)
+                {
+                    var pagePng = System.IO.Path.Combine(artifactsDirectory, $"{fileNameWithoutExt}_page{page}.png");
+                    if (System.IO.File.Exists(pagePng))
+                        pagePaths.Add(pagePng);
+                    else
+                        break;
+                }
+
+                // If no page PNGs exist yet, convert the PDF now
+                if (pagePaths.Count == 0)
                 {
                     try
                     {
-                        // Convert all pages to individual PNGs
-                        var pagePaths = await _imageService.ConvertPdfToAllPngsAsync(filePath, artifactsDirectory);
-                        if (pagePaths != null && pagePaths.Count > 0)
-                        {
-                            // Combine pages vertically
-                            var (combinedFilePath, pageHeights) = await _imageService.CombineImagesVerticallyAsync(pagePaths, combinedPath);
-                            filePath = combinedFilePath;
-                            viewModel.PageHeights = pageHeights;
-                        }
+                        var converted = await _imageService.ConvertPdfToAllPngsAsync(filePath, artifactsDirectory);
+                        if (converted != null && converted.Count > 0)
+                            pagePaths.AddRange(converted);
                         else
                         {
                             viewModel.OriginalImageSource = null;
@@ -1173,39 +1168,14 @@ try
                         return;
                     }
                 }
-                else
-                {
-                    // Combined image already exists - load page heights from database
-                    if (ocrFile != null)
-                    {
-                        var pages = await _databaseService.GetDocumentPagesAsync(ocrFile.Id);
-                        viewModel.PageHeights = new List<int>();
-                        // We need to load actual heights from the PNG files since they're not in database
-                        try
-                        {
-                            var pagePaths = await _imageService.ConvertPdfToAllPngsAsync(filePath, artifactsDirectory);
-                            foreach (var pagePath in pagePaths)
-                            {
-                                if (System.IO.File.Exists(pagePath))
-                                {
-                                    using var bitmap = new Avalonia.Media.Imaging.Bitmap(pagePath);
-                                    viewModel.PageHeights.Add(bitmap.PixelSize.Height);
-                                }
-                            }
-                            System.Console.WriteLine($"[MainWindow] Loaded {viewModel.PageHeights.Count} page heights: {string.Join(", ", viewModel.PageHeights)}");
-                        }
-                        catch
-                        {
-                            // Fallback - assume single page
-                            viewModel.PageHeights = new List<int>();
-                        }
-                    }
-                    filePath = combinedPath;
-                }
+
+                // Load individual bitmaps directly — no combined PNG created
+                viewModel.LoadPages(pagePaths, availableWidth);
+                multiPageLoaded = true;
             }
             else
             {
-                // Single-page PDF - use existing logic
+                // Single-page PDF — use or create a single PNG
                 var pngPath = System.IO.Path.Combine(artifactsDirectory, $"{fileNameWithoutExt}.png");
                 
                 if (!System.IO.File.Exists(pngPath))
@@ -1249,70 +1219,98 @@ try
             viewModel.PageHeights = new List<int>(); // Clear for non-PDF files
         }
         
-        // Load and display the image
-        try
+        // Load and display the image (single-page path; multi-page was handled above via LoadPages)
+        if (!multiPageLoaded)
         {
-            viewModel.LoadImage(filePath, availableWidth, availableHeight);
-            // Update available width for zoom calculations
-            if (imageScrollViewer != null)
+            try
             {
-                viewModel.UpdateAvailableWidth(imageScrollViewer.Viewport.Width);
-            }
-            // Auto-fit the image to the panel and reset scroll position after layout update
-            if (imageScrollViewer != null)
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+                viewModel.LoadImage(filePath, availableWidth, availableHeight);
+                // Update available width for zoom calculations
+                if (imageScrollViewer != null)
                 {
-                    viewModel.ZoomFit();
-                    imageScrollViewer.ScrollToHome();
-                }, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
+                    viewModel.UpdateAvailableWidth(imageScrollViewer.Viewport.Width);
+                }
+            }
+            catch (Exception ex)
+            {
+                viewModel.OriginalImageSource = null;
+                viewModel.FileCaption = $"Failed to load image: {ex.Message}";
+                viewModel.SetOcrJson(string.Empty);
+                viewModel.DocumentFields.Clear();
+                viewModel.CurrentInvoice = null;
+                return;
             }
         }
-        catch (Exception ex)
+
+        // Auto-fit the image to the panel and reset scroll position after layout update
+        if (imageScrollViewer != null)
         {
-            // If image loading fails, show error message
-            viewModel.OriginalImageSource = null;
-            viewModel.FileCaption = $"Failed to load image: {ex.Message}";
-            viewModel.SetOcrJson(string.Empty);
-            viewModel.DocumentFields.Clear();
-            viewModel.CurrentInvoice = null;
-            return;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+            {
+                if (imageScrollViewer != null)
+                    viewModel.UpdateAvailableWidth(imageScrollViewer.Viewport.Width);
+                viewModel.ZoomFit();
+                imageScrollViewer?.ScrollToHome();
+            }, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
         }
 
-        // Route through InvoiceProcessingService so Tesseract validation always runs.
-        // useCache:true returns instantly from DB when fully processed (Azure+Tesseract);
-        // falls through to full reprocessing only when data is absent or incomplete.
-        var processingSettings = await _configurationService.LoadSettingsAsync();
-        var processingArtifactsDir = processingSettings.ProjectArtifacts ?? string.Empty;
+        // Only display data already stored in the database.
+        // OCR is never triggered on file selection — use Batch Process or OCR Now instead.
+        var dbOcrFile = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
 
-        var processingResult = await _invoiceProcessingService.ProcessFileAsync(
-            originalFilePath, useCache: true, processingArtifactsDir);
-
-        if (processingResult.IsSuccess && processingResult.Context != null)
+        if (dbOcrFile != null && (!string.IsNullOrEmpty(dbOcrFile.OcrText) || !string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText)))
         {
-            viewModel.SetOcrJson(processingResult.Json);
-
-            // Also surface raw text columns for the OCR text panel.
-            var dbOcrFile2 = await _databaseService.GetOCRFileByPathAsync(originalFilePath);
-            viewModel.SetOriginalOcrText(dbOcrFile2?.OcrText ?? string.Empty);
-            viewModel.SetValidatedOcrText(dbOcrFile2?.ValidatedOcrText ?? string.Empty);
-            if (!string.IsNullOrEmpty(dbOcrFile2?.ValidatedOcrText))
+            viewModel.SetOriginalOcrText(dbOcrFile.OcrText ?? string.Empty);
+            viewModel.SetValidatedOcrText(dbOcrFile.ValidatedOcrText ?? string.Empty);
+            if (!string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText))
                 viewModel.ShowOriginalOcr = false;
 
-            ExtractAndDisplayInvoiceData(processingResult.Context, viewModel);
-
-            // Update the FileListItem status indicators based on validation results
-            if (viewModel.SelectedImageFile != null && dbOcrFile2 != null && !string.IsNullOrEmpty(dbOcrFile2.ValidatedOcrText))
+            // Display invoice fields from validated context if available, else try OcrText
+            PipelineContext? displayContext = null;
+            if (!string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText))
             {
                 try
                 {
-                    var validatedInvoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(dbOcrFile2.ValidatedOcrText);
-                    if (validatedInvoice != null && validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
+                    displayContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(dbOcrFile.ValidatedOcrText);
+                    viewModel.SetOcrJson(dbOcrFile.ValidatedOcrText);
+                }
+                catch { /* fall through */ }
+            }
+            if (displayContext == null && !string.IsNullOrEmpty(dbOcrFile.OcrText))
+            {
+                try
+                {
+                    displayContext = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(dbOcrFile.OcrText);
+                    viewModel.SetOcrJson(dbOcrFile.OcrText);
+                }
+                catch { /* fall through */ }
+            }
+
+            if (displayContext != null)
+            {
+                ExtractAndDisplayInvoiceData(displayContext, viewModel);
+            }
+
+            // Update the FileListItem status indicators based on stored validation results
+            if (viewModel.SelectedImageFile != null && !string.IsNullOrEmpty(dbOcrFile.ValidatedOcrText))
+            {
+                try
+                {
+                    var validatedInvoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(dbOcrFile.ValidatedOcrText);
+                    if (validatedInvoice != null)
                     {
-                        var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false);
-                        viewModel.SelectedImageFile.HasSuspectFields = hasSuspectFields;
-                        viewModel.SelectedImageFile.IsValidated = !hasSuspectFields;
-                        System.Console.WriteLine($"[OnFileSelected] {viewModel.SelectedImageFile.FileName}: HasSuspect={hasSuspectFields}, IsValidated={viewModel.SelectedImageFile.IsValidated}, FailedFields={string.Join(", ", validatedInvoice.TesseractConfirmed.Where(kv => !kv.Value).Select(kv => kv.Key))}");
+                        if (validatedInvoice.IsValidationAccepted)
+                        {
+                            viewModel.SelectedImageFile.HasSuspectFields = false;
+                            viewModel.SelectedImageFile.IsValidated = true;
+                        }
+                        else if (validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
+                        {
+                            var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false) ||
+                                                  (validatedInvoice.MathConfirmed != null && validatedInvoice.MathConfirmed.Values.Any(v => v == false));
+                            viewModel.SelectedImageFile.HasSuspectFields = hasSuspectFields;
+                            viewModel.SelectedImageFile.IsValidated = !hasSuspectFields;
+                        }
                     }
                 }
                 catch { /* ignore parse errors */ }
@@ -1320,9 +1318,7 @@ try
         }
         else
         {
-            viewModel.FileCaption = processingResult.Error != null
-                ? $"Error processing file: {processingResult.Error.Message}"
-                : "This file has not been processed yet. Please use Batch Process to run OCR on this file.";
+            viewModel.FileCaption = "This file has not been processed yet. Use Batch Process or right-click OCR Now.";
             viewModel.SetOcrJson(string.Empty);
             viewModel.ValidatedOcrText = string.Empty;
             viewModel.OriginalOcrText = string.Empty;
@@ -1342,7 +1338,7 @@ try
             Height = 200,
             Content = new TextBlock
             {
-                Text = "K-OCR Desktop\nVersion 1.0\nPowered by Tesseract OCR\nCross-platform UI with Avalonia",
+                Text = "K-OCR Desktop\nVersion 1.0\nPowered by Secondary OCR\nCross-platform UI with Avalonia",
                 HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
                 TextAlignment = Avalonia.Media.TextAlignment.Center
@@ -1657,11 +1653,43 @@ try
             boundingBoxes = boxes;
         }
         
-        // Check if validation failed for this field
+        // Check if validation failed for this field (Tesseract or Math validation)
+        // Skip validation checks if the invoice has been manually accepted
         bool validationFailed = false;
-        if (invoice.TesseractConfirmed != null && invoice.TesseractConfirmed.TryGetValue(name, out bool confirmed))
+        string? validationFailureReason = null;
+        
+        if (!invoice.IsValidationAccepted)
         {
-            validationFailed = !confirmed;  // Failed if not confirmed
+            bool tesseractFailed = false;
+            bool mathFailed = false;
+            
+            // Check Tesseract validation
+            if (invoice.TesseractConfirmed != null && invoice.TesseractConfirmed.TryGetValue(name, out bool tesseractConfirmed))
+            {
+                tesseractFailed = !tesseractConfirmed;
+                validationFailed = tesseractFailed;
+            }
+            
+            // Check Math validation
+            if (invoice.MathConfirmed != null && invoice.MathConfirmed.TryGetValue(name, out bool mathConfirmed))
+            {
+                mathFailed = !mathConfirmed;
+                validationFailed = validationFailed || mathFailed;
+            }
+            
+            // Build failure reason message
+            if (tesseractFailed && mathFailed)
+            {
+                validationFailureReason = "⚠️ Validation Failed:\n• OCR text not found in Tesseract scan\n• Mathematical calculation incorrect";
+            }
+            else if (tesseractFailed)
+            {
+                validationFailureReason = "⚠️ OCR Validation Failed: This value was not found in the Tesseract OCR text scan";
+            }
+            else if (mathFailed)
+            {
+                validationFailureReason = "⚠️ Math Validation Failed: This calculated value does not match expected total (tolerance: 2¢)";
+            }
         }
         
         viewModel.DocumentFields.Add(new K_OCR.Models.DocumentField
@@ -1672,7 +1700,8 @@ try
             FieldType = fieldType,
             RawValue = rawValue,
             BoundingBoxes = boundingBoxes,
-            IsValidationFailed = validationFailed
+            IsValidationFailed = validationFailed,
+            ValidationFailureReason = validationFailureReason
         });
     }
 
@@ -1921,6 +1950,12 @@ try
             // Create/update PipelineContext with validated data
             var updatedInvoice = viewModel.CurrentInvoice != null ? CreateUpdatedInvoice(viewModel) : null;
             
+            // Mark as edited by user when they save
+            if (updatedInvoice != null && !updatedInvoice.IsValidationAccepted)
+            {
+                updatedInvoice.IsEditedByUser = true;
+            }
+            
             var pipelineContext = new PipelineContext
             {
                 InputPath = imageFilePath,
@@ -1965,12 +2000,114 @@ try
             {
                 viewModel.SelectedImageFile.IsValidated = true;
             }
+            
+            // Update the current invoice reference and trigger UI refresh
+            if (updatedInvoice != null)
+            {
+                viewModel.CurrentInvoice = updatedInvoice;
+                viewModel.SetInvoiceData(updatedInvoice);
+            }
 
             await ShowMessageBox("Success", "Validated data saved successfully to database.");
         }
         catch (Exception ex)
         {
             await ShowMessageBox("Error", $"Failed to save data: {ex.Message}");
+        }
+    }
+
+    private async void OnAcceptValidation(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+            return;
+
+        if (viewModel.CurrentInvoice == null || viewModel.SelectedImageFile == null)
+        {
+            await ShowMessageBox("Error", "No invoice selected.");
+            return;
+        }
+
+        try
+        {
+            // Mark the invoice as validation accepted
+            viewModel.CurrentInvoice.IsValidationAccepted = true;
+            
+            // Clear validation dictionaries
+            viewModel.CurrentInvoice.TesseractConfirmed.Clear();
+            viewModel.CurrentInvoice.MathConfirmed.Clear();
+            
+            // Rebuild the DocumentFields to remove validation indicators
+            var invoiceDto = viewModel.CurrentInvoice;
+            viewModel.DocumentFields.Clear();
+            
+            // Re-add all fields (they won't have validation indicators since IsValidationAccepted = true)
+            AddField(viewModel, invoiceDto, "VendorName", "Vendor Name", invoiceDto.VendorName);
+            AddField(viewModel, invoiceDto, "CustomerName", "Customer Name", invoiceDto.CustomerName);
+            AddField(viewModel, invoiceDto, "InvoiceId", "Invoice ID", invoiceDto.InvoiceId);
+            AddField(viewModel, invoiceDto, "InvoiceDate", "Invoice Date", invoiceDto.InvoiceDate, "Date");
+            AddField(viewModel, invoiceDto, "DueDate", "Due Date", invoiceDto.DueDate, "Date");
+            AddField(viewModel, invoiceDto, "PurchaseOrder", "Purchase Order", invoiceDto.PurchaseOrder);
+            
+            if (invoiceDto.Subtotal.HasValue)
+                AddField(viewModel, invoiceDto, "Subtotal", "Subtotal", invoiceDto.Subtotal.Value.ToString("C"), "Currency", invoiceDto.Subtotal);
+            
+            if (invoiceDto.TotalTax.HasValue)
+                AddField(viewModel, invoiceDto, "TotalTax", "Total Tax", invoiceDto.TotalTax.Value.ToString("C"), "Currency", invoiceDto.TotalTax);
+            
+            if (invoiceDto.Shipping.HasValue)
+                AddField(viewModel, invoiceDto, "Shipping", "Shipping", invoiceDto.Shipping.Value.ToString("C"), "Currency", invoiceDto.Shipping);
+            
+            if (invoiceDto.Total.HasValue)
+                AddField(viewModel, invoiceDto, "Total", "Total", invoiceDto.Total.Value.ToString("C"), "Currency", invoiceDto.Total);
+            
+            // Save to database
+            var imageFilePath = System.IO.Path.Combine(viewModel.CurrentDirectory ?? "", viewModel.SelectedImageFile.FileName);
+            
+            var updatedInvoice = CreateUpdatedInvoice(viewModel);
+            updatedInvoice.IsValidationAccepted = true;
+            updatedInvoice.TesseractConfirmed.Clear();
+            updatedInvoice.MathConfirmed.Clear();
+            
+            var pipelineContext = new PipelineContext
+            {
+                InputPath = imageFilePath,
+                Text = string.Empty,
+                Layout = new List<InvoiceDto> { updatedInvoice },
+                Table = new object(),
+                LineItems = new object()
+            };
+
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(pipelineContext, Newtonsoft.Json.Formatting.Indented);
+
+            var ocrFile = await _databaseService.GetOCRFileByPathAsync(imageFilePath);
+            if (ocrFile != null)
+            {
+                ocrFile.ValidatedOcrText = json;
+                await _databaseService.SaveOCRFileAsync(ocrFile);
+            }
+            else
+            {
+                ocrFile = new OCRFile
+                {
+                    FilePath = imageFilePath,
+                    OcrText = string.Empty,
+                    ValidatedOcrText = json
+                };
+                await _databaseService.SaveOCRFileAsync(ocrFile);
+            }
+            
+            // Mark file as validated and update status
+            viewModel.SelectedImageFile.IsValidated = true;
+            viewModel.SelectedImageFile.HasSuspectFields = false;
+            
+            // Trigger property change notification to update UI (buttons -> text)
+            viewModel.SetInvoiceData(viewModel.CurrentInvoice);
+            
+            await ShowMessageBox("Success", "Validation accepted and saved.");
+        }
+        catch (Exception ex)
+        {
+            await ShowMessageBox("Error", $"Failed to accept validation: {ex.Message}");
         }
     }
 
@@ -2106,14 +2243,14 @@ try
             if (box.Points == null || box.Points.Count < 8)
                 continue;
 
-            // Calculate Y offset for this page
+            // Calculate Y offset for this page.
+            // Each preceding page contributes its pixel height plus the label strip below it.
             double pageYOffset = 0;
             if (viewModel.PageHeights.Count > 0 && box.PageNumber > 0)
             {
-                // Sum heights of all previous pages (PageNumber is 1-based)
                 for (int i = 0; i < box.PageNumber - 1 && i < viewModel.PageHeights.Count; i++)
                 {
-                    pageYOffset += viewModel.PageHeights[i];
+                    pageYOffset += viewModel.PageHeights[i] + MainWindowViewModel.PageLabelHeight;
                 }
             }
 

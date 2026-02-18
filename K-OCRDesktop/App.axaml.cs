@@ -65,6 +65,7 @@ public partial class App : Application
         services.AddSingleton<ITesseractValidationService>(sp =>
             new TesseractValidationService(sp.GetRequiredService<IImageService>()));
         services.AddSingleton<IInvoiceValidationService, InvoiceValidationService>();
+        services.AddSingleton<ILineItemValidationService, LineItemValidationService>();
 
         // Register shared document export service so both desktop and web can reuse it
         services.AddSingleton<K_OCR.Services.IDocumentExportService, K_OCR.Services.DocumentExportService>();

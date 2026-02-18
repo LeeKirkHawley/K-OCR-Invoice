@@ -378,7 +378,7 @@ namespace K_OCR.Services
                             Description = desc,
                             Quantity = qty,
                             UnitPrice = unitPrice,
-                            LineTotal = lineTotal,
+                            Amount = lineTotal,
                             BoundingBoxes = itemBoxes
                         });
                     }

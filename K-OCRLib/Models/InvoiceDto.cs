@@ -11,7 +11,7 @@ namespace K_OCR.Models
         public string Description { get; set; } = string.Empty;
         public decimal? Quantity { get; set; }
         public decimal? UnitPrice { get; set; }
-        public decimal? LineTotal { get; set; }
+        public decimal? Amount { get; set; }
         public List<BoundingBoxDto> BoundingBoxes { get; init; } = new();
 
         /// <summary>
@@ -56,5 +56,26 @@ namespace K_OCR.Models
         /// Fields absent from this dictionary were not checked (Azure returned no value).
         /// </summary>
         public Dictionary<string, bool> TesseractConfirmed { get; set; } = new();
+        
+        /// <summary>
+        /// Per-field mathematical validation result.
+        /// Key = field identifier (e.g. "Subtotal", "Total", "LineItem[0].Amount").
+        /// Value = true if the mathematical calculation is correct (within tolerance);
+        ///         false if the math doesn't add up and is therefore flagged as suspect.
+        /// Fields absent from this dictionary were not checked.
+        /// </summary>
+        public Dictionary<string, bool> MathConfirmed { get; set; } = new();
+        
+        /// <summary>
+        /// Indicates whether the user has manually accepted this invoice's validation.
+        /// When true, validation checks will be skipped and no validation indicators will be shown.
+        /// </summary>
+        public bool IsValidationAccepted { get; set; }
+        
+        /// <summary>
+        /// Indicates whether the user has edited this invoice and all validations now pass.
+        /// When true, the invoice was edited by the user and has no validation errors.
+        /// </summary>
+        public bool IsEditedByUser { get; set; }
     }
 }

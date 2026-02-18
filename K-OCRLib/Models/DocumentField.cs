@@ -39,4 +39,7 @@ public class DocumentField
     
     [NotMapped]
     public bool IsValidationFailed { get; set; }
+    
+    [NotMapped]
+    public string? ValidationFailureReason { get; set; }
 }

@@ -56,6 +56,15 @@ public partial class MainWindowViewModel : ViewModelBase
     // For multi-page PDFs - stores height of each page for coordinate calculations
     public List<int> PageHeights { get; set; } = new();
 
+    /// <summary>Height of the "Page N" separator label rendered between pages (pixels, unscaled).</summary>
+    public const int PageLabelHeight = 32;
+
+    [ObservableProperty]
+    private ObservableCollection<PageItem> _pageImages = new();
+
+    [ObservableProperty]
+    private bool _hasMultiplePages;
+
     [ObservableProperty]
     private ObservableCollection<FileListItem> _imageFiles = new();
 
@@ -77,6 +86,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private int _currentFieldIndex = -1;
+
+    [ObservableProperty]
+    private bool _isOcrRunning;
+
+    [ObservableProperty]
+    private string _ocrStatusMessage = "OCR in progress, please wait…";
 
     private readonly List<OCRFile> _filesToProcess = new();
     private int _currentIndex = -1;
@@ -130,6 +145,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public void LoadImage(string filePath, double availableWidth = 0, double availableHeight = 0)
     {
+        // Dispose any previously loaded multi-page bitmaps
+        foreach (var p in PageImages)
+            p.Image?.Dispose();
+        PageImages.Clear();
+        HasMultiplePages = false;
+        PageHeights = new List<int>();
+
         if (System.IO.File.Exists(filePath))
         {
             try
@@ -177,13 +199,72 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public void ZoomFit()
     {
-        if (_availableWidth > 0 && OriginalImageSource != null && OriginalImageSource.PixelSize.Width > 0)
+        double sourceWidth = OriginalImageSource?.PixelSize.Width
+                          ?? PageImages.FirstOrDefault()?.Width
+                          ?? 0;
+        if (_availableWidth > 0 && sourceWidth > 0)
         {
-            ImageZoom = _availableWidth / OriginalImageSource.PixelSize.Width;
+            ImageZoom = _availableWidth / sourceWidth;
         }
         else
         {
             ImageZoom = 1.0;
+        }
+    }
+
+    /// <summary>
+    /// Loads individual page bitmaps for a multi-page PDF and sets up ViewModel state.
+    /// No combined PNG is created; pages are displayed stacked via the PageImages collection.
+    /// </summary>
+    public void LoadPages(IReadOnlyList<string> pagePaths, double availableWidth = 0)
+    {
+        // Dispose old page bitmaps to release GDI/native resources
+        foreach (var p in PageImages)
+            p.Image?.Dispose();
+        PageImages.Clear();
+
+        // Clear single-page source so only the multi-page ItemsControl is shown
+        OriginalImageSource = null;
+        PageHeights = new List<int>();
+
+        int totalHeight = 0;
+        int maxWidth = 0;
+
+        for (int i = 0; i < pagePaths.Count; i++)
+        {
+            var path = pagePaths[i];
+            if (!System.IO.File.Exists(path))
+                continue;
+
+            var bmp = new Bitmap(path);
+            var item = new PageItem
+            {
+                Image = bmp,
+                PageNumber = i + 1,
+                Height = bmp.PixelSize.Height,
+                Width = bmp.PixelSize.Width
+            };
+            PageImages.Add(item);
+            PageHeights.Add(bmp.PixelSize.Height);
+            totalHeight += bmp.PixelSize.Height;
+            maxWidth = Math.Max(maxWidth, bmp.PixelSize.Width);
+        }
+
+        // The DataTemplate renders a label strip below every page including the last,
+        // so the full rendered height includes n label strips, not n-1.
+        int labelGapTotal = PageImages.Count * PageLabelHeight;
+        totalHeight += labelGapTotal;
+
+        CanvasWidth = maxWidth;
+        CanvasHeight = totalHeight;
+        HasMultiplePages = PageImages.Count > 1;
+        OcrJsonText = string.Empty;
+        FileCaption = pagePaths.Count > 0 ? pagePaths[0] : string.Empty;
+
+        if (availableWidth > 0 && maxWidth > 0)
+        {
+            _availableWidth = availableWidth;
+            ImageZoom = availableWidth / maxWidth;
         }
     }
 
@@ -234,7 +315,14 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasLineItems));
         OnPropertyChanged(nameof(LineItemsCount));
         OnPropertyChanged(nameof(LineItems));
+        OnPropertyChanged(nameof(IsValidationAccepted));
+        OnPropertyChanged(nameof(IsEditedByUser));
+        OnPropertyChanged(nameof(ShowValidationButtons));
     }
+    
+    public bool IsValidationAccepted => CurrentInvoice?.IsValidationAccepted ?? false;
+    public bool IsEditedByUser => CurrentInvoice?.IsEditedByUser ?? false;
+    public bool ShowValidationButtons => !IsValidationAccepted && !IsEditedByUser;
 
     public void LoadImageFilesFromFolder(string folderPath, DatabaseService? databaseService = null)
     {

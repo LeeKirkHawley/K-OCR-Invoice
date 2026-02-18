@@ -10,18 +10,21 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     private readonly IInvoiceService _invoiceService;
     private readonly ITesseractValidationService _tesseractValidation;
     private readonly IInvoiceValidationService _invoiceValidation;
+    private readonly ILineItemValidationService _lineItemValidation;
     private readonly string _defaultPipelineConfigPath;
     
     public InvoiceProcessingService(
         IFileService fileService,
         IInvoiceService invoiceService,
         ITesseractValidationService tesseractValidation,
-        IInvoiceValidationService invoiceValidation)
+        IInvoiceValidationService invoiceValidation,
+        ILineItemValidationService lineItemValidation)
     {
         _fileService = fileService;
         _invoiceService = invoiceService;
         _tesseractValidation = tesseractValidation;
         _invoiceValidation = invoiceValidation;
+        _lineItemValidation = lineItemValidation;
         _defaultPipelineConfigPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, 
             "PipelineService", 
@@ -244,6 +247,12 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         if (invoices == null) return;
 
         foreach (var invoice in invoices)
+        {
+            // Run Tesseract text validation
             _invoiceValidation.ValidateAgainstTesseract(invoice, tesseractText);
+            
+            // Run mathematical validation
+            _lineItemValidation.ValidateInvoiceMath(invoice);
+        }
     }
 }

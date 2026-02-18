@@ -24,13 +24,15 @@
         <converters:ValidatedStatusToColorConverter x:Key="ValidatedStatusToColorConverter"/>
         <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
         <converters:ValidationTextColorConverter x:Key="ValidationTextColorConverter"/>
+        <converters:ValidationBorderBrushConverter x:Key="ValidationBorderBrushConverter"/>
+        <converters:ValidationBorderThicknessConverter x:Key="ValidationBorderThicknessConverter"/>
     </Window.Resources>
 
     <Window.Styles>
-        <!-- Custom TextBox style for Validation tab - yellow background like image highlight -->
+        <!-- Custom TextBox style for Validation tab - yellow background with blue border for selection -->
         <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
             <Setter Property="Background" Value="#50FFFF00"/>
-            <Setter Property="BorderBrush" Value="#FFFFA500"/>
+            <Setter Property="BorderBrush" Value="#FF2196F3"/>
             <Setter Property="BorderThickness" Value="2"/>
         </Style>
         <!-- Light selection highlight so text is readable -->
@@ -40,6 +42,7 @@
         </Style>
     </Window.Styles>
 
+    <Grid>
     <DockPanel>
         <!-- Menu bar at top -->
         <Menu DockPanel.Dock="Top">
@@ -131,8 +134,7 @@
                             <ListBox.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem Header="OCR Now"
-                                              Command="{Binding DataContext.OcrNowCommand, ElementName=RootWindow}"
-                                              CommandParameter="{Binding}"/>
+                                              Click="OnOcrNowMenuClick"/>
                                 </ContextMenu>
                             </ListBox.ContextMenu>
                             <ListBox.ItemTemplate>
@@ -211,19 +213,51 @@
                                      VerticalScrollBarVisibility="Auto"
                                      Name="ImageScrollViewer">
                             <Grid>
-                                <!-- Image -->
+                                <!-- Single-page image (single-page PDFs, JPEGs, PNGs, etc.) -->
                                 <Image Source="{Binding OriginalImageSource}"
                                        Stretch="None"
                                        HorizontalAlignment="Left"
                                        VerticalAlignment="Top"
                                        RenderTransformOrigin="0,0"
                                        Name="DisplayImage"
+                                       IsVisible="{Binding !HasMultiplePages}"
                                        PointerPressed="OnImageClick">
                                     <Image.RenderTransform>
                                         <ScaleTransform ScaleX="{Binding ImageZoom}" 
                                                        ScaleY="{Binding ImageZoom}"/>
                                     </Image.RenderTransform>
                                 </Image>
+
+                                <!-- Multi-page PDF: individual page images stacked with labels -->
+                                <ItemsControl ItemsSource="{Binding PageImages}"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Top"
+                                              RenderTransformOrigin="0,0"
+                                              IsVisible="{Binding HasMultiplePages}">
+                                    <ItemsControl.RenderTransform>
+                                        <ScaleTransform ScaleX="{Binding ImageZoom}"
+                                                        ScaleY="{Binding ImageZoom}"/>
+                                    </ItemsControl.RenderTransform>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <Image Source="{Binding Image}"
+                                                       Stretch="None"
+                                                       HorizontalAlignment="Left"
+                                                       PointerPressed="OnPageImageClick"/>
+                                                <Border Height="32"
+                                                        Background="#444444">
+                                                    <TextBlock Text="{Binding PageLabel}"
+                                                               Foreground="White"
+                                                               VerticalAlignment="Center"
+                                                               Margin="10,0"
+                                                               FontWeight="SemiBold"
+                                                               FontSize="13"/>
+                                                </Border>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                                 
                                 <!-- Overlay Canvas for highlighting bounding boxes -->
                                 <Canvas Name="HighlightCanvas"
@@ -259,15 +293,44 @@
                         <!-- Validation Tab (default) -->
                         <TabItem Header="Validation" Name="ValidationTab">
                             <Grid RowDefinitions="Auto,*">
-                                <!-- Save Button at top -->
-                                <Button Grid.Row="0" 
-                                       Content="💾 Save Validated Data" 
-                                       HorizontalAlignment="Center"
-                                       Margin="10,10,10,5"
-                                       Padding="20,8"
-                                       FontWeight="Bold"
-                                       Click="OnSaveValidatedData"
-                                       IsVisible="{Binding DocumentFields.Count}"/>
+                                <!-- Save and Accept Buttons (shown when validation NOT accepted and NOT edited) -->
+                                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10" Margin="10,10,10,5">
+                                    <StackPanel.IsVisible>
+                                        <Binding Path="DocumentFields.Count" Converter="{StaticResource CountToVisibilityConverter}"/>
+                                    </StackPanel.IsVisible>
+                                    <Button Content="💾 Save Validated Data" 
+                                           Padding="20,8"
+                                           FontWeight="Bold"
+                                           Click="OnSaveValidatedData"/>
+                                    <Button Content="✓ Accept Validation" 
+                                           Padding="20,8"
+                                           FontWeight="Bold"
+                                           Background="#4CAF50"
+                                           Foreground="White"
+                                           Click="OnAcceptValidation"/>
+                                </StackPanel>
+                                
+                                <!-- Validation Accepted Text -->
+                                <TextBlock Grid.Row="0" 
+                                          Text="✓ Validation accepted by Generic User"
+                                          HorizontalAlignment="Center"
+                                          Margin="10,10,10,5"
+                                          Padding="20,8"
+                                          FontWeight="Bold"
+                                          FontSize="14"
+                                          Foreground="#4CAF50"
+                                          IsVisible="{Binding IsValidationAccepted}"/>
+                                
+                                <!-- Edited By User Text -->
+                                <TextBlock Grid.Row="0" 
+                                          Text="✓ Edited by Generic User"
+                                          HorizontalAlignment="Center"
+                                          Margin="10,10,10,5"
+                                          Padding="20,8"
+                                          FontWeight="Bold"
+                                          FontSize="14"
+                                          Foreground="#2196F3"
+                                          IsVisible="{Binding IsEditedByUser}"/>
                                 
                                 <!-- Dynamic document fields display -->
                                 <ScrollViewer Grid.Row="1"
@@ -298,7 +361,10 @@
                                                                 GotFocus="OnFieldGotFocus"
                                                                 KeyDown="OnFieldTextBoxKeyDown"
                                                                 Tag="{Binding Name}"
-                                                                Foreground="{Binding IsValidationFailed, Converter={StaticResource ValidationTextColorConverter}}"/>
+                                                                Foreground="{Binding IsValidationFailed, Converter={StaticResource ValidationTextColorConverter}}"
+                                                                BorderBrush="{Binding IsValidationFailed, Converter={StaticResource ValidationBorderBrushConverter}}"
+                                                                BorderThickness="{Binding IsValidationFailed, Converter={StaticResource ValidationBorderThicknessConverter}}"
+                                                                ToolTip.Tip="{Binding ValidationFailureReason}"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -347,7 +413,7 @@
                                                                     <!-- Line Total (Read-only) -->
                                                                     <StackPanel Grid.Column="3" Spacing="3" Margin="5,0">
                                                                         <TextBlock Text="Line Total:" FontWeight="SemiBold" FontSize="11"/>
-                                                                        <TextBox Text="{Binding LineTotal, StringFormat={}{0:C}, Mode=OneWay}" 
+                                                                        <TextBox Text="{Binding Amount, StringFormat={}{0:C}, Mode=OneWay}" 
                                                                                 TextAlignment="Right"
                                                                                 FontWeight="Bold"
                                                                                 IsReadOnly="True"
@@ -413,5 +479,28 @@
             </Grid>
         </Grid>
     </DockPanel>
+
+        <!-- OCR Spinner Overlay: covers and disables the entire UI while OCR is running -->
+        <Grid IsVisible="{Binding IsOcrRunning}"
+              IsHitTestVisible="{Binding IsOcrRunning}"
+              Background="#AA000000">
+            <Border Background="White"
+                    CornerRadius="8"
+                    Padding="48,32"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    BoxShadow="0 6 24 0 #60000000">
+                <StackPanel Spacing="18" HorizontalAlignment="Center">
+                    <ProgressBar IsIndeterminate="True"
+                                 Width="280"
+                                 Height="8"/>
+                    <TextBlock Text="{Binding OcrStatusMessage}"
+                               HorizontalAlignment="Center"
+                               FontSize="16"
+                               FontWeight="SemiBold"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
 
 </Window>

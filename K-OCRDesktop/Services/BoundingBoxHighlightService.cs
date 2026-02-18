@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using K_OCR.Models;
+using K_OCRDesktop.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -59,14 +60,15 @@ namespace K_OCRDesktop.Services
                 scaleY = _canvasHeight / _originalPageHeight;
             }
 
-            // Calculate Y offset for this page (for multi-page PDFs)
+            // Calculate Y offset for this page (for multi-page PDFs).
+            // The label strip (PageLabelHeight) is rendered below each page image in the
+            // ItemsControl, so every preceding page contributes height + label height.
             double pageYOffset = 0;
             if (_pageHeights.Count > 0 && box.PageNumber > 0)
             {
-                // Sum heights of all previous pages (PageNumber is 1-based)
                 for (int i = 0; i < box.PageNumber - 1 && i < _pageHeights.Count; i++)
                 {
-                    pageYOffset += _pageHeights[i];
+                    pageYOffset += _pageHeights[i] + MainWindowViewModel.PageLabelHeight;
                 }
             }
 
@@ -120,14 +122,14 @@ namespace K_OCRDesktop.Services
                 if (box.Points == null || box.Points.Count < 8)
                     continue;
 
-                // Calculate Y offset for this page
+                // Calculate Y offset for this page.
+                // Each preceding page contributes its pixel height plus the label strip below it.
                 double pageYOffset = 0;
                 if (_pageHeights.Count > 0 && box.PageNumber > 0)
                 {
-                    // Sum heights of all previous pages (PageNumber is 1-based)
                     for (int i = 0; i < box.PageNumber - 1 && i < _pageHeights.Count; i++)
                     {
-                        pageYOffset += _pageHeights[i];
+                        pageYOffset += _pageHeights[i] + MainWindowViewModel.PageLabelHeight;
                     }
                 }
 
