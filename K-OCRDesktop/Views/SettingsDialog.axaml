@@ -6,9 +6,9 @@
         x:Class="K_OCRDesktop.Views.SettingsDialog"
         Title="Settings"
         Width="600"
-        Height="320"
+        Height="400"
         MinWidth="500"
-        MinHeight="280"
+        MinHeight="360"
         CanResize="true"
         WindowStartupLocation="CenterOwner">
 
@@ -35,6 +35,9 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="10"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="10"/>
@@ -88,6 +91,23 @@
                            Increment="1"
                            Width="200"
                            HorizontalAlignment="Left"/>
+
+            <TextBlock Grid.Row="9" Grid.Column="0"
+                       Text="Minimum Confidence Threshold:"
+                       VerticalAlignment="Center"
+                       Margin="0,10,10,5"
+                       ToolTip.Tip="Azure OCR fields with a confidence score below this value (0.0 – 1.0) will be flagged."/>
+
+            <NumericUpDown Grid.Row="10" Grid.Column="0"
+                           Name="MinConfidenceThresholdBox"
+                           Minimum="0"
+                           Maximum="1"
+                           Value="0.8"
+                           Increment="0.05"
+                           FormatString="0.00"
+                           Width="200"
+                           HorizontalAlignment="Left"
+                           ToolTip.Tip="Azure OCR fields with a confidence score below this value (0.0 – 1.0) will be flagged."/>
         </Grid>
 
         <!-- Spacer -->

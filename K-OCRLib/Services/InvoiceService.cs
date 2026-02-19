@@ -199,6 +199,7 @@ namespace K_OCR.Services
             return result.Documents.Select(doc =>
             {
                 var fieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>();
+                var fieldConfidences   = new Dictionary<string, double>();
                 
                 // Get page dimensions from the first page (Azure provides dimensions in inches)
                 double pageWidth = 8.5;  // Default letter size
@@ -284,7 +285,11 @@ namespace K_OCR.Services
                         var boxes = GetBoundingBoxes(actualFieldName);
                         if (boxes.Count > 0)
                             fieldBoundingBoxes[name] = boxes;
-                        
+
+                        // Capture Azure confidence score
+                        if (f.Confidence.HasValue)
+                            fieldConfidences[name] = f.Confidence.Value;
+
                         if (!string.IsNullOrEmpty(f.ValueString)) return f.ValueString!;
                         if (!string.IsNullOrEmpty(f.Content)) return f.Content!;
                     }
@@ -300,7 +305,11 @@ namespace K_OCR.Services
                         var boxes = GetBoundingBoxes(actualFieldName);
                         if (boxes.Count > 0)
                             fieldBoundingBoxes[name] = boxes;
-                        
+
+                        // Capture Azure confidence score
+                        if (field.Confidence.HasValue)
+                            fieldConfidences[name] = field.Confidence.Value;
+
                         if (field.ValueCurrency?.Amount is double a) return (decimal)a;
                         if (field.ValueDouble is double d) return (decimal)d;
                         if (field.ValueInt64 is long l) return l;
@@ -329,15 +338,22 @@ namespace K_OCR.Services
                     {
                         var dict = item.ValueDictionary;
 
+                        // Capture sub-field confidence scores for line items
+                        var itemFieldConfidences = new Dictionary<string, double>();
+
                         string desc = dict.TryGetValue("Description", out var vDesc)
                             ? (vDesc?.ValueString ?? vDesc?.Content ?? string.Empty)
                             : string.Empty;
+                        if (vDesc?.Confidence.HasValue == true)
+                            itemFieldConfidences[nameof(InvoiceItemDto.Description)] = vDesc.Confidence.Value;
 
                         decimal? qty = null;
                         if (dict.TryGetValue("Quantity", out var vQty))
                         {
                             if (vQty.ValueDouble is double qd) qty = (decimal)qd;
                             else if (vQty.ValueInt64 is long ql) qty = ql;
+                            if (vQty.Confidence.HasValue)
+                                itemFieldConfidences[nameof(InvoiceItemDto.Quantity)] = vQty.Confidence.Value;
                         }
 
                         decimal? unitPrice = null;
@@ -346,6 +362,8 @@ namespace K_OCR.Services
                             if (vUnit.ValueCurrency?.Amount is double ud) unitPrice = (decimal)ud;
                             else if (vUnit.ValueDouble is double nd) unitPrice = (decimal)nd;
                             else if (vUnit.ValueInt64 is long nl) unitPrice = nl;
+                            if (vUnit.Confidence.HasValue)
+                                itemFieldConfidences[nameof(InvoiceItemDto.UnitPrice)] = vUnit.Confidence.Value;
                         }
 
                         decimal? lineTotal = null;
@@ -354,6 +372,8 @@ namespace K_OCR.Services
                             if (vAmt.ValueCurrency?.Amount is double ld) lineTotal = (decimal)ld;
                             else if (vAmt.ValueDouble is double nd2) lineTotal = (decimal)nd2;
                             else if (vAmt.ValueInt64 is long nl2) lineTotal = nl2;
+                            if (vAmt.Confidence.HasValue)
+                                itemFieldConfidences[nameof(InvoiceItemDto.Amount)] = vAmt.Confidence.Value;
                         }
 
                         // Get bounding boxes for the entire line item
@@ -375,32 +395,34 @@ namespace K_OCR.Services
 
                         items.Add(new InvoiceItemDto
                         {
-                            Description = desc,
-                            Quantity = qty,
-                            UnitPrice = unitPrice,
-                            Amount = lineTotal,
-                            BoundingBoxes = itemBoxes
+                            Description     = desc,
+                            Quantity        = qty,
+                            UnitPrice       = unitPrice,
+                            Amount          = lineTotal,
+                            BoundingBoxes   = itemBoxes,
+                            FieldConfidences = itemFieldConfidences
                         });
                     }
                 }
 
                 return new InvoiceDto
                 {
-                    VendorName = GetString("VendorName"),
-                    CustomerName = GetString("CustomerName"),
-                    InvoiceId = GetString("InvoiceId"),
-                    InvoiceDate = GetString("InvoiceDate"),
-                    DueDate = GetString("DueDate"),
+                    VendorName    = GetString("VendorName"),
+                    CustomerName  = GetString("CustomerName"),
+                    InvoiceId     = GetString("InvoiceId"),
+                    InvoiceDate   = GetString("InvoiceDate"),
+                    DueDate       = GetString("DueDate"),
                     PurchaseOrder = GetString("PurchaseOrder"),
-                    Subtotal = GetDecimal("Subtotal"),
-                    TotalTax = GetDecimal("TotalTax"),
-                    Shipping = GetDecimal("Shipping"),
-                    Total = GetDecimal("Total"),
-                    Items = items,
+                    Subtotal      = GetDecimal("Subtotal"),
+                    TotalTax      = GetDecimal("TotalTax"),
+                    Shipping      = GetDecimal("Shipping"),
+                    Total         = GetDecimal("Total"),
+                    Items             = items,
                     FieldBoundingBoxes = fieldBoundingBoxes,
-                    OriginalPageWidth = pageWidth,
+                    FieldConfidences   = fieldConfidences,
+                    OriginalPageWidth  = pageWidth,
                     OriginalPageHeight = pageHeight,
-                    PageCount = result.Pages?.Count ?? 1
+                    PageCount          = result.Pages?.Count ?? 1
                 };
             }).ToList();
         }

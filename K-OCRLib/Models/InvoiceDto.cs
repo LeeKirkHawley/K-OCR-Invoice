@@ -15,6 +15,23 @@ namespace K_OCR.Models
         public List<BoundingBoxDto> BoundingBoxes { get; init; } = new();
 
         /// <summary>
+        /// Azure Document Intelligence confidence score for each extracted field.
+        /// Key = property name (e.g. nameof(Description)).
+        /// Value = confidence 0.0 – 1.0 as returned by Azure.
+        /// Fields absent were not extracted by Azure.
+        /// </summary>
+        public Dictionary<string, double> FieldConfidences { get; set; } = new();
+
+        /// <summary>
+        /// Per-field confidence validation result.
+        /// Key = property name of the field (e.g. nameof(Description)).
+        /// Value = true if the field's Azure confidence meets the configured minimum;
+        ///         false if the confidence is below the threshold and the field is flagged.
+        /// Fields absent from this dictionary were not checked.
+        /// </summary>
+        public Dictionary<string, bool> ConfidenceConfirmed { get; set; } = new();
+
+        /// <summary>
         /// Per-field Tesseract cross-validation result.
         /// Key = property name of the field (e.g. nameof(Description)).
         /// Value = true if the field value was found in the Tesseract OCR text (confirmed);
@@ -40,6 +57,14 @@ namespace K_OCR.Models
         
         // Bounding boxes for each field
         public Dictionary<string, List<BoundingBoxDto>> FieldBoundingBoxes { get; init; } = new();
+
+        /// <summary>
+        /// Azure Document Intelligence confidence score for each extracted header field.
+        /// Key = property name (e.g. nameof(InvoiceDto.VendorName)).
+        /// Value = confidence 0.0 – 1.0 as returned by Azure.
+        /// Fields absent were not extracted by Azure.
+        /// </summary>
+        public Dictionary<string, double> FieldConfidences { get; init; } = new();
         
         // Original page dimensions from Azure OCR (in inches)
         public double OriginalPageWidth { get; init; }
@@ -56,7 +81,16 @@ namespace K_OCR.Models
         /// Fields absent from this dictionary were not checked (Azure returned no value).
         /// </summary>
         public Dictionary<string, bool> TesseractConfirmed { get; set; } = new();
-        
+
+        /// <summary>
+        /// Per-field confidence validation result.
+        /// Key = property name of the field (e.g. nameof(InvoiceDto.VendorName)).
+        /// Value = true if the field's Azure confidence meets the configured minimum;
+        ///         false if the confidence is below the threshold and the field is flagged.
+        /// Fields absent from this dictionary were not checked.
+        /// </summary>
+        public Dictionary<string, bool> ConfidenceConfirmed { get; set; } = new();
+
         /// <summary>
         /// Per-field mathematical validation result.
         /// Key = field identifier (e.g. "Subtotal", "Total", "LineItem[0].Amount").

@@ -17,6 +17,7 @@ public partial class SettingsDialog : Window
     public string? ProjectDirectory { get; private set; }
     public string? ProjectArtifacts { get; private set; }
     public int MaxConcurrentRequests { get; private set; } = 3;
+    public double MinConfidenceThreshold { get; private set; } = 0.8;
     public bool SettingsSaved { get; private set; }
 
     public SettingsDialog(IConfigurationService configService)
@@ -35,6 +36,7 @@ public partial class SettingsDialog : Window
             ProjectDirectory = _currentSettings.ProjectDirectory ?? string.Empty;
             ProjectArtifacts = _currentSettings.ProjectArtifacts ?? string.Empty;
             MaxConcurrentRequests = _currentSettings.MaxConcurrentRequests;
+            MinConfidenceThreshold = _currentSettings.MinConfidenceThreshold;
             
             var projectDirectoryTextBox = this.FindControl<TextBox>("ProjectDirectoryTextBox");
             if (projectDirectoryTextBox != null)
@@ -52,6 +54,12 @@ public partial class SettingsDialog : Window
             if (maxConcurrentTextBox != null)
             {
                 maxConcurrentTextBox.Value = MaxConcurrentRequests;
+            }
+
+            var minConfidenceBox = this.FindControl<NumericUpDown>("MinConfidenceThresholdBox");
+            if (minConfidenceBox != null)
+            {
+                minConfidenceBox.Value = (decimal)MinConfidenceThreshold;
             }
         }
         catch
@@ -104,6 +112,9 @@ public partial class SettingsDialog : Window
             var maxConcurrentTextBox = this.FindControl<NumericUpDown>("MaxConcurrentTextBox");
             var maxConcurrent = maxConcurrentTextBox?.Value ?? 3;
 
+            var minConfidenceBox = this.FindControl<NumericUpDown>("MinConfidenceThresholdBox");
+            var minConfidence = (double)(minConfidenceBox?.Value ?? 0.8m);
+
             // Validate directories if not empty
             if (!string.IsNullOrEmpty(newProjectDirectory) && !Directory.Exists(newProjectDirectory))
             {
@@ -121,6 +132,7 @@ public partial class SettingsDialog : Window
             _currentSettings.ProjectDirectory = newProjectDirectory;
             _currentSettings.ProjectArtifacts = newProjectArtifacts;
             _currentSettings.MaxConcurrentRequests = (int)maxConcurrent;
+            _currentSettings.MinConfidenceThreshold = minConfidence;
 
             // Save settings using service
             await _configService.SaveSettingsAsync(_currentSettings);
@@ -128,6 +140,7 @@ public partial class SettingsDialog : Window
             ProjectDirectory = newProjectDirectory;
             ProjectArtifacts = newProjectArtifacts;
             MaxConcurrentRequests = (int)maxConcurrent;
+            MinConfidenceThreshold = minConfidence;
             SettingsSaved = true;
             Close();
         }

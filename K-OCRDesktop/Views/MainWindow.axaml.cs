@@ -247,7 +247,9 @@ public partial class MainWindow : Window
                                 }
                                 if (invoice != null && invoice.TesseractConfirmed != null && invoice.TesseractConfirmed.Count > 0)
                                 {
-                                    fileItem.HasSuspectFields = invoice.TesseractConfirmed.Values.Any(v => v == false);
+                                    fileItem.HasSuspectFields = invoice.TesseractConfirmed.Values.Any(v => v == false)
+                                        || (invoice.MathConfirmed != null && invoice.MathConfirmed.Values.Any(v => v == false))
+                                        || (invoice.ConfidenceConfirmed != null && invoice.ConfidenceConfirmed.Values.Any(v => v == false));
                                     fileItem.IsValidated = !fileItem.HasSuspectFields;
                                     System.Console.WriteLine($"[OcrNow] Updated validation (Secondary): HasSuspect={fileItem.HasSuspectFields}, IsValidated={fileItem.IsValidated}");
                                 }
@@ -348,7 +350,8 @@ public partial class MainWindow : Window
                         else if (validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
                         {
                             var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false) ||
-                                                  (validatedInvoice.MathConfirmed != null && validatedInvoice.MathConfirmed.Values.Any(v => v == false));
+                                                  (validatedInvoice.MathConfirmed != null && validatedInvoice.MathConfirmed.Values.Any(v => v == false)) ||
+                                                  (validatedInvoice.ConfidenceConfirmed != null && validatedInvoice.ConfidenceConfirmed.Values.Any(v => v == false));
                             fileItem.HasSuspectFields = hasSuspectFields;
                             fileItem.IsValidated = !hasSuspectFields;
                             System.Console.WriteLine($"[ValidateProcessedFiles-FromDB] {fileItem.FileName}: HasSuspect={hasSuspectFields}, IsValidated={fileItem.IsValidated}, FailedFields={string.Join(", ", validatedInvoice.TesseractConfirmed.Where(kv => !kv.Value).Select(kv => kv.Key))}");
@@ -1307,7 +1310,8 @@ try
                         else if (validatedInvoice.TesseractConfirmed != null && validatedInvoice.TesseractConfirmed.Count > 0)
                         {
                             var hasSuspectFields = validatedInvoice.TesseractConfirmed.Values.Any(v => v == false) ||
-                                                  (validatedInvoice.MathConfirmed != null && validatedInvoice.MathConfirmed.Values.Any(v => v == false));
+                                                  (validatedInvoice.MathConfirmed != null && validatedInvoice.MathConfirmed.Values.Any(v => v == false)) ||
+                                                  (validatedInvoice.ConfidenceConfirmed != null && validatedInvoice.ConfidenceConfirmed.Values.Any(v => v == false));
                             viewModel.SelectedImageFile.HasSuspectFields = hasSuspectFields;
                             viewModel.SelectedImageFile.IsValidated = !hasSuspectFields;
                         }
@@ -1662,6 +1666,7 @@ try
         {
             bool tesseractFailed = false;
             bool mathFailed = false;
+            bool confidenceFailed = false;
             
             // Check Tesseract validation
             if (invoice.TesseractConfirmed != null && invoice.TesseractConfirmed.TryGetValue(name, out bool tesseractConfirmed))
@@ -1676,20 +1681,28 @@ try
                 mathFailed = !mathConfirmed;
                 validationFailed = validationFailed || mathFailed;
             }
-            
-            // Build failure reason message
-            if (tesseractFailed && mathFailed)
+
+            // Check Confidence validation
+            if (invoice.ConfidenceConfirmed != null && invoice.ConfidenceConfirmed.TryGetValue(name, out bool confConfirmed))
             {
-                validationFailureReason = "⚠️ Validation Failed:\n• OCR text not found in Tesseract scan\n• Mathematical calculation incorrect";
+                confidenceFailed = !confConfirmed;
+                validationFailed = validationFailed || confidenceFailed;
             }
-            else if (tesseractFailed)
+
+            // Build combined failure reason from all triggered validations
+            var reasons = new System.Text.StringBuilder();
+            if (tesseractFailed)
+                reasons.AppendLine("• OCR text not found in Tesseract scan");
+            if (mathFailed)
+                reasons.AppendLine("• Mathematical calculation incorrect");
+            if (confidenceFailed)
             {
-                validationFailureReason = "⚠️ OCR Validation Failed: This value was not found in the Tesseract OCR text scan";
+                double score = invoice.FieldConfidences != null && invoice.FieldConfidences.TryGetValue(name, out double c) ? c : 0;
+                reasons.AppendLine($"• Azure confidence too low ({score:P0})");
             }
-            else if (mathFailed)
-            {
-                validationFailureReason = "⚠️ Math Validation Failed: This calculated value does not match expected total (tolerance: 2¢)";
-            }
+
+            if (reasons.Length > 0)
+                validationFailureReason = "⚠️ Validation Failed:\n" + reasons.ToString().TrimEnd();
         }
         
         viewModel.DocumentFields.Add(new K_OCR.Models.DocumentField
@@ -2035,6 +2048,7 @@ try
             // Clear validation dictionaries
             viewModel.CurrentInvoice.TesseractConfirmed.Clear();
             viewModel.CurrentInvoice.MathConfirmed.Clear();
+            viewModel.CurrentInvoice.ConfidenceConfirmed.Clear();
             
             // Rebuild the DocumentFields to remove validation indicators
             var invoiceDto = viewModel.CurrentInvoice;

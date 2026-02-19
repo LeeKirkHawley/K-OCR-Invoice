@@ -1,5 +1,6 @@
 using K_OCR.Models;
 using K_OCR.PipelineService;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 
 namespace K_OCR.Services;
@@ -11,6 +12,8 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     private readonly ITesseractValidationService _tesseractValidation;
     private readonly IInvoiceValidationService _invoiceValidation;
     private readonly ILineItemValidationService _lineItemValidation;
+    private readonly IConfidenceValidationService _confidenceValidation;
+    private readonly IConfiguration _configuration;
     private readonly string _defaultPipelineConfigPath;
     
     public InvoiceProcessingService(
@@ -18,13 +21,17 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         IInvoiceService invoiceService,
         ITesseractValidationService tesseractValidation,
         IInvoiceValidationService invoiceValidation,
-        ILineItemValidationService lineItemValidation)
+        ILineItemValidationService lineItemValidation,
+        IConfidenceValidationService confidenceValidation,
+        IConfiguration configuration)
     {
         _fileService = fileService;
         _invoiceService = invoiceService;
         _tesseractValidation = tesseractValidation;
         _invoiceValidation = invoiceValidation;
         _lineItemValidation = lineItemValidation;
+        _confidenceValidation = confidenceValidation;
+        _configuration = configuration;
         _defaultPipelineConfigPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, 
             "PipelineService", 
@@ -253,6 +260,10 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             
             // Run mathematical validation
             _lineItemValidation.ValidateInvoiceMath(invoice);
+
+            // Run Azure confidence validation
+            var minConfidence = _configuration.GetValue<double>("MinConfidenceThreshold", 0.8);
+            _confidenceValidation.ValidateConfidence(invoice, minConfidence);
         }
     }
 }

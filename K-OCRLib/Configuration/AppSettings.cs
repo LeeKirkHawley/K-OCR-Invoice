@@ -12,6 +12,13 @@ public class AppSettings
     public double? SplitterCenterPaneWidth { get; set; }
     public double? SplitterRightPaneWidth { get; set; }
 
+    /// <summary>
+    /// Minimum Azure Document Intelligence confidence score (0.0 – 1.0) required
+    /// for a field to pass confidence validation.  Fields whose score is strictly
+    /// below this value are flagged in <see cref="K_OCR.Models.InvoiceDto.ConfidenceConfirmed"/>.
+    /// </summary>
+    public double MinConfidenceThreshold { get; set; } = 0.8;
+
     // Database configuration
     public DatabaseSettings? Database { get; set; }
 }
