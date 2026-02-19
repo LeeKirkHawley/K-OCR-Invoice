@@ -1,0 +1,680 @@
+/* ─── Reset & base ─────────────────────────────────────────── */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+}
+
+/* ─── Top toolbar bar ────────────────────────────────────────── */
+.kocr-top-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 36px;
+    padding: 0 12px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #404040;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.kocr-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: #e8e8e8;
+    letter-spacing: 0.5px;
+}
+
+.kocr-status {
+    font-size: 12px;
+    color: #999;
+    flex: 1;
+}
+
+/* ─── 3-pane shell ──────────────────────────────────────────── */
+.kocr-shell {
+    display: grid;
+    grid-template-columns: 220px 4px 1fr 4px 420px;
+    grid-template-rows: 1fr;
+    height: calc(100vh - 36px);
+    overflow: hidden;
+}
+
+.kocr-pane {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #252526;
+    min-width: 100px;
+}
+
+.kocr-pane-left {
+    border-right: none;
+    min-width: 140px;
+}
+
+.kocr-pane-center {
+    background: #1e1e1e;
+    min-width: 200px;
+}
+
+.kocr-pane-right {
+    min-width: 200px;
+    border-left: none;
+}
+
+/* ─── Splitters ─────────────────────────────────────────────── */
+.splitter {
+    width: 4px;
+    background: #404040;
+    cursor: col-resize;
+    transition: background 0.15s;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.splitter:hover,
+.splitter.dragging {
+    background: #007acc;
+}
+
+/* ─── Center pane placeholder ───────────────────────────────── */
+.kocr-center-placeholder,
+.kocr-right-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: #555;
+    font-size: 13px;
+    font-style: italic;
+    user-select: none;
+}
+
+/* ─── File list panel (left pane content) ───────────────────── */
+.file-list-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.file-list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #404040;
+    flex-shrink: 0;
+}
+
+.file-list-directory {
+    padding: 4px 8px;
+    font-size: 11px;
+    color: #888;
+    background: #2a2a2a;
+    border-bottom: 1px solid #3a3a3a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+}
+
+.file-list-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: #555;
+    font-size: 12px;
+    font-style: italic;
+    user-select: none;
+}
+
+.file-list-items {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.file-list-item {
+    display: flex;
+    align-items: center;
+    padding: 5px 8px;
+    cursor: pointer;
+    border-bottom: 1px solid #2e2e2e;
+    gap: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #ccc;
+}
+
+.file-list-item:hover {
+    background: #2a2a3a;
+}
+
+.file-list-item.selected {
+    background: #094771;
+    color: #fff;
+}
+
+.file-list-item .file-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.file-list-item .file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ─── Buttons ───────────────────────────────────────────────── */
+.btn-sm {
+    font-size: 12px;
+    padding: 3px 8px;
+}
+
+.btn-outline-secondary {
+    color: #aaa;
+    border-color: #555;
+    background: transparent;
+}
+
+.btn-outline-secondary:hover {
+    background: #3a3a3a;
+    color: #fff;
+    border-color: #777;
+}
+
+/* ─── Blazor error UI ───────────────────────────────────────── */
+#blazor-error-ui {
+    background: #b32121;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    color: white;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+.blazor-error-boundary {
+    background: #b32121;
+    padding: 1rem;
+    color: white;
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred."
+}
+
+/* ─── Top nav links ─────────────────────────────────────────── */
+.kocr-top-nav {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.kocr-nav-link {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #aaa;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+}
+
+.kocr-nav-link:hover {
+    background: #3a3a3a;
+    color: #fff;
+}
+
+.kocr-nav-link.active {
+    background: #094771;
+    color: #fff;
+}
+
+/* ─── Settings page ─────────────────────────────────────────── */
+.settings-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: #1e1e1e;
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 24px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #404040;
+    flex-shrink: 0;
+    gap: 12px;
+}
+
+.settings-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #e8e8e8;
+    flex: 1;
+}
+
+.settings-header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-save {
+    padding: 5px 16px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    background: #0e639c;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.btn-save:hover:not(:disabled) {
+    background: #1177bb;
+}
+
+.btn-save:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.btn-cancel {
+    padding: 5px 16px;
+    font-size: 12px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: transparent;
+    color: #aaa;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.btn-cancel:hover {
+    background: #3a3a3a;
+    color: #fff;
+}
+
+/* ─── Settings banners ───────────────────────────────────────── */
+.settings-banner {
+    padding: 8px 24px;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.settings-banner-success {
+    background: #1a3a1a;
+    color: #6abf69;
+    border-bottom: 1px solid #2e5a2e;
+}
+
+.settings-banner-error {
+    background: #3a1a1a;
+    color: #e07070;
+    border-bottom: 1px solid #5a2e2e;
+}
+
+/* ─── Settings content (scrollable) ────────────────────────── */
+.settings-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* ─── Settings sections ─────────────────────────────────────── */
+.settings-section {
+    border: 1px solid #383838;
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    background: #252526;
+}
+
+.settings-section-title {
+    margin: 0 0 14px 0;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #888;
+}
+
+/* ─── Individual fields ─────────────────────────────────────── */
+.settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 14px;
+}
+
+.settings-field:last-child {
+    margin-bottom: 0;
+}
+
+.settings-field-inline {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+.settings-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #ccc;
+    white-space: nowrap;
+}
+
+.settings-field-inline .settings-label {
+    min-width: 180px;
+}
+
+.settings-input {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #d4d4d4;
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+    max-width: 540px;
+    transition: border-color 0.15s;
+}
+
+.settings-input:focus {
+    border-color: #007acc;
+}
+
+.settings-input-narrow {
+    max-width: 120px;
+}
+
+.settings-select {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #d4d4d4;
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+    max-width: 300px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.settings-select:focus {
+    border-color: #007acc;
+}
+
+.settings-checkbox {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    accent-color: #007acc;
+}
+
+.settings-hint {
+    font-size: 11px;
+    color: #666;
+    font-style: italic;
+}
+
+/* ─── Status dots ────────────────────────────────────────────── */
+.file-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+.dot-unprocessed { background: #555;    }   /* grey  — never OCR'd */
+.dot-processed   { background: #4db8ff; }   /* blue  — OCR'd, no Tesseract data */
+.dot-validated   { background: #22c55e; }   /* green — all Tesseract checks passed */
+.dot-suspect     { background: #dc2626; }   /* red   — ≥1 Tesseract check failed */
+
+/* ─── Folder input ───────────────────────────────────────────── */
+.folder-input {
+    flex: 1;
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #d4d4d4;
+    font-size: 11px;
+    padding: 4px 7px;
+    outline: none;
+    min-width: 0;
+    transition: border-color 0.15s;
+}
+
+.folder-input:focus {
+    border-color: #007acc;
+}
+
+.folder-input:disabled {
+    opacity: 0.5;
+}
+
+.btn-open,
+.btn-refresh {
+    padding: 4px 7px;
+    font-size: 13px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: #2d2d2d;
+    color: #ccc;
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+}
+
+.btn-open:hover:not(:disabled),
+.btn-refresh:hover:not(:disabled) {
+    background: #3a3a3a;
+    color: #fff;
+    border-color: #666;
+}
+
+.btn-open:disabled,
+.btn-refresh:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* ─── File list error / loading ──────────────────────────────── */
+.file-list-error {
+    padding: 6px 8px;
+    font-size: 11px;
+    color: #e07070;
+    background: #2a1a1a;
+    border-bottom: 1px solid #5a2e2e;
+    flex-shrink: 0;
+}
+
+.file-list-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 8px;
+    font-size: 12px;
+    color: #888;
+    font-style: italic;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #555;
+    border-top-color: #4db8ff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+/* ─── Center pane file preview header ───────────────────────── */
+.kocr-file-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #404040;
+    flex-shrink: 0;
+    font-size: 12px;
+    overflow: hidden;
+}
+
+.kocr-file-preview-name {
+    color: #e8e8e8;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ─── Document viewer ───────────────────────────────────────── */
+
+/* The viewer fills whatever space the center pane gives it */
+.viewer-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #404040;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.viewer-btn {
+    padding: 3px 9px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #333;
+    color: #ccc;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+
+.viewer-btn:hover {
+    background: #444;
+    color: #fff;
+    border-color: #777;
+}
+
+.viewer-btn-fit {
+    font-size: 12px;
+    font-weight: 400;
+    padding: 3px 8px;
+}
+
+.viewer-zoom-label {
+    font-size: 12px;
+    color: #aaa;
+    min-width: 40px;
+    text-align: center;
+}
+
+.viewer-page-count {
+    font-size: 11px;
+    color: #666;
+    margin-left: 6px;
+}
+
+.viewer-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    background: #181818;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+}
+
+.viewer-page-wrap {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.viewer-page-img {
+    display: block;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+    background: #fff;
+    /* width is set inline by zoom % */
+}
+
+.viewer-page-label {
+    width: 100%;
+    text-align: center;
+    font-size: 11px;
+    color: #555;
+    padding: 8px 0 4px;
+    user-select: none;
+}
+
+.viewer-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex: 1;
+    font-size: 13px;
+    color: #777;
+    font-style: italic;
+}
+
+.viewer-error {
+    display: flex;
+    align-items: flex-start;
+    flex: 1;
+    padding: 16px;
+    font-size: 12px;
+    color: #e07070;
+    background: #1e1212;
+}

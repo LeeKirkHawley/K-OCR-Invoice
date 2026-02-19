@@ -1,0 +1,161 @@
+@inject WorkspaceState State
+@inject IImageService ImageService
+@inject IConfigurationService ConfigService
+@implements IAsyncDisposable
+
+@if (_loading)
+{
+    <div class="viewer-loading">
+        <span class="loading-spinner"></span> Loading document…
+    </div>
+}
+else if (_error is not null)
+{
+    <div class="viewer-error">⚠ @_error</div>
+}
+else if (_pages.Count == 0)
+{
+    <div class="kocr-center-placeholder">
+        <span>Select a file to view the document</span>
+    </div>
+}
+else
+{
+    <!-- Toolbar -->
+    <div class="viewer-toolbar">
+        <button class="viewer-btn" @onclick="ZoomOut" title="Zoom out (−)">−</button>
+        <span class="viewer-zoom-label">@ZoomLabel</span>
+        <button class="viewer-btn" @onclick="ZoomIn"  title="Zoom in (+)">+</button>
+        <button class="viewer-btn viewer-btn-fit" @onclick="ZoomFit" title="Fit to width">⊡ Fit</button>
+        @if (_pages.Count > 1)
+        {
+            <span class="viewer-page-count">@_pages.Count pages</span>
+        }
+    </div>
+
+    <!-- Pages -->
+    <div class="viewer-scroll">
+        @for (int i = 0; i < _pages.Count; i++)
+        {
+            var page  = _pages[i];
+            var label = i + 1;
+            @if (_pages.Count > 1)
+            {
+                <div class="viewer-page-label">Page @label</div>
+            }
+            <div class="viewer-page-wrap">
+                <img class="viewer-page-img"
+                     src="/api/image?path=@Uri.EscapeDataString(page)"
+                     style="width: @(_zoomPct.ToString("0", System.Globalization.CultureInfo.InvariantCulture))%;"
+                     alt="Page @label"
+                     loading="lazy" />
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<string> _pages    = new();
+    private bool         _loading;
+    private string?      _error;
+    private double       _zoomPct  = 100.0;
+    private string?      _lastPath;
+
+    private string ZoomLabel => _zoomPct == 100.0 ? "100%" : $"{_zoomPct:0}%";
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.OnChange += OnStateChanged;
+        await LoadPagesAsync(State.SelectedFilePath);
+    }
+
+    private void OnStateChanged() =>
+        InvokeAsync(async () =>
+        {
+            await CheckAndLoadAsync();
+            StateHasChanged();
+        });
+
+    private async Task CheckAndLoadAsync()
+    {
+        var path = State.SelectedFilePath;
+        if (path == _lastPath) return;
+        await LoadPagesAsync(path);
+    }
+
+    // ── Image loading ─────────────────────────────────────────────────────────
+
+    private async Task LoadPagesAsync(string? filePath)
+    {
+        _lastPath = filePath;
+        _pages.Clear();
+        _error = null;
+
+        if (filePath is null)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var ext = Path.GetExtension(filePath).ToLowerInvariant();
+
+            if (ext == ".pdf")
+            {
+                var settings  = await ConfigService.LoadSettingsAsync();
+                var artifacts = settings.ProjectArtifacts;
+
+                if (string.IsNullOrEmpty(artifacts))
+                {
+                    // Fall back to an "artifacts" sub-folder beside the PDF
+                    artifacts = Path.Combine(
+                        Path.GetDirectoryName(filePath) ?? string.Empty,
+                        "artifacts");
+                }
+
+                var pages = await ImageService.ConvertPdfToAllPngsAsync(filePath, artifacts);
+                _pages = pages;
+
+                if (_pages.Count == 0)
+                    _error = "PDF could not be converted — no pages were produced.";
+            }
+            else
+            {
+                if (!File.Exists(filePath))
+                    _error = "File not found.";
+                else
+                    _pages = new List<string> { filePath };
+            }
+
+            _zoomPct = 100.0;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load document: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    // ── Zoom controls ─────────────────────────────────────────────────────────
+
+    private void ZoomIn()  => _zoomPct = Math.Min(_zoomPct * 1.25, 500.0);
+    private void ZoomOut() => _zoomPct = Math.Max(_zoomPct / 1.25,  20.0);
+    private void ZoomFit() => _zoomPct = 100.0;
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+
+    public ValueTask DisposeAsync()
+    {
+        State.OnChange -= OnStateChanged;
+        return ValueTask.CompletedTask;
+    }
+}

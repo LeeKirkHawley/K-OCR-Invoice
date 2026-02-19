@@ -1,0 +1,216 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inject IFileService FileService
+@inject DatabaseService DatabaseSvc
+@inject WorkspaceState State
+@inject IConfigurationService ConfigService
+
+<PageTitle>K-OCR</PageTitle>
+
+<div class="file-list-panel">
+
+    <!-- ── Toolbar ──────────────────────────────────────────── -->
+    <div class="file-list-toolbar">
+        <input type="text"
+               class="folder-input"
+               placeholder="/path/to/invoices"
+               @bind="_folderPath"
+               @bind:event="oninput"
+               @onkeydown="OnFolderKeyDown"
+               disabled="@_loading"
+               title="Folder path" />
+        <button class="btn btn-open"
+                @onclick="LoadDirectoryAsync"
+                disabled="@_loading"
+                title="Open folder">
+            📂
+        </button>
+        @if (State.Files.Count > 0)
+        {
+            <button class="btn btn-refresh"
+                    @onclick="LoadDirectoryAsync"
+                    disabled="@_loading"
+                    title="Refresh">
+                🔄
+            </button>
+        }
+    </div>
+
+    <!-- ── Status messages ──────────────────────────────────── -->
+    @if (_errorMessage is not null)
+    {
+        <div class="file-list-error">⚠ @_errorMessage</div>
+    }
+
+    @if (State.CurrentDirectory is not null)
+    {
+        <div class="file-list-directory" title="@State.CurrentDirectory">
+            @TruncatePath(State.CurrentDirectory)
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="file-list-loading">
+            <span class="loading-spinner"></span> Loading…
+        </div>
+    }
+
+    <!-- ── File list ─────────────────────────────────────────── -->
+    @if (!_loading)
+    {
+        @if (State.Files.Count == 0 && State.CurrentDirectory is null)
+        {
+            <div class="file-list-empty">Open a folder to see files</div>
+        }
+        else if (State.Files.Count == 0)
+        {
+            <div class="file-list-empty">No supported files in this folder</div>
+        }
+        else
+        {
+            <div class="file-list-items">
+                @foreach (var file in State.Files)
+                {
+                    <div class="file-list-item @(file.FilePath == State.SelectedFilePath ? "selected" : "")"
+                         @onclick="() => SelectFile(file)"
+                         title="@file.FilePath">
+                        <span class="file-status-dot @file.DotClass" title="@file.StatusLabel"></span>
+                        <span class="file-name">@file.FileName</span>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+</div>
+
+@code {
+    private string  _folderPath   = string.Empty;
+    private bool    _loading;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Auto-load the project directory from settings if set
+        var settings = await ConfigService.LoadSettingsAsync();
+        if (!string.IsNullOrEmpty(settings.ProjectDirectory))
+        {
+            _folderPath = settings.ProjectDirectory;
+            await LoadDirectoryAsync();
+        }
+    }
+
+    private async Task OnFolderKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await LoadDirectoryAsync();
+    }
+
+    private void SelectFile(FileListEntry file) =>
+        State.SelectFile(file.FilePath);
+
+    private async Task LoadDirectoryAsync()
+    {
+        _errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(_folderPath))
+        {
+            _errorMessage = "Enter a folder path.";
+            return;
+        }
+
+        if (!Directory.Exists(_folderPath))
+        {
+            _errorMessage = $"Directory not found: {_folderPath}";
+            return;
+        }
+
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
+            var allFiles   = FileService.LoadFiles(_folderPath, extensions).ToList();
+
+            // Suppress PDF-derived PNG files (e.g. invoice.pdf → invoice.png)
+            var pdfBaseNames = new HashSet<string>(
+                allFiles.Where(f => Path.GetExtension(f).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+                        .Select(Path.GetFileNameWithoutExtension)
+                        .Where(n => n is not null)
+                        .Select(n => n!),
+                StringComparer.OrdinalIgnoreCase);
+
+            var entries = new List<FileListEntry>();
+
+            foreach (var filePath in allFiles)
+            {
+                var ext      = Path.GetExtension(filePath);
+                var baseName = Path.GetFileNameWithoutExtension(filePath);
+
+                if (ext.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                    && baseName is not null && pdfBaseNames.Contains(baseName))
+                    continue;
+
+                var entry = new FileListEntry
+                {
+                    FilePath = filePath,
+                    FileName = Path.GetFileName(filePath)
+                };
+
+                // Check DB for OCR / validation status
+                var ocrFile = await DatabaseSvc.GetOCRFileByPathAsync(filePath);
+                if (ocrFile is not null)
+                {
+                    entry.IsProcessed = true;
+
+                    if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+                    {
+                        try
+                        {
+                            K_OCR.Models.InvoiceDto? invoice = null;
+                            try
+                            {
+                                invoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(
+                                    ocrFile.ValidatedOcrText);
+                            }
+                            catch
+                            {
+                                var list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(
+                                    ocrFile.ValidatedOcrText);
+                                invoice = list?.FirstOrDefault();
+                            }
+
+                            if (invoice?.TesseractConfirmed?.Count > 0)
+                            {
+                                entry.HasSuspectFields = invoice.TesseractConfirmed.Values.Any(v => !v);
+                                entry.IsValidated      = !entry.HasSuspectFields;
+                            }
+                        }
+                        catch { /* ignore parse errors */ }
+                    }
+                }
+
+                entries.Add(entry);
+            }
+
+            State.SetDirectory(_folderPath, entries);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load folder: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string TruncatePath(string path, int maxLen = 36)
+    {
+        if (path.Length <= maxLen) return path;
+        var parts = path.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length <= 2) return "…" + path[^maxLen..];
+        return $"…{Path.DirectorySeparatorChar}{parts[^2]}{Path.DirectorySeparatorChar}{parts[^1]}";
+    }
+}

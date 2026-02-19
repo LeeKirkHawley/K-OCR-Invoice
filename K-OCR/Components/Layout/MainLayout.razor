@@ -1,0 +1,95 @@
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JS
+@inject WorkspaceState State
+@implements IAsyncDisposable
+
+<div class="kocr-top-bar">
+    <span class="kocr-title">K-OCR</span>
+    <span class="kocr-status">@State.StatusMessage</span>
+    <nav class="kocr-top-nav">
+        <NavLink href="/" class="kocr-nav-link" Match="NavLinkMatch.All">Files</NavLink>
+        <NavLink href="/settings" class="kocr-nav-link">⚙ Settings</NavLink>
+    </nav>
+</div>
+
+<div class="kocr-shell" @ref="_shellRef">
+    <!-- Left pane — @Body renders here (file list / settings page) -->
+    <div class="kocr-pane kocr-pane-left">
+        @Body
+    </div>
+
+    <!-- Left splitter -->
+    <div class="splitter splitter-left" title="Drag to resize"></div>
+
+    <!-- Center pane — document image viewer -->
+    <div class="kocr-pane kocr-pane-center">
+        @if (State.SelectedFile is { } selected)
+        {
+            <div class="kocr-file-preview-header">
+                <span class="file-status-dot @selected.DotClass" title="@selected.StatusLabel"></span>
+                <span class="kocr-file-preview-name" title="@selected.FilePath">@selected.FileName</span>
+            </div>
+        }
+        <DocumentViewer />
+    </div>
+
+    <!-- Right splitter -->
+    <div class="splitter splitter-right" title="Drag to resize"></div>
+
+    <!-- Right pane — validation / data panel -->
+    <div class="kocr-pane kocr-pane-right">
+        @if (State.SelectedFile is not null)
+        {
+            <div class="kocr-right-placeholder">
+                <span>Validation panel — coming next</span>
+            </div>
+        }
+        else
+        {
+            <div class="kocr-right-placeholder">
+                <span>No document data available</span>
+            </div>
+        }
+    </div>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private ElementReference _shellRef;
+    private DotNetObjectReference<MainLayout>? _selfRef;
+
+    protected override void OnInitialized()
+    {
+        State.OnChange += OnStateChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("kocrLayout.initSplitters", _selfRef);
+        }
+    }
+
+    private void OnStateChanged() =>
+        InvokeAsync(StateHasChanged);
+
+    [JSInvokable]
+    public void OnPaneWidthsChanged(double left, double right)
+    {
+        // Pane widths are persisted by JS in localStorage; nothing to do server-side yet.
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        State.OnChange -= OnStateChanged;
+        _selfRef?.Dispose();
+        await ValueTask.CompletedTask;
+    }
+}
