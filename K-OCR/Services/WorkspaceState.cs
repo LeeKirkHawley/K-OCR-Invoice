@@ -20,6 +20,21 @@ public class WorkspaceState
     public FileListEntry? SelectedFile =>
         Files.FirstOrDefault(f => f.FilePath == SelectedFilePath);
 
+    /// <summary>The invoice loaded or processed for the currently selected file.</summary>
+    public InvoiceDto? SelectedInvoice { get; private set; }
+
+    /// <summary>True while OCR is running for any file in this session.</summary>
+    public bool IsOcrRunning { get; private set; }
+
+    /// <summary>Per-file OCR progress message. Key = absolute file path.</summary>
+    public Dictionary<string, string> OcrProgress { get; } = new();
+
+    /// <summary>
+    /// The field name currently selected in the validation panel (e.g. "VendorName").
+    /// DocumentViewer watches this to highlight the matching bounding box.
+    /// </summary>
+    public string? SelectedFieldName { get; private set; }
+
     /// <summary>Short message shown in the top bar (e.g. "42 files · 3 processed").</summary>
     public string StatusMessage { get; private set; } = string.Empty;
 
@@ -39,16 +54,34 @@ public class WorkspaceState
         CurrentDirectory  = path;
         Files             = files;
         SelectedFilePath  = null;
-        StatusMessage     = statusMessage
-            ?? (path is null ? string.Empty
-                             : BuildDefaultStatus(files));
+        SelectedInvoice   = null;
+        SelectedFieldName = null;
+        OcrProgress.Clear();
+        StatusMessage    = statusMessage
+            ?? (path is null ? string.Empty : BuildDefaultStatus(files));
         NotifyChange();
     }
 
-    /// <summary>Set (or clear) the currently selected file.</summary>
-    public void SelectFile(string? filePath)
+    /// <summary>Set (or clear) the currently selected file and its cached invoice (if any).</summary>
+    public void SelectFile(string? filePath, InvoiceDto? invoice = null)
     {
-        SelectedFilePath = filePath;
+        SelectedFilePath  = filePath;
+        SelectedInvoice   = invoice;
+        SelectedFieldName = null;
+        NotifyChange();
+    }
+
+    /// <summary>Set (or clear) the field currently highlighted in the validation panel.</summary>
+    public void SetSelectedField(string? fieldName)
+    {
+        SelectedFieldName = fieldName;
+        NotifyChange();
+    }
+
+    /// <summary>Update the invoice for the currently selected file (after OCR or cache load).</summary>
+    public void SetSelectedInvoice(InvoiceDto? invoice)
+    {
+        SelectedInvoice = invoice;
         NotifyChange();
     }
 
@@ -60,6 +93,21 @@ public class WorkspaceState
         if (idx >= 0) list[idx] = updated;
         Files = list;
         StatusMessage = BuildDefaultStatus(Files);
+        NotifyChange();
+    }
+
+    /// <summary>Mark OCR as running / idle, optionally updating the top-bar message.</summary>
+    public void SetOcrRunning(bool running, string? statusMessage = null)
+    {
+        IsOcrRunning = running;
+        if (statusMessage is not null) StatusMessage = statusMessage;
+        NotifyChange();
+    }
+
+    /// <summary>Record a per-file OCR progress message and notify subscribers.</summary>
+    public void SetOcrProgress(string filePath, string message)
+    {
+        OcrProgress[filePath] = message;
         NotifyChange();
     }
 

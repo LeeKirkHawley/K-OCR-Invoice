@@ -85,3 +85,23 @@ window.kocrLayout = {
         });
     }
 };
+
+// ── File download helper ──────────────────────────────────────────────────────
+// Called from Blazor via JS interop to trigger a browser Save-File dialog.
+// base64Data : base64-encoded byte array (string)
+// fileName   : suggested filename shown in the browser dialog
+// mimeType   : e.g. 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+window.kocrExport = {
+    saveAs: function (base64Data, fileName, mimeType) {
+        const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        const blob  = new Blob([bytes], { type: mimeType });
+        const url   = URL.createObjectURL(blob);
+        const a     = document.createElement('a');
+        a.href      = url;
+        a.download  = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+};

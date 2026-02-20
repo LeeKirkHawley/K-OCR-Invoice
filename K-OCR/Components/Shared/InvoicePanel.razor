@@ -1,0 +1,441 @@
+@inject WorkspaceState State
+@inject IInvoiceProcessingService ProcessingService
+@inject IConfigurationService ConfigService
+@inject IDocumentExportService ExportService
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="invoice-panel">
+    @if (_invoice is { } inv)
+    {
+        @* ── Status banner ──────────────────────────────────────────── *@
+        @if (inv.IsValidationAccepted)
+        {
+            <div class="inv-status-banner inv-banner-accepted">
+                <span class="inv-banner-icon">✓</span> Validation accepted
+            </div>
+        }
+        else if (inv.IsEditedByUser)
+        {
+            <div class="inv-status-banner inv-banner-edited">
+                <span class="inv-banner-icon">✓</span> Edited by user
+            </div>
+        }
+        else if (_suspectCount > 0)
+        {
+            <div class="inv-status-banner inv-banner-suspect">
+                <span class="inv-banner-icon">⚠</span>
+                @_suspectCount suspect field@(_suspectCount == 1 ? "" : "s")
+            </div>
+        }
+
+        @* ── Action toolbar ─────────────────────────────────────────── *@
+        @if (!inv.IsValidationAccepted)
+        {
+            <div class="inv-actions">
+                @if (_editMode)
+                {
+                    <button class="btn inv-btn-save" @onclick="SaveEditAsync" disabled="@_saving">
+                        @(_saving ? "Saving…" : "💾 Save")
+                    </button>
+                    <button class="btn inv-btn-cancel" @onclick="CancelEdit" disabled="@_saving">
+                        Cancel
+                    </button>
+                }
+                else
+                {
+                    <button class="btn inv-btn-edit" @onclick="EnterEditMode">✏ Edit</button>
+                    <button class="btn inv-btn-accept" @onclick="AcceptValidationAsync" disabled="@_saving">
+                        @(_saving ? "Saving…" : "✓ Accept")
+                    </button>
+                    <button class="btn inv-btn-export" @onclick="ExportDocxAsync" disabled="@_exporting"
+                            title="Download invoice as Word document">
+                        @(_exporting ? "Exporting…" : "⬇ DOCX")
+                    </button>
+                }
+            </div>
+        }
+
+        @* ── Header fields ──────────────────────────────────────────── *@
+        <div class="inv-fields-section">
+            @foreach (var (key, label) in _headerFields)
+            {
+                var k       = key;
+                var suspect = IsFieldSuspect(k);
+                var isOk    = IsFieldChecked(k);
+                var tip     = GetFieldTooltip(k);
+                var isSel   = State.SelectedFieldName == k && _invoice?.FieldBoundingBoxes.ContainsKey(k) == true;
+                <div class="inv-field-row @(suspect ? "inv-suspect" : isOk ? "inv-ok" : "") @(isSel ? "inv-field-selected" : "")"
+                     @onclick="() => ToggleFieldSelection(k)"
+                     title="@tip">
+                    <label class="inv-field-label @(suspect ? "inv-suspect-label" : "")">@label</label>
+                    @if (_editMode)
+                    {
+                        <input type="text"
+                               class="inv-field-input @(suspect ? "inv-suspect-input" : "")"
+                               value="@_editValues.GetValueOrDefault(k, string.Empty)"
+                               @onchange="@(e => _editValues[k] = e.Value?.ToString() ?? string.Empty)" />
+                    }
+                    else
+                    {
+                        <span class="inv-field-value @(suspect ? "inv-suspect-text" : "")">
+                            @(string.IsNullOrEmpty(_editValues.GetValueOrDefault(k)) ? "—" : _editValues[k])
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+
+        @* ── Line items ─────────────────────────────────────────────── *@
+        @if (inv.Items.Count > 0)
+        {
+            <div class="inv-line-items-section">
+                <div class="inv-section-title">Line Items (@inv.Items.Count)</div>
+
+                @for (int i = 0; i < inv.Items.Count; i++)
+                {
+                    var idx      = i;
+                    var item     = inv.Items[idx];
+                    var liSuspect = IsLineItemSuspect(item);
+
+                    <div class="inv-line-item @(liSuspect ? "inv-li-suspect" : "")">
+                        <div class="inv-li-row inv-li-desc-row">
+                            <span class="inv-li-label">Description</span>
+                            @if (_editMode)
+                            {
+                                <input type="text"
+                                       class="inv-field-input"
+                                       value="@item.Description"
+                                       @onchange="@(e => inv.Items[idx].Description = e.Value?.ToString() ?? string.Empty)" />
+                            }
+                            else
+                            {
+                                <span class="inv-li-value">
+                                    @(string.IsNullOrEmpty(item.Description) ? "—" : item.Description)
+                                </span>
+                            }
+                        </div>
+
+                        <div class="inv-li-row inv-li-nums-row">
+                            <div class="inv-li-num-col">
+                                <span class="inv-li-label">Qty</span>
+                                @if (_editMode)
+                                {
+                                    <input type="text"
+                                           class="inv-field-input inv-input-num"
+                                           value="@(inv.Items[idx].Quantity?.ToString("G"))"
+                                           @onchange="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].Quantity = v; })" />
+                                }
+                                else
+                                {
+                                    <span class="inv-num">@(item.Quantity?.ToString("G") ?? "—")</span>
+                                }
+                            </div>
+                            <div class="inv-li-num-col">
+                                <span class="inv-li-label">Unit Price</span>
+                                @if (_editMode)
+                                {
+                                    <input type="text"
+                                           class="inv-field-input inv-input-num"
+                                           value="@(inv.Items[idx].UnitPrice?.ToString("F2"))"
+                                           @onchange="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].UnitPrice = v; })" />
+                                }
+                                else
+                                {
+                                    <span class="inv-num">@(item.UnitPrice?.ToString("C") ?? "—")</span>
+                                }
+                            </div>
+                            <div class="inv-li-num-col">
+                                <span class="inv-li-label">Amount</span>
+                                <span class="inv-num inv-num-bold">@(item.Amount?.ToString("C") ?? "—")</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+    else if (State.SelectedFilePath is not null)
+    {
+        <div class="inv-empty">No invoice data — run OCR first.</div>
+    }
+    else
+    {
+        <div class="inv-empty">Select a file to view data.</div>
+    }
+</div>
+
+@code {
+    private InvoiceDto? _invoice;
+    private bool        _editMode;
+    private bool        _saving;
+    private bool        _exporting;
+    private int         _suspectCount;
+
+    // Header field definitions — Key matches InvoiceDto property name exactly
+    private static readonly (string Key, string Label)[] _headerFields =
+    [
+        ("VendorName",    "Vendor"),
+        ("CustomerName",  "Customer"),
+        ("InvoiceId",     "Invoice #"),
+        ("InvoiceDate",   "Invoice Date"),
+        ("DueDate",       "Due Date"),
+        ("PurchaseOrder", "PO #"),
+        ("Subtotal",      "Subtotal"),
+        ("TotalTax",      "Tax"),
+        ("Shipping",      "Shipping"),
+        ("Total",         "Total"),
+    ];
+
+    // String-backed mutable state — display + edit values share this dictionary
+    private readonly Dictionary<string, string> _editValues = new();
+
+    // JSON snapshot of line items taken when entering edit mode (for CancelEdit restore)
+    private string _lineItemsJson = "[]";
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    protected override void OnInitialized()
+    {
+        State.OnChange += OnStateChanged;
+        _invoice = State.SelectedInvoice;
+        PopulateEditValues();
+        ComputeSuspectCount();
+    }
+
+    public void Dispose() => State.OnChange -= OnStateChanged;
+
+    private void OnStateChanged() => InvokeAsync(() =>
+    {
+        if (!ReferenceEquals(State.SelectedInvoice, _invoice))
+        {
+            _invoice  = State.SelectedInvoice;
+            _editMode = false;
+            _saving   = false;
+            PopulateEditValues();
+            ComputeSuspectCount();
+        }
+        StateHasChanged();
+    });
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private void PopulateEditValues()
+    {
+        _editValues.Clear();
+        if (_invoice is null) return;
+
+        _editValues["VendorName"]    = _invoice.VendorName    ?? string.Empty;
+        _editValues["CustomerName"]  = _invoice.CustomerName  ?? string.Empty;
+        _editValues["InvoiceId"]     = _invoice.InvoiceId     ?? string.Empty;
+        _editValues["InvoiceDate"]   = _invoice.InvoiceDate   ?? string.Empty;
+        _editValues["DueDate"]       = _invoice.DueDate       ?? string.Empty;
+        _editValues["PurchaseOrder"] = _invoice.PurchaseOrder ?? string.Empty;
+        _editValues["Subtotal"]      = _invoice.Subtotal?.ToString("F2")  ?? string.Empty;
+        _editValues["TotalTax"]      = _invoice.TotalTax?.ToString("F2")  ?? string.Empty;
+        _editValues["Shipping"]      = _invoice.Shipping?.ToString("F2")  ?? string.Empty;
+        _editValues["Total"]         = _invoice.Total?.ToString("F2")     ?? string.Empty;
+    }
+
+    private void ComputeSuspectCount()
+    {
+        if (_invoice is null || _invoice.IsValidationAccepted || _invoice.IsEditedByUser)
+        {
+            _suspectCount = 0;
+            return;
+        }
+        _suspectCount = _headerFields.Count(f => IsFieldSuspect(f.Key))
+                      + (_invoice.Items?.Count(IsLineItemSuspect) ?? 0);
+    }
+
+    private bool IsFieldSuspect(string fieldName)
+    {
+        if (_invoice is null || _invoice.IsValidationAccepted || _invoice.IsEditedByUser) return false;
+        if (_invoice.TesseractConfirmed.TryGetValue(fieldName,  out var t) && !t) return true;
+        if (_invoice.ConfidenceConfirmed.TryGetValue(fieldName, out var c) && !c) return true;
+        if (_invoice.MathConfirmed.TryGetValue(fieldName,       out var m) && !m) return true;
+        return false;
+    }
+
+    private bool IsFieldChecked(string fieldName)
+    {
+        if (_invoice is null) return false;
+        return _invoice.TesseractConfirmed.ContainsKey(fieldName)
+            || _invoice.ConfidenceConfirmed.ContainsKey(fieldName)
+            || _invoice.MathConfirmed.ContainsKey(fieldName);
+    }
+
+    private string? GetFieldTooltip(string fieldName)
+    {
+        if (_invoice is null) return null;
+        var reasons = new List<string>();
+        if (_invoice.TesseractConfirmed.TryGetValue(fieldName,  out var t) && !t) reasons.Add("Tesseract mismatch");
+        if (_invoice.ConfidenceConfirmed.TryGetValue(fieldName, out var c) && !c) reasons.Add("Low Azure confidence");
+        if (_invoice.MathConfirmed.TryGetValue(fieldName,       out var m) && !m) reasons.Add("Math error");
+        return reasons.Count > 0 ? string.Join(" · ", reasons) : null;
+    }
+
+    private bool IsLineItemSuspect(InvoiceItemDto item)
+    {
+        if (_invoice?.IsValidationAccepted == true || _invoice?.IsEditedByUser == true) return false;
+        return item.TesseractConfirmed.Values.Any(v => !v)
+            || item.ConfidenceConfirmed.Values.Any(v => !v);
+    }
+
+    // ── Edit mode ─────────────────────────────────────────────────────────────
+
+    private void EnterEditMode()
+    {
+        // Snapshot line items so CancelEdit can restore them
+        _lineItemsJson = Newtonsoft.Json.JsonConvert.SerializeObject(_invoice?.Items ?? []);
+        State.SetSelectedField(null); // clear bounding box highlight while editing
+        _editMode = true;
+    }
+
+    private void CancelEdit()
+    {
+        // Restore line items from snapshot (in-place, since Items list has init on the property)
+        if (_invoice is not null)
+        {
+            var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<List<InvoiceItemDto>>(_lineItemsJson)
+                           ?? [];
+            _invoice.Items.Clear();
+            _invoice.Items.AddRange(restored);
+        }
+        _editMode = false;
+        PopulateEditValues();
+    }
+
+    // ── Field selection (bounding box highlight) ──────────────────────────────
+
+    /// <summary>
+    /// Toggle the field selection: first click selects (highlights bbox on image),
+    /// second click on the same field deselects.
+    /// Fields without bounding box data are silently ignored.
+    /// </summary>
+    private void ToggleFieldSelection(string fieldName)
+    {
+        if (_invoice?.FieldBoundingBoxes.ContainsKey(fieldName) != true) return;
+        State.SetSelectedField(State.SelectedFieldName == fieldName ? null : fieldName);
+    }
+
+    // ── Actions ───────────────────────────────────────────────────────────────
+
+    private async Task SaveEditAsync()
+    {
+        if (_invoice is null || State.SelectedFilePath is null) return;
+        _saving = true;
+        try
+        {
+            decimal? ParseDec(string key) =>
+                decimal.TryParse(_editValues.GetValueOrDefault(key),
+                                 System.Globalization.NumberStyles.Any,
+                                 System.Globalization.CultureInfo.InvariantCulture,
+                                 out var v) ? v : null;
+
+            var updated = new InvoiceDto
+            {
+                VendorName           = _editValues.GetValueOrDefault("VendorName",    string.Empty),
+                CustomerName         = _editValues.GetValueOrDefault("CustomerName",  string.Empty),
+                InvoiceId            = _editValues.GetValueOrDefault("InvoiceId",     string.Empty),
+                InvoiceDate          = _editValues.GetValueOrDefault("InvoiceDate",   string.Empty),
+                DueDate              = _editValues.GetValueOrDefault("DueDate",       string.Empty),
+                PurchaseOrder        = _editValues.GetValueOrDefault("PurchaseOrder", string.Empty),
+                Subtotal             = ParseDec("Subtotal"),
+                TotalTax             = ParseDec("TotalTax"),
+                Shipping             = ParseDec("Shipping"),
+                Total                = ParseDec("Total"),
+                Items                = _invoice.Items,         // mutated in-place during edit
+                FieldBoundingBoxes   = _invoice.FieldBoundingBoxes,
+                FieldConfidences     = _invoice.FieldConfidences,
+                OriginalPageWidth    = _invoice.OriginalPageWidth,
+                OriginalPageHeight   = _invoice.OriginalPageHeight,
+                PageCount            = _invoice.PageCount,
+                TesseractConfirmed   = _invoice.TesseractConfirmed,
+                ConfidenceConfirmed  = _invoice.ConfidenceConfirmed,
+                MathConfirmed        = _invoice.MathConfirmed,
+                IsEditedByUser       = true,
+                IsValidationAccepted = false,
+            };
+
+            var settings = await ConfigService.LoadSettingsAsync();
+            await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, updated, settings.ProjectArtifacts);
+
+            State.SetSelectedInvoice(updated);
+            _invoice = updated;
+            PopulateEditValues();
+            ComputeSuspectCount();
+            _editMode = false;
+        }
+        catch { /* non-fatal; TODO: surface error in status bar */ }
+        finally
+        {
+            _saving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AcceptValidationAsync()
+    {
+        if (_invoice is null || State.SelectedFilePath is null) return;
+        _saving = true;
+        try
+        {
+            _invoice.IsValidationAccepted = true;
+            var settings = await ConfigService.LoadSettingsAsync();
+            await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, _invoice, settings.ProjectArtifacts);
+            State.SetSelectedInvoice(_invoice);
+            _suspectCount = 0;
+        }
+        catch { /* non-fatal */ }
+        finally
+        {
+            _saving = false;
+            StateHasChanged();
+        }
+    }
+
+    // ── DOCX export ───────────────────────────────────────────────────────────
+
+    private async Task ExportDocxAsync()
+    {
+        if (_invoice is null || State.SelectedFilePath is null || _exporting) return;
+        _exporting = true;
+        StateHasChanged();
+        try
+        {
+            // Build a minimal OCRFile so DocumentExportService can write the DOCX.
+            var ocrFile = new K_OCR.Models.OCRFile
+            {
+                FilePath         = State.SelectedFilePath,
+                OcrText          = string.Empty,
+                ValidatedOcrText = Newtonsoft.Json.JsonConvert.SerializeObject(_invoice),
+            };
+
+            // ExportToDocxAsync writes to a file path; use a temp file then read it back.
+            var tmp = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                System.IO.Path.GetFileNameWithoutExtension(State.SelectedFilePath) + ".docx");
+
+            await ExportService.ExportToDocxAsync(ocrFile, tmp);
+
+            var bytes    = await System.IO.File.ReadAllBytesAsync(tmp);
+            var base64   = Convert.ToBase64String(bytes);
+            var fileName = System.IO.Path.GetFileNameWithoutExtension(State.SelectedFilePath) + ".docx";
+            const string mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+            await JS.InvokeVoidAsync("kocrExport.saveAs", base64, fileName, mime);
+
+            try { System.IO.File.Delete(tmp); } catch { /* best-effort cleanup */ }
+        }
+        catch (Exception ex)
+        {
+            State.SetStatus($"Export failed: {ex.Message}");
+        }
+        finally
+        {
+            _exporting = false;
+            StateHasChanged();
+        }
+    }
+}

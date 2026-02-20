@@ -4,6 +4,7 @@
 @inject DatabaseService DatabaseSvc
 @inject WorkspaceState State
 @inject IConfigurationService ConfigService
+@inject IInvoiceProcessingService ProcessingService
 
 <PageTitle>K-OCR</PageTitle>
 
@@ -29,9 +30,25 @@
         {
             <button class="btn btn-refresh"
                     @onclick="LoadDirectoryAsync"
-                    disabled="@_loading"
+                    disabled="@(_loading || State.IsOcrRunning)"
                     title="Refresh">
                 🔄
+            </button>
+            <div class="file-list-toolbar-sep"></div>
+            @if (State.SelectedFilePath is not null)
+            {
+                <button class="btn btn-ocr-now"
+                        @onclick="OcrNowAsync"
+                        disabled="@State.IsOcrRunning"
+                        title="Run OCR on the selected file (ignores cache)">
+                    ⚡ OCR Now
+                </button>
+            }
+            <button class="btn btn-batch-ocr"
+                    @onclick="BatchOcrAsync"
+                    disabled="@State.IsOcrRunning"
+                    title="Run OCR on all unprocessed files">
+                @(State.IsOcrRunning ? "Running…" : "⚡ Batch OCR")
             </button>
         }
     </div>
@@ -46,6 +63,14 @@
     {
         <div class="file-list-directory" title="@State.CurrentDirectory">
             @TruncatePath(State.CurrentDirectory)
+        </div>
+    }
+
+    @if (State.IsOcrRunning && State.OcrProgress.Count > 0)
+    {
+        var lastMsg = State.OcrProgress.Values.Last();
+        <div class="file-list-ocr-progress">
+            <span class="loading-spinner"></span> @lastMsg
         </div>
     }
 
@@ -72,11 +97,16 @@
             <div class="file-list-items">
                 @foreach (var file in State.Files)
                 {
+                    var progress = State.OcrProgress.GetValueOrDefault(file.FilePath);
                     <div class="file-list-item @(file.FilePath == State.SelectedFilePath ? "selected" : "")"
-                         @onclick="() => SelectFile(file)"
+                         @onclick="() => SelectFileAsync(file)"
                          title="@file.FilePath">
                         <span class="file-status-dot @file.DotClass" title="@file.StatusLabel"></span>
                         <span class="file-name">@file.FileName</span>
+                        @if (progress is not null)
+                        {
+                            <span class="file-ocr-badge" title="@progress">⚡</span>
+                        }
                     </div>
                 }
             </div>
@@ -106,8 +136,135 @@
         if (e.Key == "Enter") await LoadDirectoryAsync();
     }
 
-    private void SelectFile(FileListEntry file) =>
+    // ── File selection — loads cached invoice from DB ──────────────────────
+    private async Task SelectFileAsync(FileListEntry file)
+    {
         State.SelectFile(file.FilePath);
+
+        // Load cached invoice in background so the viewer can show it immediately
+        try
+        {
+            var settings = await ConfigService.LoadSettingsAsync();
+            var invoice  = await ProcessingService.LoadCachedInvoiceAsync(file.FilePath, settings.ProjectArtifacts);
+            State.SetSelectedInvoice(invoice);
+        }
+        catch { /* non-fatal — invoice panel will show empty */ }
+    }
+
+    // ── OCR Now — reprocess the selected file, ignoring cache ─────────────
+    private async Task OcrNowAsync()
+    {
+        var filePath = State.SelectedFilePath;
+        if (filePath is null || State.IsOcrRunning) return;
+
+        State.SetOcrRunning(true);
+        State.SetOcrProgress(filePath, $"Running OCR on {Path.GetFileName(filePath)}…");
+        try
+        {
+            var settings = await ConfigService.LoadSettingsAsync();
+            var result   = await ProcessingService.ProcessFileAsync(filePath, useCache: false, settings.ProjectArtifacts);
+
+            if (result.IsSuccess)
+            {
+                var updated = BuildEntry(filePath, result.Context?.Layout);
+                State.UpdateFileEntry(updated);
+                var invoice = await ProcessingService.LoadCachedInvoiceAsync(filePath, settings.ProjectArtifacts);
+                State.SetSelectedInvoice(invoice);
+                State.SetOcrProgress(filePath, "Done");
+            }
+            else
+            {
+                State.SetOcrProgress(filePath, $"Error: {result.Error?.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            State.SetOcrProgress(filePath, $"Error: {ex.Message}");
+        }
+        finally
+        {
+            State.SetOcrRunning(false);
+        }
+    }
+
+    // ── Batch OCR — process all files, skipping those already cached ──────
+    private async Task BatchOcrAsync()
+    {
+        if (State.IsOcrRunning || State.Files.Count == 0) return;
+
+        State.SetOcrRunning(true, $"Batch OCR starting ({State.Files.Count} files)…");
+        var settings = await ConfigService.LoadSettingsAsync();
+        var total    = State.Files.Count;
+        var done     = 0;
+        var errors   = 0;
+
+        try
+        {
+            foreach (var file in State.Files.ToList())
+            {
+                State.SetOcrProgress(file.FilePath, $"Processing {file.FileName} ({done + 1}/{total})…");
+                try
+                {
+                    var result = await ProcessingService.ProcessFileAsync(
+                        file.FilePath, useCache: true, settings.ProjectArtifacts);
+
+                    if (result.IsSuccess)
+                    {
+                        var updated = BuildEntry(file.FilePath, result.Context?.Layout);
+                        State.UpdateFileEntry(updated);
+                        State.SetOcrProgress(file.FilePath, "Done");
+                    }
+                    else
+                    {
+                        errors++;
+                        State.SetOcrProgress(file.FilePath, $"Error: {result.Error?.Message}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors++;
+                    State.SetOcrProgress(file.FilePath, $"Error: {ex.Message}");
+                }
+
+                done++;
+                State.SetStatus($"Batch OCR: {done}/{total} complete{(errors > 0 ? $", {errors} errors" : "")}");
+            }
+        }
+        finally
+        {
+            State.SetOcrRunning(false, $"Batch done — {done - errors}/{total} succeeded{(errors > 0 ? $", {errors} failed" : "")}");
+        }
+    }
+
+    // ── Shared helper: derive FileListEntry status from a pipeline layout ─
+    private static FileListEntry BuildEntry(string filePath, object? layout)
+    {
+        var entry = new FileListEntry
+        {
+            FilePath    = filePath,
+            FileName    = Path.GetFileName(filePath),
+            IsProcessed = true
+        };
+
+        List<InvoiceDto>? invoices = null;
+        if (layout is List<InvoiceDto> list)
+            invoices = list;
+        else if (layout is Newtonsoft.Json.Linq.JArray jArray)
+        {
+            try { invoices = jArray.ToObject<List<InvoiceDto>>(); } catch { }
+        }
+
+        var invoice = invoices?.FirstOrDefault();
+        if (invoice?.TesseractConfirmed?.Count > 0)
+        {
+            entry.HasSuspectFields =
+                invoice.TesseractConfirmed.Values.Any(v => !v)
+                || (invoice.MathConfirmed?.Values.Any(v => !v) ?? false)
+                || (invoice.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
+            entry.IsValidated = !entry.HasSuspectFields;
+        }
+        return entry;
+    }
 
     private async Task LoadDirectoryAsync()
     {

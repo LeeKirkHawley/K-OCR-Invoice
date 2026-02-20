@@ -44,11 +44,40 @@ else
                 <div class="viewer-page-label">Page @label</div>
             }
             <div class="viewer-page-wrap">
-                <img class="viewer-page-img"
-                     src="/api/image?path=@Uri.EscapeDataString(page)"
-                     style="width: @(_zoomPct.ToString("0", System.Globalization.CultureInfo.InvariantCulture))%;"
-                     alt="Page @label"
-                     loading="lazy" />
+                <div class="viewer-img-wrap"
+                     style="width: @(_zoomPct.ToString("0", System.Globalization.CultureInfo.InvariantCulture))%">
+                    <img class="viewer-page-img"
+                         src="/api/image?path=@Uri.EscapeDataString(page)"
+                         alt="Page @label"
+                         loading="lazy" />
+                    @{
+                        var inv = State.SelectedInvoice;
+                        if (inv?.FieldBoundingBoxes.Count > 0 && inv.OriginalPageWidth > 0)
+                        {
+                            var pageNo = label;
+                            var pw = inv.OriginalPageWidth.ToString("G9",  System.Globalization.CultureInfo.InvariantCulture);
+                            var ph = inv.OriginalPageHeight.ToString("G9", System.Globalization.CultureInfo.InvariantCulture);
+                            <svg class="viewer-bbox-overlay"
+                                 viewBox="0 0 @pw @ph"
+                                 xmlns="http://www.w3.org/2000/svg">
+                                @foreach (var kvp in inv.FieldBoundingBoxes)
+                                {
+                                    var fld        = kvp.Key;
+                                    var isSelected = fld == State.SelectedFieldName;
+                                    var isSuspect  = BboxIsSuspect(inv, fld);
+                                    var bboxClass  = isSelected ? "bbox-selected"
+                                                   : isSuspect  ? "bbox-suspect"
+                                                   :              "bbox-ok";
+                                    foreach (var box in kvp.Value.Where(b => b.PageNumber == pageNo))
+                                    {
+                                        <polygon points="@FormatBboxPoints(box.Points)"
+                                                 class="viewer-bbox @bboxClass" />
+                                    }
+                                }
+                            </svg>
+                        }
+                    }
+                </div>
             </div>
         }
     </div>
@@ -150,6 +179,32 @@ else
     private void ZoomIn()  => _zoomPct = Math.Min(_zoomPct * 1.25, 500.0);
     private void ZoomOut() => _zoomPct = Math.Max(_zoomPct / 1.25,  20.0);
     private void ZoomFit() => _zoomPct = 100.0;
+
+    // ── Bounding box helpers ───────────────────────────────────────────────────
+
+    /// <summary>Convert Azure polygon float pairs to SVG "x,y" point string.</summary>
+    private static string FormatBboxPoints(List<float> pts)
+    {
+        var sb = new System.Text.StringBuilder();
+        for (int j = 0; j + 1 < pts.Count; j += 2)
+        {
+            if (j > 0) sb.Append(' ');
+            sb.Append(pts[j].ToString("G6",     System.Globalization.CultureInfo.InvariantCulture));
+            sb.Append(',');
+            sb.Append(pts[j + 1].ToString("G6", System.Globalization.CultureInfo.InvariantCulture));
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>True if the field has any failed validation check (and acceptance has not been set).</summary>
+    private static bool BboxIsSuspect(InvoiceDto inv, string fieldName)
+    {
+        if (inv.IsValidationAccepted || inv.IsEditedByUser) return false;
+        if (inv.TesseractConfirmed.TryGetValue(fieldName,  out var t) && !t) return true;
+        if (inv.ConfidenceConfirmed.TryGetValue(fieldName, out var c) && !c) return true;
+        if (inv.MathConfirmed.TryGetValue(fieldName,       out var m) && !m) return true;
+        return false;
+    }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
 

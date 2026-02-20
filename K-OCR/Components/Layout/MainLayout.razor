@@ -38,18 +38,7 @@
 
     <!-- Right pane — validation / data panel -->
     <div class="kocr-pane kocr-pane-right">
-        @if (State.SelectedFile is not null)
-        {
-            <div class="kocr-right-placeholder">
-                <span>Validation panel — coming next</span>
-            </div>
-        }
-        else
-        {
-            <div class="kocr-right-placeholder">
-                <span>No document data available</span>
-            </div>
-        }
+        <InvoicePanel />
     </div>
 </div>
 

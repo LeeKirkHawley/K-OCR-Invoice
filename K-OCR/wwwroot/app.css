@@ -516,6 +516,77 @@ html, body {
     cursor: default;
 }
 
+.file-list-toolbar-sep {
+    width: 1px;
+    height: 16px;
+    background: #555;
+    flex-shrink: 0;
+}
+
+.btn-ocr-now {
+    padding: 3px 7px;
+    font-size: 11px;
+    border: 1px solid #0e639c;
+    border-radius: 4px;
+    background: #0e3a5e;
+    color: #7ec8f8;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.12s, color 0.12s;
+}
+
+.btn-ocr-now:hover:not(:disabled) {
+    background: #0e639c;
+    color: #fff;
+}
+
+.btn-batch-ocr {
+    padding: 3px 7px;
+    font-size: 11px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #2d2d2d;
+    color: #aaa;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.12s, color 0.12s;
+}
+
+.btn-batch-ocr:hover:not(:disabled) {
+    background: #3a3a3a;
+    color: #fff;
+    border-color: #777;
+}
+
+.btn-ocr-now:disabled,
+.btn-batch-ocr:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.file-list-ocr-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: #7ec8f8;
+    background: #0e2033;
+    border-bottom: 1px solid #1a3a5e;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-ocr-badge {
+    font-size: 10px;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
 /* ─── File list error / loading ──────────────────────────────── */
 .file-list-error {
     padding: 6px 8px;
@@ -642,11 +713,47 @@ html, body {
     width: 100%;
 }
 
+/* Zoom-width wrapper — contains the img and SVG overlay */
+.viewer-img-wrap {
+    position: relative;
+    display: block;
+    /* width is set inline as zoom % */
+}
+
 .viewer-page-img {
     display: block;
+    width: 100%; /* fills the zoom wrapper */
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
     background: #fff;
-    /* width is set inline by zoom % */
+}
+
+/* ── Bounding box SVG overlay ────────────────────────────────── */
+.viewer-bbox-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* clicks pass through to image */
+    overflow: visible;
+}
+
+.viewer-bbox {
+    fill: transparent;
+    vector-effect: non-scaling-stroke; /* stroke stays 2px regardless of zoom */
+    stroke-width: 2;
+    opacity: 0.35;
+    transition: opacity 0.15s;
+}
+
+/* All bboxes become slightly visible when any field is selected */
+.bbox-ok       { stroke: #50c878; }
+.bbox-suspect  { stroke: #e05050; opacity: 0.55; }
+.bbox-selected {
+    stroke: #ffaa00;
+    fill: rgba(255, 170, 0, 0.18);
+    opacity: 1.0;
+    stroke-width: 2.5;
 }
 
 .viewer-page-label {
@@ -669,6 +776,346 @@ html, body {
     font-style: italic;
 }
 
+/* ─── Invoice / Validation panel (right pane) ───────────────── */
+
+.invoice-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-size: 13px;
+    color: #ccc;
+    background: #1e1e1e;
+    padding: 10px 12px;
+    gap: 0;
+    box-sizing: border-box;
+}
+
+/* Status banner */
+.inv-status-banner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.inv-banner-accepted {
+    background: #1b3a1b;
+    color: #6fcf6f;
+    border: 1px solid #3a6a3a;
+}
+
+.inv-banner-edited {
+    background: #1a2d40;
+    color: #5ab4f0;
+    border: 1px solid #2a4a6a;
+}
+
+.inv-banner-suspect {
+    background: #3a2a00;
+    color: #e8b000;
+    border: 1px solid #6a5000;
+}
+
+.inv-banner-icon {
+    font-size: 13px;
+}
+
+/* Action toolbar */
+.inv-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+
+.inv-btn-edit,
+.inv-btn-accept,
+.inv-btn-save,
+.inv-btn-cancel {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.inv-btn-edit {
+    background: #2a3a4a;
+    color: #9ec8f0;
+    border: 1px solid #3a5a7a;
+}
+
+.inv-btn-edit:hover {
+    background: #3a4a5a;
+}
+
+.inv-btn-accept {
+    background: #1b3a1b;
+    color: #6fcf6f;
+    border: 1px solid #3a6a3a;
+}
+
+.inv-btn-accept:hover:not(:disabled) {
+    background: #254a25;
+}
+
+.inv-btn-save {
+    background: #007acc;
+    color: #fff;
+    border: 1px solid #005f9e;
+}
+
+.inv-btn-save:hover:not(:disabled) {
+    background: #0090e0;
+}
+
+.inv-btn-cancel {
+    background: #2d2d2d;
+    color: #aaa;
+    border: 1px solid #444;
+}
+
+.inv-btn-cancel:hover:not(:disabled) {
+    background: #3a3a3a;
+}
+
+.inv-btn-edit:disabled,
+.inv-btn-accept:disabled,
+.inv-btn-save:disabled,
+.inv-btn-cancel:disabled,
+.inv-btn-export:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.inv-btn-export {
+    background: #2a2a3a;
+    color: #9090d0;
+    border: 1px solid #44447a;
+    margin-left: auto; /* push to right end of the toolbar */
+}
+
+.inv-btn-export:hover:not(:disabled) {
+    background: #35355a;
+}
+
+/* Header fields section */
+.inv-fields-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+}
+
+/* Each field row */
+.inv-field-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    border-left: 3px solid transparent;
+    transition: background 0.1s;
+    cursor: pointer;
+    user-select: none;
+}
+
+.inv-field-row:hover {
+    background: rgba(255,255,255,0.06);
+}
+
+/* Field highlighted because its bbox is selected in the viewer */
+.inv-field-selected {
+    background: rgba(255, 170, 0, 0.12) !important;
+    border-left-color: #ffaa00 !important;
+}
+
+.inv-suspect {
+    border-left-color: #d94040;
+    background: rgba(217, 64, 64, 0.07);
+}
+
+.inv-ok {
+    border-left-color: #3a6a3a;
+}
+
+/* Field label */
+.inv-field-label {
+    min-width: 88px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    text-align: right;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.inv-suspect-label {
+    color: #d07070;
+}
+
+/* Field value (read-only) */
+.inv-field-value {
+    flex: 1;
+    font-size: 13px;
+    color: #ddd;
+    word-break: break-word;
+    min-width: 0;
+}
+
+.inv-suspect-text {
+    color: #e07070;
+    font-weight: 600;
+}
+
+/* Field input (edit mode) */
+.inv-field-input {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 6px;
+    font-size: 12px;
+    background: #2a2a2a;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 3px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.inv-field-input:focus {
+    border-color: #007acc;
+    background: #262626;
+}
+
+.inv-suspect-input {
+    border-color: #8a3030;
+    background: #2a1a1a;
+}
+
+.inv-suspect-input:focus {
+    border-color: #c04040;
+}
+
+/* Number inputs (right-aligned, narrower) */
+.inv-input-num {
+    text-align: right;
+    max-width: 90px;
+}
+
+/* ── Line items section ──────────────────────────────────────── */
+.inv-line-items-section {
+    flex-shrink: 0;
+    border-top: 1px solid #333;
+    padding-top: 10px;
+}
+
+.inv-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #777;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+    user-select: none;
+}
+
+/* Individual line item card */
+.inv-line-item {
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 6px;
+}
+
+.inv-li-suspect {
+    border-color: #7a2a2a;
+    background: #2a1a1a;
+}
+
+/* Row inside a line item */
+.inv-li-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.inv-li-row:last-child {
+    margin-bottom: 0;
+}
+
+.inv-li-desc-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+}
+
+.inv-li-nums-row {
+    display: flex;
+    gap: 8px;
+}
+
+.inv-li-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.inv-li-value {
+    font-size: 12px;
+    color: #ccc;
+    word-break: break-word;
+}
+
+/* Number column inside a line item */
+.inv-li-num-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.inv-num {
+    font-size: 12px;
+    color: #bbb;
+    font-variant-numeric: tabular-nums;
+}
+
+.inv-num-bold {
+    font-weight: 700;
+    color: #ddd;
+}
+
+/* Empty state */
+.inv-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    font-size: 13px;
+    color: #555;
+    font-style: italic;
+    text-align: center;
+    padding: 32px 16px;
+    user-select: none;
+}
+
+/* ─── (viewer-error was here) ───────────────────────────────── */
 .viewer-error {
     display: flex;
     align-items: flex-start;
