@@ -78,6 +78,40 @@ public class WorkspaceState
         NotifyChange();
     }
 
+    // ── File navigation ───────────────────────────────────────────────────────
+
+    /// <summary>True when the selected file is not the first in the list.</summary>
+    public bool CanNavigatePrev =>
+        SelectedFilePath is not null
+        && Files.Count > 0
+        && Files[0].FilePath != SelectedFilePath;
+
+    /// <summary>True when the selected file is not the last in the list.</summary>
+    public bool CanNavigateNext =>
+        SelectedFilePath is not null
+        && Files.Count > 0
+        && Files[^1].FilePath != SelectedFilePath;
+
+    /// <summary>
+    /// Move the selection forward (<paramref name="delta"/> = +1) or backward (-1).
+    /// Clears the current invoice and field highlight, and returns the newly selected
+    /// <see cref="FileListEntry"/>, or <c>null</c> if already at the boundary.
+    /// </summary>
+    public FileListEntry? NavigateFile(int delta)
+    {
+        if (Files.Count == 0 || SelectedFilePath is null) return null;
+        var idx = Files.ToList().FindIndex(f => f.FilePath == SelectedFilePath);
+        if (idx < 0) return null;
+        var newIdx = idx + delta;
+        if (newIdx < 0 || newIdx >= Files.Count) return null;
+        var newFile       = Files[newIdx];
+        SelectedFilePath  = newFile.FilePath;
+        SelectedInvoice   = null;
+        SelectedFieldName = null;
+        NotifyChange();
+        return newFile;
+    }
+
     /// <summary>Update the invoice for the currently selected file (after OCR or cache load).</summary>
     public void SetSelectedInvoice(InvoiceDto? invoice)
     {

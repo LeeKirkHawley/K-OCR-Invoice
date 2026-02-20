@@ -1,7 +1,12 @@
 ﻿@inherits LayoutComponentBase
 @inject IJSRuntime JS
 @inject WorkspaceState State
+@inject IInvoiceProcessingService ProcessingService
+@inject IConfigurationService ConfigService
+@inject ToastService Toast
 @implements IAsyncDisposable
+
+<PageTitle>@(State.SelectedFile?.FileName is { } fn ? $"{fn} — K-OCR" : "K-OCR")</PageTitle>
 
 <div class="kocr-top-bar">
     <span class="kocr-title">K-OCR</span>
@@ -26,8 +31,18 @@
         @if (State.SelectedFile is { } selected)
         {
             <div class="kocr-file-preview-header">
+                <button class="file-nav-btn"
+                        @onclick="() => NavigateFileAsync(-1)"
+                        disabled="@(!State.CanNavigatePrev)"
+                        aria-label="Previous file"
+                        title="Previous file (Alt+←)">◀</button>
                 <span class="file-status-dot @selected.DotClass" title="@selected.StatusLabel"></span>
                 <span class="kocr-file-preview-name" title="@selected.FilePath">@selected.FileName</span>
+                <button class="file-nav-btn"
+                        @onclick="() => NavigateFileAsync(+1)"
+                        disabled="@(!State.CanNavigateNext)"
+                        aria-label="Next file"
+                        title="Next file (Alt+→)">▶</button>
             </div>
         }
         <DocumentViewer />
@@ -38,7 +53,7 @@
 
     <!-- Right pane — validation / data panel -->
     <div class="kocr-pane kocr-pane-right">
-        <InvoicePanel />
+        <InvoicePanel @ref="_invoicePanel" />
     </div>
 </div>
 
@@ -48,9 +63,12 @@
     <span class="dismiss">🗙</span>
 </div>
 
+<ToastContainer />
+
 @code {
     private ElementReference _shellRef;
     private DotNetObjectReference<MainLayout>? _selfRef;
+    private InvoicePanel? _invoicePanel;
 
     protected override void OnInitialized()
     {
@@ -63,6 +81,7 @@
         {
             _selfRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("kocrLayout.initSplitters", _selfRef);
+            await JS.InvokeVoidAsync("kocrKeyboard.init", _selfRef);
         }
     }
 
@@ -73,6 +92,40 @@
     public void OnPaneWidthsChanged(double left, double right)
     {
         // Pane widths are persisted by JS in localStorage; nothing to do server-side yet.
+    }
+
+    /// <summary>
+    /// Dispatches a keyboard shortcut action from the global JS keydown handler.
+    /// Called by <c>window.kocrKeyboard.init</c> in kocr.js.
+    /// </summary>
+    [JSInvokable]
+    public Task OnKeyboardShortcut(string shortcut) => shortcut switch
+    {
+        "save"       => _invoicePanel?.TriggerSaveAsync()        ?? Task.CompletedTask,
+        "export"     => _invoicePanel?.TriggerExportAsync()      ?? Task.CompletedTask,
+        "escape"     => _invoicePanel?.TriggerEscapeAsync()      ?? InvokeAsync(() => State.SetSelectedField(null)),
+        "next-field" => _invoicePanel?.CycleSuspectFieldAsync(+1) ?? Task.CompletedTask,
+        "prev-field" => _invoicePanel?.CycleSuspectFieldAsync(-1) ?? Task.CompletedTask,
+        "prev-file"  => NavigateFileAsync(-1),
+        "next-file"  => NavigateFileAsync(+1),
+        _            => Task.CompletedTask
+    };
+
+    /// <summary>
+    /// Moves file selection by <paramref name="delta"/> (+1 or -1), then loads the
+    /// cached invoice from the database so the viewer and panel update immediately.
+    /// </summary>
+    private async Task NavigateFileAsync(int delta)
+    {
+        var file = State.NavigateFile(delta);
+        if (file is null) return;
+        try
+        {
+            var settings = await ConfigService.LoadSettingsAsync();
+            var invoice  = await ProcessingService.LoadCachedInvoiceAsync(file.FilePath, settings.ProjectArtifacts);
+            State.SetSelectedInvoice(invoice);
+        }
+        catch (Exception ex) { Toast.ShowError($"Could not load file data: {ex.Message}"); }
     }
 
     public async ValueTask DisposeAsync()

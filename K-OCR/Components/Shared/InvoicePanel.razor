@@ -3,11 +3,40 @@
 @inject IConfigurationService ConfigService
 @inject IDocumentExportService ExportService
 @inject IJSRuntime JS
+@inject DatabaseService DatabaseSvc
+@inject ToastService Toast
 @implements IDisposable
 
 <div class="invoice-panel">
     @if (_invoice is { } inv)
     {
+        @* ── Tab bar ─────────────────────────────────────────────── *@
+        <div class="inv-tabs">
+            <button class="inv-tab-btn @(!_rawTab ? "active" : "")"
+                    @onclick="() => SwitchTabAsync(false)">Validation</button>
+            <button class="inv-tab-btn @(_rawTab ? "active" : "")"
+                    @onclick="() => SwitchTabAsync(true)">Raw JSON</button>
+        </div>
+
+        @if (_rawTab)
+        {
+            @* ── Raw JSON tab ─────────────────────────────────── *@
+            @if (_rawJsonLoading)
+            {
+                <div class="inv-empty"><span class="loading-spinner"></span> Loading…</div>
+            }
+            else if (_rawJson is null)
+            {
+                <div class="inv-empty">(no data)</div>
+            }
+            else
+            {
+                <pre class="raw-json-pre">@_rawJson</pre>
+            }
+        }
+        else
+        {
+
         @* ── Status banner ──────────────────────────────────────────── *@
         @if (inv.IsValidationAccepted)
         {
@@ -66,7 +95,10 @@
                 var tip     = GetFieldTooltip(k);
                 var isSel   = State.SelectedFieldName == k && _invoice?.FieldBoundingBoxes.ContainsKey(k) == true;
                 <div class="inv-field-row @(suspect ? "inv-suspect" : isOk ? "inv-ok" : "") @(isSel ? "inv-field-selected" : "")"
+                     tabindex="0"
+                     role="button"
                      @onclick="() => ToggleFieldSelection(k)"
+                     @onkeydown="@(e => OnFieldKeyDown(e, k))"
                      title="@tip">
                     <label class="inv-field-label @(suspect ? "inv-suspect-label" : "")">@label</label>
                     @if (_editMode)
@@ -154,6 +186,7 @@
                 }
             </div>
         }
+        } @* end validation tab *@
     }
     else if (State.SelectedFilePath is not null)
     {
@@ -171,6 +204,10 @@
     private bool        _saving;
     private bool        _exporting;
     private int         _suspectCount;
+    private int         _suspectFieldIdx = -1;   // tracks position for Tab cycling
+    private bool        _rawTab;                  // true = showing Raw JSON tab
+    private string?     _rawJson;                 // lazy-loaded raw JSON text
+    private bool        _rawJsonLoading;          // spinner while DB fetch is in flight
 
     // Header field definitions — Key matches InvoiceDto property name exactly
     private static readonly (string Key, string Label)[] _headerFields =
@@ -209,9 +246,12 @@
     {
         if (!ReferenceEquals(State.SelectedInvoice, _invoice))
         {
-            _invoice  = State.SelectedInvoice;
-            _editMode = false;
-            _saving   = false;
+            _invoice         = State.SelectedInvoice;
+            _editMode        = false;
+            _saving          = false;
+            _suspectFieldIdx = -1;
+            _rawTab          = false;
+            _rawJson         = null;
             PopulateEditValues();
             ComputeSuspectCount();
         }
@@ -319,6 +359,11 @@
         State.SetSelectedField(State.SelectedFieldName == fieldName ? null : fieldName);
     }
 
+    private void OnFieldKeyDown(KeyboardEventArgs e, string fieldName)
+    {
+        if (e.Key is "Enter" or " ") ToggleFieldSelection(fieldName);
+    }
+
     // ── Actions ───────────────────────────────────────────────────────────────
 
     private async Task SaveEditAsync()
@@ -367,7 +412,7 @@
             ComputeSuspectCount();
             _editMode = false;
         }
-        catch { /* non-fatal; TODO: surface error in status bar */ }
+        catch (Exception ex) { Toast.ShowError($"Save failed: {ex.Message}"); }
         finally
         {
             _saving = false;
@@ -387,7 +432,7 @@
             State.SetSelectedInvoice(_invoice);
             _suspectCount = 0;
         }
-        catch { /* non-fatal */ }
+        catch (Exception ex) { Toast.ShowError($"Accept failed: {ex.Message}"); }
         finally
         {
             _saving = false;
@@ -430,12 +475,109 @@
         }
         catch (Exception ex)
         {
-            State.SetStatus($"Export failed: {ex.Message}");
+            Toast.ShowError($"Export failed: {ex.Message}");
         }
         finally
         {
             _exporting = false;
             StateHasChanged();
+        }
+    }
+
+    // ── Keyboard shortcut entry points (called from MainLayout via JS interop) ───
+
+    /// <summary>Ctrl+S — saves the invoice if edit mode is currently active.</summary>
+    public Task TriggerSaveAsync() =>
+        _editMode ? SaveEditAsync() : Task.CompletedTask;
+
+    /// <summary>Ctrl+E — exports the current invoice as DOCX.</summary>
+    public Task TriggerExportAsync() => ExportDocxAsync();
+
+    /// <summary>
+    /// Escape — cancels edit mode if active, otherwise deselects the highlighted bbox field.
+    /// </summary>
+    public Task TriggerEscapeAsync() =>
+        InvokeAsync(() =>
+        {
+            if (_editMode && !_saving)
+                CancelEdit();
+            else
+                State.SetSelectedField(null);
+        });
+
+    /// <summary>
+    /// Tab / Shift+Tab — moves the bbox highlight to the next (+1) or previous (-1)
+    /// suspect field that has a bounding box.  Does nothing when in edit mode.
+    /// </summary>
+    public Task CycleSuspectFieldAsync(int delta)
+    {
+        if (_editMode || _invoice is null) return Task.CompletedTask;
+
+        return InvokeAsync(() =>
+        {
+            var suspects = _headerFields
+                .Where(f => IsFieldSuspect(f.Key)
+                         && _invoice?.FieldBoundingBoxes.ContainsKey(f.Key) == true)
+                .Select(f => f.Key)
+                .ToList();
+
+            if (suspects.Count == 0) return;
+
+            // Wrap around correctly for both positive and negative delta
+            _suspectFieldIdx = ((_suspectFieldIdx + delta) % suspects.Count
+                                 + suspects.Count) % suspects.Count;
+
+            State.SetSelectedField(suspects[_suspectFieldIdx]);
+        });
+    }
+
+    // ── Raw JSON tab ─────────────────────────────────────────────────────────
+
+    private async Task SwitchTabAsync(bool showRaw)
+    {
+        _rawTab = showRaw;
+        if (showRaw && _rawJson is null && !_rawJsonLoading && State.SelectedFilePath is not null)
+        {
+            _rawJsonLoading = true;
+            StateHasChanged();
+            try
+            {
+                var ocrFile = await DatabaseSvc.GetOCRFileByPathAsync(State.SelectedFilePath);
+                if (ocrFile is not null)
+                {
+                    var raw = ocrFile.ValidatedOcrText ?? ocrFile.OcrText;
+                    if (!string.IsNullOrWhiteSpace(raw))
+                    {
+                        try
+                        {
+                            using var doc = System.Text.Json.JsonDocument.Parse(raw);
+                            _rawJson = System.Text.Json.JsonSerializer.Serialize(
+                                doc.RootElement,
+                                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                        }
+                        catch
+                        {
+                            _rawJson = raw; // not valid JSON — show as-is
+                        }
+                    }
+                    else
+                    {
+                        _rawJson = "(no OCR text stored for this file)";
+                    }
+                }
+                else
+                {
+                    _rawJson = "(file not found in database)";
+                }
+            }
+            catch (Exception ex)
+            {
+                _rawJson = $"Error loading raw data: {ex.Message}";
+            }
+            finally
+            {
+                _rawJsonLoading = false;
+            }
         }
     }
 }

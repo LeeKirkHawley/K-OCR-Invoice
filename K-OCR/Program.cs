@@ -52,6 +52,7 @@ builder.Services.AddScoped<IInvoiceProcessingService, InvoiceProcessingService>(
 
 // Per-circuit Blazor state
 builder.Services.AddScoped<WorkspaceState>();
+builder.Services.AddScoped<ToastService>();
 
 var app = builder.Build();
 

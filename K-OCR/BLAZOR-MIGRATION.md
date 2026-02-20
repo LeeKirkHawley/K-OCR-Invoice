@@ -96,64 +96,94 @@ chunk of work that compiles cleanly on its own.
 
 ---
 
-### ⏳ Step 11 — Keyboard navigation
-**Goal:** Match K-OCRDesktop shortcuts — `Ctrl+S` saves the current invoice,
-`Ctrl+E` exports DOCX, `Tab`/`Shift+Tab` moves between suspect fields in the
-panel, `Escape` deselects the active bounding box.
-
-**Key pieces:**
-- Register a `@onkeydown` listener on the shell `<div>` in `MainLayout.razor`
-  (requires `tabindex="0"` + `@ref` + JS `focus()` on mount)
-- Or: use Blazor JS interop — register `document.addEventListener('keydown', ...)`
-  in `kocr.js` and call a `[JSInvokable]` method on `MainLayout`
-- JS approach is cleaner for global shortcuts; avoids focus wars
-- `State.SetSelectedField` already handles deselect for Escape
-- `InvoicePanel` exposes a `FocusSuspectField(int delta)` method (or `WorkspaceState`
-  carries a `SuspectFieldIndex`)
-
-**Files to touch:** `kocr.js`, `MainLayout.razor`, `WorkspaceState.cs`,
-`InvoicePanel.razor`
+### ✅ Step 11 — Keyboard shortcuts
+- `kocr.js`: `window.kocrKeyboard.init(dotNetRef)` registers a global `document.keydown`
+  handler:
+  - `Ctrl+S`      → `'save'`       (save invoice if edit mode is active)
+  - `Ctrl+E`      → `'export'`     (download DOCX)
+  - `Escape`      → `'escape'`     (cancel edit mode, or deselect bbox field)
+  - `Tab`         → `'next-field'` (cycle to next suspect bbox field, skipped when focus is in an input)
+  - `Shift+Tab`   → `'prev-field'` (cycle to previous suspect bbox field)
+- `MainLayout.razor`:
+  - `@ref="_invoicePanel"` on `<InvoicePanel />` for direct method calls
+  - `kocrKeyboard.init(_selfRef)` called on first render
+  - `[JSInvokable] OnKeyboardShortcut(string shortcut)` switch-expression routes to panel
+- `InvoicePanel.razor`:
+  - `_suspectFieldIdx` tracks Tab-cycle position; reset to `-1` on file change
+  - `TriggerSaveAsync()`          → `SaveEditAsync()` when in edit mode
+  - `TriggerExportAsync()`        → `ExportDocxAsync()`
+  - `TriggerEscapeAsync()`        → cancel edit mode if active, else deselect bbox field
+  - `CycleSuspectFieldAsync(±1)`  → wraps through suspect fields that have bounding boxes
 
 ---
 
-### ⏳ Step 12 — Prev / Next file navigation
+### ✅ Step 12 — Prev / Next file navigation
 **Goal:** Arrow buttons in the center pane header (or keyboard `Alt+←` / `Alt+→`)
 to move through the file list without touching the left panel.
 
-**Key pieces:**
-- `WorkspaceState.NavigateFile(int delta)` — finds the current index in `Files`,
-  advances, calls `SelectFile` + loads cached invoice
-- Buttons rendered in `MainLayout.razor` inside `kocr-file-preview-header`
-- Disable Prev at index 0, Disable Next at last index
-- Keyboard shortcut wired in Step 11's global handler
+**Delivered:**
+- `WorkspaceState.CanNavigatePrev` / `CanNavigateNext` computed properties (boundary checks)
+- `WorkspaceState.NavigateFile(int delta)` — finds current index, steps by delta,
+  clears invoice + field highlight, returns the new `FileListEntry?`
+- `MainLayout.razor`: added `@inject IInvoiceProcessingService` + `@inject IConfigurationService`;
+  `◀` / `▶` buttons in `kocr-file-preview-header` (disabled at boundaries);
+  `NavigateFileAsync(int delta)` loads cached invoice after navigation;
+  `"prev-file"` / `"next-file"` added to `OnKeyboardShortcut` switch
+- `kocr.js`: `Alt+←` → `'prev-file'`, `Alt+→` → `'next-file'` (preventDefault)
+- `app.css`: `.file-nav-btn` styles; `.kocr-file-preview-name` gets `flex:1 1 0%; min-width:0`
+- Build: **0 errors**
 
-**Files to touch:** `WorkspaceState.cs`, `MainLayout.razor`, `app.css`
-
----
-
-### ⏳ Step 13 — Raw JSON / OCR text tab
-**Goal:** Second tab in the right pane (mirrors K-OCRDesktop's "OCR" tab) showing
-the raw pipeline JSON output for the selected file, formatted with syntax
-colouring or at least a monospace `<pre>`.
-
-**Key pieces:**
-- Add a `_tab` enum / bool toggle (`Validation` | `RawJson`) to `InvoicePanel`
-- Load raw JSON from `DatabaseService.GetOCRFileByPathAsync(path).ValidatedOcrText`
-  (already fetched in `SelectFileAsync` — store it in `WorkspaceState` or pass via
-  an extra field on `InvoicePanel`)
-- Optional: use `<pre>` + a light CSS highlight for JSON keys
-
-**Files to touch:** `InvoicePanel.razor`, `app.css`
+**Files touched:** `WorkspaceState.cs`, `MainLayout.razor`, `kocr.js`, `app.css`
 
 ---
 
-### ⏳ Step 14 — Polish & hardening
-- Error toast / notification component (replace silent `catch { }` blocks)
-- Empty-state illustrations for the three panes
-- Responsive minimum widths for panes (collapse to icon-only?)
-- `<title>` tag reflects current file name
-- Loading skeleton for the file list while the DB is queried
-- Accessibility: `aria-label` on icon-only buttons, focus ring on field rows
+### ✅ Step 13 — Raw JSON / OCR text tab
+**Goal:** Second tab in the right pane showing the raw pipeline JSON output for the
+selected file, formatted in a monospace scrollable block.
+
+**Delivered:**
+- `InvoicePanel.razor`: `@inject DatabaseService DatabaseSvc` added
+- Tab bar rendered at the top of the panel when an invoice is loaded: **Validation** (default) | **Raw JSON**
+- Existing validation UI (banners, actions, fields, line items) wrapped in `else { }` — only shown when `_rawTab == false`
+- Raw JSON tab: lazy-loads `OCRFile.ValidatedOcrText` (falling back to `OcrText`) from DB on first open; pretty-prints with `System.Text.Json.JsonSerializer` (`WriteIndented = true`); falls back to raw text if not valid JSON; shows loading spinner + error string on failure
+- Fields: `_rawTab` (bool), `_rawJson` (string?), `_rawJsonLoading` (bool)
+- `SwitchTabAsync(bool showRaw)` — switches tab and triggers DB fetch if needed; result cached per file, cleared in `OnStateChanged` when file changes
+- `app.css`: `.inv-tabs`, `.inv-tab-btn`, `.inv-tab-btn.active`, `.raw-json-pre`
+- Build: **0 errors**
+
+**Files touched:** `InvoicePanel.razor`, `app.css`
+
+---
+
+### ✅ Step 14 — Polish & hardening
+
+**Delivered:**
+
+**Error toast system:**
+- New `ToastService.cs` (Scoped) — `ShowInfo/Success/Warning/Error(string)` methods, fires `OnToast` event
+- New `ToastContainer.razor` — subscribes to `ToastService`, renders stacked toasts at bottom-right with slide-in animation; each auto-dismisses after 5 seconds, has a manual × button
+- Registered `builder.Services.AddScoped<ToastService>()` in `Program.cs`
+- `InvoicePanel.razor`: `@inject ToastService Toast`; replaced 3 silent `catch {}` blocks:
+  - `SaveEditAsync` → `Toast.ShowError($"Save failed: …")`
+  - `AcceptValidationAsync` → `Toast.ShowError($"Accept failed: …")`
+  - `ExportDocxAsync` `State.SetStatus(…)` → `Toast.ShowError($"Export failed: …")`
+- `MainLayout.razor`: `@inject ToastService Toast`; `NavigateFileAsync` catch → `Toast.ShowError(…)`;
+  `<ToastContainer />` added to layout markup
+
+**Page title:**
+- `<PageTitle>@(State.SelectedFile?.FileName is { } fn ? $"{fn} — K-OCR" : "K-OCR")</PageTitle>` in `MainLayout.razor` — browser tab reflects the selected file name
+
+**Accessibility:**
+- `◀`/`▶` file-nav buttons: added `aria-label="Previous file"` / `aria-label="Next file"`
+- `DocumentViewer.razor` zoom buttons: added `aria-label="Zoom out"`, `aria-label="Zoom in"`, `aria-label="Fit to width"`
+- `InvoicePanel.razor` field rows: `tabindex="0"` + `role="button"` + `@onkeydown` (Enter/Space activates selection); handled by new `OnFieldKeyDown(KeyboardEventArgs, string)` helper
+
+**CSS:**
+- `.inv-field-row:focus-visible` — 2px blue (`#569cd6`) outline on keyboard focus, no outline for mouse
+- Full toast CSS block: `.toast-container`, `.toast`, `@keyframes toast-in`, `.toast-icon/.text/.close`, `.toast-info/.success/.warning/.error` colour variants
+
+**Files touched:** `ToastService.cs` (new), `ToastContainer.razor` (new), `Program.cs`, `MainLayout.razor`, `InvoicePanel.razor`, `DocumentViewer.razor`, `app.css`
+- Build: **0 errors**
 
 ---
 

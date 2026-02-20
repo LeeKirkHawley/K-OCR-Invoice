@@ -23,10 +23,10 @@ else
 {
     <!-- Toolbar -->
     <div class="viewer-toolbar">
-        <button class="viewer-btn" @onclick="ZoomOut" title="Zoom out (−)">−</button>
+        <button class="viewer-btn" @onclick="ZoomOut" aria-label="Zoom out" title="Zoom out (−)">−</button>
         <span class="viewer-zoom-label">@ZoomLabel</span>
-        <button class="viewer-btn" @onclick="ZoomIn"  title="Zoom in (+)">+</button>
-        <button class="viewer-btn viewer-btn-fit" @onclick="ZoomFit" title="Fit to width">⊡ Fit</button>
+        <button class="viewer-btn" @onclick="ZoomIn"  aria-label="Zoom in" title="Zoom in (+)">+</button>
+        <button class="viewer-btn viewer-btn-fit" @onclick="ZoomFit" aria-label="Fit to width" title="Fit to width">⊞ Fit</button>
         @if (_pages.Count > 1)
         {
             <span class="viewer-page-count">@_pages.Count pages</span>

@@ -105,3 +105,57 @@ window.kocrExport = {
         URL.revokeObjectURL(url);
     }
 };
+
+// ── Global keyboard shortcut handler ─────────────────────────────────────────
+// Registers document-level keydown shortcuts and calls [JSInvokable]
+// OnKeyboardShortcut on the MainLayout DotNetObjectReference.
+//
+//  Ctrl+S        → 'save'        (save invoice if edit mode is active)
+//  Ctrl+E        → 'export'      (download DOCX)
+//  Escape        → 'escape'      (cancel edit mode, or deselect bbox field)
+//  Tab           → 'next-field'  (cycle to next suspect field, skip in inputs)
+//  Shift+Tab     → 'prev-field'  (cycle to previous suspect field, skip in inputs)
+window.kocrKeyboard = {
+    init: function (dotNetRef) {
+        document.addEventListener('keydown', function (e) {
+            const tag        = document.activeElement?.tagName ?? '';
+            const isEditable = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)
+                             || document.activeElement?.isContentEditable === true;
+
+            // Ctrl+S → save
+            if (e.ctrlKey && !e.altKey && e.key === 's') {
+                e.preventDefault();
+                dotNetRef.invokeMethodAsync('OnKeyboardShortcut', 'save');
+                return;
+            }
+
+            // Ctrl+E → export DOCX
+            if (e.ctrlKey && !e.altKey && e.key === 'e') {
+                e.preventDefault();
+                dotNetRef.invokeMethodAsync('OnKeyboardShortcut', 'export');
+                return;
+            }
+
+            // Escape → cancel edit or deselect field
+            if (e.key === 'Escape') {
+                dotNetRef.invokeMethodAsync('OnKeyboardShortcut', 'escape');
+                return;
+            }
+
+            // Alt+Left / Alt+Right → navigate prev/next file
+            if (e.altKey && !e.ctrlKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                e.preventDefault();
+                dotNetRef.invokeMethodAsync('OnKeyboardShortcut',
+                    e.key === 'ArrowLeft' ? 'prev-file' : 'next-file');
+                return;
+            }
+
+            // Tab / Shift+Tab → cycle suspect fields (only when focus is NOT in a text input)
+            if (e.key === 'Tab' && !isEditable) {
+                e.preventDefault();
+                dotNetRef.invokeMethodAsync('OnKeyboardShortcut',
+                    e.shiftKey ? 'prev-field' : 'next-field');
+            }
+        });
+    }
+};
