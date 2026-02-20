@@ -9,11 +9,106 @@
 <PageTitle>@(State.SelectedFile?.FileName is { } fn ? $"{fn} — K-OCR" : "K-OCR")</PageTitle>
 
 <div class="kocr-top-bar">
-    <span class="kocr-title">K-OCR</span>
-    <span class="kocr-status">@State.StatusMessage</span>
-    <nav class="kocr-top-nav">
-        <NavLink href="/" class="kocr-nav-link" Match="NavLinkMatch.All">Files</NavLink>
-        <NavLink href="/settings" class="kocr-nav-link">⚙ Settings</NavLink>
+    <div class="kocr-top-left">
+        <span class="kocr-title">K-OCR</span>
+        <span class="kocr-status">@State.StatusMessage</span>
+    </div>
+    <nav class="navbar navbar-expand-lg kocr-menu-bar">
+        <div class="container-fluid px-0">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#kocrMenu" aria-controls="kocrMenu"
+                    aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="kocrMenu">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <!-- File menu -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="fileMenu"
+                        role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            File
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="fileMenu">
+                            <li>
+                                <a class="dropdown-item" href="#" @onclick="BatchProcess">
+                                    Batch Process…
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider" /></li>
+                            <li>
+                                <a class="dropdown-item" href="#" @onclick="Exit">
+                                    Exit
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <!-- Export menu -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="exportMenu"
+                        role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Export
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="exportMenu">
+                            <li>
+                                <a class="dropdown-item" href="#" @onclick="ExportDocx">
+                                    Docx
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <!-- Edit menu -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="editMenu"
+                        role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Edit
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="editMenu">
+                            <li><a class="dropdown-item" href="#" @onclick="Copy">Copy</a></li>
+                            <li><a class="dropdown-item" href="#" @onclick="Paste">Paste</a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Tools menu -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="toolsMenu"
+                        role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Tools
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="toolsMenu">
+                            <li>
+                                <NavLink class="dropdown-item" href="/settings">
+                                    Settings
+                                </NavLink>
+                            </li>
+                            <li><hr class="dropdown-divider" /></li>
+                            <li>
+                                <a class="dropdown-item" href="#" @onclick="ClearAllData">
+                                    Clear All Data…
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <!-- Help menu -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="helpMenu"
+                        role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Help
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="helpMenu">
+                            <li>
+                                <a class="dropdown-item" href="#" @onclick="ShowAbout">
+                                    About
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
     </nav>
 </div>
 
@@ -126,6 +221,48 @@
             State.SetSelectedInvoice(invoice);
         }
         catch (Exception ex) { Toast.ShowError($"Could not load file data: {ex.Message}"); }
+    }
+
+    // --- Menu handler stubs ---
+    private async Task BatchProcess()
+    {
+        // TODO: Implement batch processing logic
+        await Task.CompletedTask;
+    }
+
+    private async Task ExportDocx()
+    {
+        // TODO: Implement export to Docx logic
+        await Task.CompletedTask;
+    }
+
+    private async Task Copy()
+    {
+        // TODO: Implement copy logic
+        await Task.CompletedTask;
+    }
+
+    private async Task Paste()
+    {
+        // TODO: Implement paste logic
+        await Task.CompletedTask;
+    }
+
+    private void Exit()
+    {
+        // TODO: Implement exit logic (clear state or redirect)
+    }
+
+    private async Task ClearAllData()
+    {
+        // TODO: Implement clear all data logic
+        await Task.CompletedTask;
+    }
+
+    private async Task ShowAbout()
+    {
+        // TODO: Implement about dialog logic
+        await Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
