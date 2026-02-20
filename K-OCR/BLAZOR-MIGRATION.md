@@ -187,6 +187,63 @@ selected file, formatted in a monospace scrollable block.
 
 ---
 
+### ✅ Step 15 — Line items section (collapsible + bbox highlight)
+**Delivered:**
+- `InvoicePanel.razor`: section header replaced with `<button class="inv-section-toggle">` — click toggles `_lineItemsCollapsed`; chevron ▼/▶ indicates state; `aria-expanded` attribute set
+- Each line item card gets `tabindex="0"`, `role="button"`, `@onclick` → `ToggleLineItemSelection(idx)`, `@onkeydown` → `OnLineItemKeyDown(idx)` (Enter/Space); inputs get `@onclick:stopPropagation="true"` so edit mode doesn't accidentally toggle
+- Selection key encoded as `$"Item_{idx}"` and stored in `WorkspaceState.SelectedFieldName` — reuses existing mechanism
+- `ToggleLineItemSelection(int idx)` — no-ops in `_editMode`; toggles or clears `SelectedFieldName`
+- `DocumentViewer.razor`: SVG render condition expanded to fire when `inv.Items` have any bboxes; new `@for` loop renders `InvoiceItemDto.BoundingBoxes` with `bbox-ok/suspect/selected` classes; new `ItemIsSuspect(InvoiceDto, InvoiceItemDto)` static helper
+- `_lineItemsCollapsed` reset to `false` on file change in `OnStateChanged`
+- `app.css`: `.inv-section-toggle` button (full-width, uppercase, hover/focus-visible styles), `.inv-toggle-chevron`, kept `.inv-section-title` for back-compat, `.inv-li-selected` (amber border + glow, `!important` to override suspect)
+- Build: **0 errors**
+
+**Files touched:** `InvoicePanel.razor`, `DocumentViewer.razor`, `app.css`
+
+---
+
+### ✅ Step 16 — OCR JSON tab *(already complete as Step 13)*
+Raw JSON / OCR text tab implemented in Step 13: Validation | Raw JSON tabs, lazy DB load, pretty-printed `<pre>`.
+
+---
+
+### ✅ Step 17 — DOCX export *(already complete as Step 10)*
+Export implemented in Step 10: `ExportDocxAsync` → `IDocumentExportService.ExportToDocxAsync` → JS `kocrExport.saveAs` → browser Save dialog.
+
+---
+
+### ⏳ Step 18 — Clear All Data
+**Goal:** "Tools → Clear All Data…" shows a confirmation modal; on confirm calls `DatabaseService.ClearAllDataAsync()` (or equivalent), deletes all files in the artifacts directory, then refreshes the file list.
+
+**Key pieces:**
+- Add a `ClearAllAsync()` method to `DatabaseService` (or call existing truncate logic)
+- `ConfirmDialog.razor` — reusable modal with Yes/No buttons
+- "Clear All Data" button in Settings page or top-bar Tools menu
+- On confirm: clear DB → delete artifacts dir contents → call `State.SetDirectory(null, [])` to reset UI
+
+**Files to touch:** `DatabaseService.cs` (K-OCRLib), `Settings.razor`, new `ConfirmDialog.razor`, `app.css`
+
+---
+
+### ✅ Step 19 — Keyboard navigation *(already complete as Steps 11 + 12)*
+Global shortcuts (Ctrl+S, Ctrl+E, Escape, Tab/Shift+Tab, Alt+←/→) implemented in Steps 11 and 12 via `kocrKeyboard.init` JS interop.
+
+---
+
+### ⏳ Step 20 — Folder creation dialog
+**Goal:** `FolderPickerDialog.razor` — a modal with a server-side directory tree (call `IFileService.ListDirectory` or `Directory.GetDirectories`), Up button, New Folder input, Select button. Used in Settings to replace the plain text path input.
+
+**Key pieces:**
+- `FolderPickerDialog.razor` (modal component, receives `CurrentPath` and emits `PathSelected` callback)
+- Server-side `GetDirectories(path)` method — probably a new method on `IFileService` or a local helper
+- Wire into `Settings.razor` — replace or augment the folder path `<input>`
+- New Folder: `Directory.CreateDirectory(path)` then refresh listing
+- CSS: `.folder-picker-modal`, `.folder-tree`, `.folder-tree-item`
+
+**Files to touch:** `FolderPickerDialog.razor` (new), `Settings.razor`, `app.css`, optionally `IFileService`
+
+---
+
 ## Architecture reference
 
 ### WorkspaceState (Scoped per SignalR circuit)

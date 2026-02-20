@@ -52,7 +52,9 @@ else
                          loading="lazy" />
                     @{
                         var inv = State.SelectedInvoice;
-                        if (inv?.FieldBoundingBoxes.Count > 0 && inv.OriginalPageWidth > 0)
+                        var hasFieldBoxes = inv?.FieldBoundingBoxes.Count > 0;
+                        var hasItemBoxes  = inv?.Items.Any(it => it.BoundingBoxes.Count > 0) == true;
+                        if ((hasFieldBoxes || hasItemBoxes) && inv?.OriginalPageWidth > 0)
                         {
                             var pageNo = label;
                             var pw = inv.OriginalPageWidth.ToString("G9",  System.Globalization.CultureInfo.InvariantCulture);
@@ -72,6 +74,23 @@ else
                                     {
                                         <polygon points="@FormatBboxPoints(box.Points)"
                                                  class="viewer-bbox @bboxClass" />
+                                    }
+                                }
+                                @for (int ii = 0; ii < inv.Items.Count; ii++)
+                                {
+                                    var itemIdx  = ii;
+                                    var lineItem = inv.Items[itemIdx];
+                                    if (lineItem.BoundingBoxes.Count == 0) { continue; }
+                                    var itemKey      = $"Item_{itemIdx}";
+                                    var itemSelected = itemKey == State.SelectedFieldName;
+                                    var itemSuspect  = ItemIsSuspect(inv, lineItem);
+                                    var itemClass    = itemSelected ? "bbox-selected"
+                                                     : itemSuspect  ? "bbox-suspect"
+                                                     :                "bbox-ok";
+                                    foreach (var box in lineItem.BoundingBoxes.Where(b => b.PageNumber == pageNo))
+                                    {
+                                        <polygon points="@FormatBboxPoints(box.Points)"
+                                                 class="viewer-bbox @itemClass" />
                                     }
                                 }
                             </svg>
@@ -204,6 +223,14 @@ else
         if (inv.ConfidenceConfirmed.TryGetValue(fieldName, out var c) && !c) return true;
         if (inv.MathConfirmed.TryGetValue(fieldName,       out var m) && !m) return true;
         return false;
+    }
+
+    /// <summary>True if a line item has any failed per-field validation check.</summary>
+    private static bool ItemIsSuspect(InvoiceDto inv, InvoiceItemDto item)
+    {
+        if (inv.IsValidationAccepted || inv.IsEditedByUser) return false;
+        return item.TesseractConfirmed.Values.Any(v => !v)
+            || item.ConfidenceConfirmed.Values.Any(v => !v);
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────

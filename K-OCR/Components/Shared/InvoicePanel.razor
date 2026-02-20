@@ -208,6 +208,7 @@
     private bool        _rawTab;                  // true = showing Raw JSON tab
     private string?     _rawJson;                 // lazy-loaded raw JSON text
     private bool        _rawJsonLoading;          // spinner while DB fetch is in flight
+    private bool        _lineItemsCollapsed;      // true = line items body is hidden
 
     // Header field definitions — Key matches InvoiceDto property name exactly
     private static readonly (string Key, string Label)[] _headerFields =
@@ -249,9 +250,10 @@
             _invoice         = State.SelectedInvoice;
             _editMode        = false;
             _saving          = false;
-            _suspectFieldIdx = -1;
-            _rawTab          = false;
-            _rawJson         = null;
+            _suspectFieldIdx   = -1;
+            _rawTab            = false;
+            _rawJson           = null;
+            _lineItemsCollapsed = false;
             PopulateEditValues();
             ComputeSuspectCount();
         }
@@ -362,6 +364,18 @@
     private void OnFieldKeyDown(KeyboardEventArgs e, string fieldName)
     {
         if (e.Key is "Enter" or " ") ToggleFieldSelection(fieldName);
+    }
+
+    private void ToggleLineItemSelection(int idx)
+    {
+        if (_editMode) return; // don’t toggle bbox while an input has focus
+        var key = $"Item_{idx}";
+        State.SetSelectedField(State.SelectedFieldName == key ? null : key);
+    }
+
+    private void OnLineItemKeyDown(KeyboardEventArgs e, int idx)
+    {
+        if (e.Key is "Enter" or " ") ToggleLineItemSelection(idx);
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────

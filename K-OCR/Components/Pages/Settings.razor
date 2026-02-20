@@ -2,6 +2,9 @@
 @rendermode InteractiveServer
 @using K_OCR.Configuration
 @inject IConfigurationService ConfigService
+@inject DatabaseService DatabaseSvc
+@inject WorkspaceState State
+@inject ToastService Toast
 @inject NavigationManager Nav
 
 <PageTitle>Settings – K-OCR</PageTitle>
@@ -92,17 +95,31 @@
 
             <div class="settings-field">
                 <label class="settings-label">Project Directory</label>
-                <input type="text" class="settings-input"
-                       @bind="_settings.ProjectDirectory"
-                       placeholder="/path/to/invoices" />
+                <div class="settings-browse-row">
+                    <input type="text" class="settings-input"
+                           @bind="_settings.ProjectDirectory"
+                           placeholder="/path/to/invoices" />
+                    <button class="btn fpicker-browse-btn"
+                            @onclick="() => BrowseDirAsync(true)"
+                            title="Browse for folder">
+                        Browse…
+                    </button>
+                </div>
                 <span class="settings-hint">Root folder that K-OCR will open by default.</span>
             </div>
 
             <div class="settings-field">
                 <label class="settings-label">Artifacts Directory</label>
-                <input type="text" class="settings-input"
-                       @bind="_settings.ProjectArtifacts"
-                       placeholder="Defaults to &lt;project&gt;/artifacts" />
+                <div class="settings-browse-row">
+                    <input type="text" class="settings-input"
+                           @bind="_settings.ProjectArtifacts"
+                           placeholder="Defaults to &lt;project&gt;/artifacts" />
+                    <button class="btn fpicker-browse-btn"
+                            @onclick="() => BrowseDirAsync(false)"
+                            title="Browse for folder">
+                        Browse…
+                    </button>
+                </div>
                 <span class="settings-hint">Where processed JSON and export files are written.</span>
             </div>
         </section>
@@ -148,14 +165,41 @@
             </div>
         </section>
 
+        <!-- ── Danger Zone ──────────────────────────────────── -->
+        <section class="settings-section settings-danger-zone">
+            <h3 class="settings-section-title settings-danger-title">⚠ Danger Zone</h3>
+
+            <div class="settings-field settings-field-inline">
+                <div class="settings-danger-desc">
+                    <strong>Clear All Data</strong>
+                    <span class="settings-hint">Removes every OCR result and validated invoice from the database and deletes all artifact files. This cannot be undone.</span>
+                </div>
+                <button class="btn btn-danger" @onclick="ShowClearConfirmAsync" disabled="@_clearing">
+                    @(_clearing ? "Clearing…" : "🗑 Clear All Data")
+                </button>
+            </div>
+        </section>
+
     </div>
 </div>
+
+<ConfirmDialog @ref="_confirmDialog"
+               Title="Clear All Data?"
+               Message="This will permanently delete every OCR result, validated invoice, and artifact file. This cannot be undone."
+               ConfirmLabel="Yes, clear everything"
+               Danger="true"
+               OnConfirmed="ClearAllDataAsync" />
+
+<FolderPickerDialog @ref="_folderPicker" />
 
 @code {
     private AppSettings _settings = new() { Database = new DatabaseSettings() };
     private bool _saving;
     private bool _saved;
+    private bool _clearing;
     private string? _error;
+    private ConfirmDialog?       _confirmDialog;
+    private FolderPickerDialog? _folderPicker;
 
     protected override async Task OnInitializedAsync()
     {
@@ -182,6 +226,67 @@
         {
             _saving = false;
         }
+    }
+
+    private Task ShowClearConfirmAsync() =>
+        _confirmDialog?.ShowAsync() ?? Task.CompletedTask;
+
+    private async Task ClearAllDataAsync()
+    {
+        _clearing = true;
+        try
+        {
+            // 1. Wipe the database
+            await DatabaseSvc.ClearAllDataAsync();
+
+            // 2. Delete all artifact files
+            var settings = await ConfigService.LoadSettingsAsync();
+            if (!string.IsNullOrEmpty(settings.ProjectArtifacts)
+                && Directory.Exists(settings.ProjectArtifacts))
+            {
+                foreach (var f in Directory.EnumerateFiles(
+                    settings.ProjectArtifacts, "*", SearchOption.AllDirectories))
+                {
+                    try { File.Delete(f); } catch { /* best-effort */ }
+                }
+            }
+
+            // 3. Reset the in-memory file list so status dots are cleared
+            var resetFiles = State.Files
+                .Select(f => new FileListEntry
+                {
+                    FilePath         = f.FilePath,
+                    FileName         = f.FileName,
+                    IsProcessed      = false,
+                    IsValidated      = false,
+                    HasSuspectFields = false,
+                })
+                .ToList<FileListEntry>();
+            State.SetDirectory(State.CurrentDirectory, resetFiles, "All data cleared.");
+            State.SelectFile(null);
+
+            Toast.ShowSuccess("All OCR data and artifacts cleared.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Clear failed: {ex.Message}");
+        }
+        finally
+        {
+            _clearing = false;
+        }
+    }
+
+    private async Task BrowseDirAsync(bool isProjectDir)
+    {
+        if (_folderPicker is null) return;
+        var current = isProjectDir ? _settings.ProjectDirectory : _settings.ProjectArtifacts;
+        var chosen  = await _folderPicker.ShowAsync(current);
+        if (chosen is null) return;
+        if (isProjectDir)
+            _settings.ProjectDirectory = chosen;
+        else
+            _settings.ProjectArtifacts = chosen;
     }
 
     private void Cancel() => Nav.NavigateTo("/");

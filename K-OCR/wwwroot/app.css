@@ -1098,6 +1098,51 @@ html, body {
     padding-top: 10px;
 }
 
+/* ── Line items section ───────────────────────────────────────── */
+.inv-line-items-section {
+    flex-shrink: 0;
+    border-top: 1px solid #333;
+    padding-top: 10px;
+}
+
+/* Collapse / expand toggle button for the section header */
+.inv-section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+    color: #777;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    user-select: none;
+    transition: color 0.15s, background 0.15s;
+    width: 100%;
+    text-align: left;
+}
+.inv-section-toggle:hover {
+    color: #bbb;
+    background: rgba(255,255,255,0.04);
+}
+.inv-section-toggle:focus-visible {
+    outline: 2px solid #569cd6;
+    outline-offset: -1px;
+}
+
+.inv-toggle-chevron {
+    font-size: 9px;
+    flex-shrink: 0;
+    display: inline-block;
+    width: 10px;
+    text-align: center;
+}
+
 .inv-section-title {
     font-size: 11px;
     font-weight: 700;
@@ -1120,6 +1165,12 @@ html, body {
 .inv-li-suspect {
     border-color: #7a2a2a;
     background: #2a1a1a;
+}
+
+.inv-li-selected {
+    border-color: #b08000 !important;
+    background: rgba(255, 170, 0, 0.10) !important;
+    box-shadow: 0 0 0 1px rgba(255,170,0,0.25);
 }
 
 /* Row inside a line item */
@@ -1268,3 +1319,400 @@ html, body {
 .toast-success { background: #1b3a1b; color: #6fcf6f; border: 1px solid #3a6a3a; }
 .toast-warning { background: #3a2a00; color: #ffc342; border: 1px solid #5a4000; }
 .toast-error   { background: #3a1a1a; color: #e06060; border: 1px solid #6a2a2a; }
+
+/* ─── Danger zone section ───────────────────────────────────── */
+.settings-danger-zone {
+    border-color: #6a2a2a;
+}
+
+.settings-danger-title {
+    color: #c05050;
+}
+
+.settings-danger-desc {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    font-size: 12px;
+    color: #ccc;
+}
+
+.settings-danger-desc strong {
+    color: #e8e8e8;
+}
+
+.btn-danger {
+    flex-shrink: 0;
+    background: #5a1a1a;
+    border: 1px solid #8a2a2a;
+    color: #e06060;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-danger:hover:not(:disabled) {
+    background: #7a1a1a;
+    border-color: #b03030;
+    color: #f08080;
+}
+.btn-danger:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ─── Confirmation dialog ───────────────────────────────────── */
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+}
+
+.confirm-dialog {
+    background: #252526;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 24px;
+    min-width: 360px;
+    max-width: 480px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.confirm-header {
+    display: flex;
+    align-items: center;
+}
+
+.confirm-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #e8e8e8;
+}
+
+.confirm-body {
+    font-size: 13px;
+    color: #aaa;
+    line-height: 1.5;
+}
+
+.confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.confirm-btn-cancel {
+    background: #333;
+    border: 1px solid #555;
+    color: #ccc;
+    font-size: 12px;
+    padding: 6px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.confirm-btn-cancel:hover:not(:disabled) {
+    background: #3a3a3a;
+    color: #fff;
+}
+
+.confirm-btn-confirm {
+    background: #007acc;
+    border: 1px solid #006ab0;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.confirm-btn-confirm:hover:not(:disabled) {
+    background: #0098e6;
+}
+.confirm-btn-confirm.confirm-btn-danger {
+    background: #7a1a1a;
+    border-color: #a03030;
+    color: #f08080;
+}
+.confirm-btn-danger:hover:not(:disabled) {
+    background: #a02020;
+    color: #fff;
+}
+.confirm-btn-cancel:disabled,
+.confirm-btn-confirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+/* ═══════════════════════════════════════════════════════════════
+   Folder Picker Dialog  (Step 20)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Overlay ──────────────────────────────────────────────────── */
+.fpicker-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1200;
+}
+
+/* ── Dialog shell ─────────────────────────────────────────────── */
+.fpicker-dialog {
+    background: #252526;
+    border: 1px solid #444;
+    border-radius: 8px;
+    width: 580px;
+    max-width: 95vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+    overflow: hidden;
+}
+
+/* ── Header ───────────────────────────────────────────────────── */
+.fpicker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.fpicker-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e8e8e8;
+}
+
+.fpicker-close {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    line-height: 1;
+    transition: color 0.15s, background 0.15s;
+}
+.fpicker-close:hover { color: #fff; background: #3a3a3a; }
+
+/* ── Current path bar ────────────────────────────────────────── */
+.fpicker-path {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #2d2d2d;
+    flex-shrink: 0;
+    min-height: 0;
+}
+
+.fpicker-path-icon { font-size: 13px; }
+
+.fpicker-path-text {
+    font-size: 12px;
+    color: #9cdcfe;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+    font-family: 'Consolas', 'Menlo', monospace;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────── */
+.fpicker-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #2d2d2d;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.fpicker-up-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.fpicker-newfolder {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.fpicker-input {
+    flex: 1;
+    min-width: 0;
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-size: 12px;
+    padding: 4px 8px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.fpicker-input:focus { border-color: #007acc; }
+
+/* ── Generic small button (Up, + New Folder) ─────────────────── */
+.fpicker-btn {
+    background: #333;
+    border: 1px solid #555;
+    color: #ccc;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+}
+.fpicker-btn:hover:not(:disabled) { background: #3d3d3d; color: #fff; }
+.fpicker-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Error banner ────────────────────────────────────────────── */
+.fpicker-error {
+    font-size: 12px;
+    color: #f08080;
+    background: #2d1a1a;
+    border-bottom: 1px solid #5a2020;
+    padding: 5px 16px;
+    flex-shrink: 0;
+}
+
+/* ── Directory list ──────────────────────────────────────────── */
+.fpicker-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+    min-height: 0;
+}
+
+.fpicker-entry {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px;
+    font-size: 13px;
+    color: #c8c8c8;
+    cursor: pointer;
+    user-select: none;
+    gap: 6px;
+    transition: background 0.1s;
+}
+.fpicker-entry:hover        { background: #2a2d2e; color: #fff; }
+.fpicker-entry:focus-visible {
+    outline: 1px solid #007acc;
+    outline-offset: -1px;
+    background: #2a2d2e;
+}
+
+.fpicker-empty {
+    padding: 20px 16px;
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.fpicker-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-top: 1px solid #333;
+    flex-shrink: 0;
+    background: #1e1e1e;
+}
+
+.fpicker-selected-label {
+    font-size: 11px;
+    color: #666;
+    font-family: 'Consolas', 'Menlo', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.fpicker-footer-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.fpicker-btn-cancel {
+    background: #333;
+    border: 1px solid #555;
+    color: #ccc;
+    font-size: 12px;
+    padding: 5px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.fpicker-btn-cancel:hover { background: #3a3a3a; color: #fff; }
+
+.fpicker-btn-select {
+    background: #007acc;
+    border: 1px solid #006ab0;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.fpicker-btn-select:hover:not(:disabled) { background: #0098e6; }
+.fpicker-btn-select:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Settings: browse-row (input + Browse… button) ───────────── */
+.settings-browse-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+}
+
+.settings-browse-row .settings-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.fpicker-browse-btn {
+    background: #333;
+    border: 1px solid #555;
+    color: #ccc;
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+}
+.fpicker-browse-btn:hover { background: #3d3d3d; color: #fff; }
