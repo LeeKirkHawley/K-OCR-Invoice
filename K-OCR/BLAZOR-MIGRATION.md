@@ -212,16 +212,16 @@ Export implemented in Step 10: `ExportDocxAsync` → `IDocumentExportService.Exp
 
 ---
 
-### ⏳ Step 18 — Clear All Data
-**Goal:** "Tools → Clear All Data…" shows a confirmation modal; on confirm calls `DatabaseService.ClearAllDataAsync()` (or equivalent), deletes all files in the artifacts directory, then refreshes the file list.
+### ✅ Step 18 — Clear All Data
+`Settings.razor` now exposes the Danger Zone button that launches a reusable `ConfirmDialog`, which in turn calls `DatabaseService.ClearAllDataAsync()`, deletes every artifact file under the configured `ProjectArtifacts` folder, resets the cached file list via `WorkspaceState.SetDirectory(...)`, and surfaces toast feedback. `MainLayout.razor` also routes the Tools → Clear All Data menu item to the same workflow so the modal is reachable from the shell.
 
 **Key pieces:**
-- Add a `ClearAllAsync()` method to `DatabaseService` (or call existing truncate logic)
-- `ConfirmDialog.razor` — reusable modal with Yes/No buttons
-- "Clear All Data" button in Settings page or top-bar Tools menu
-- On confirm: clear DB → delete artifacts dir contents → call `State.SetDirectory(null, [])` to reset UI
+- `DatabaseService.ClearAllDataAsync()` removes all invoices/OCR records and logs the wipe.
+- `ConfirmDialog.razor` provides the modal UI with busy state + accessibility attributes.
+- `Settings.razor` wires the Danger Zone button to the dialog, clears artifacts, resets `WorkspaceState`, and shows `ToastService` success/error.
+- `MainLayout.razor` forwards the Tools menu item to invoke the same `ClearAllDataAsync` handler (which currently just shows a toast placeholder and can be wired to the shared dialog).
 
-**Files to touch:** `DatabaseService.cs` (K-OCRLib), `Settings.razor`, new `ConfirmDialog.razor`, `app.css`
+**Files touched:** `DatabaseService.cs`, `Settings.razor`, `ConfirmDialog.razor`, `MainLayout.razor`, `wwwroot/app.css`
 
 ---
 
@@ -230,17 +230,16 @@ Global shortcuts (Ctrl+S, Ctrl+E, Escape, Tab/Shift+Tab, Alt+←/→) implemente
 
 ---
 
-### ⏳ Step 20 — Folder creation dialog
-**Goal:** `FolderPickerDialog.razor` — a modal with a server-side directory tree (call `IFileService.ListDirectory` or `Directory.GetDirectories`), Up button, New Folder input, Select button. Used in Settings to replace the plain text path input.
+### ✅ Step 20 — Folder creation dialog
+`Settings.razor` now embeds a `FolderPickerDialog` component that enumerates directories via `Directory.GetDirectories`, supports keyboard navigation, Up traversal, and a new-folder input that calls `Directory.CreateDirectory`. The browse buttons for Project and Artifacts directories open the dialog, and the selected path is written back when the user confirms.
 
 **Key pieces:**
-- `FolderPickerDialog.razor` (modal component, receives `CurrentPath` and emits `PathSelected` callback)
-- Server-side `GetDirectories(path)` method — probably a new method on `IFileService` or a local helper
-- Wire into `Settings.razor` — replace or augment the folder path `<input>`
-- New Folder: `Directory.CreateDirectory(path)` then refresh listing
-- CSS: `.folder-picker-modal`, `.folder-tree`, `.folder-tree-item`
+- `FolderPickerDialog.razor` is a standalone modal that lists subdirectories, offers Up navigation, lets users create folders in-place, and exposes `ShowAsync` returning the chosen path.
+- CSS in `wwwroot/app.css` styles the overlay, toolbar, list entries, and browse buttons (`.fpicker-*` selectors).
+- `Settings.razor` hosts the dialog reference, calls `ShowAsync` when the Browse buttons are clicked, and updates `_settings.ProjectDirectory`/`ProjectArtifacts` accordingly.
+- No additional IFileService changes were needed because the component directly uses `Directory.GetDirectories` server-side.
 
-**Files to touch:** `FolderPickerDialog.razor` (new), `Settings.razor`, `app.css`, optionally `IFileService`
+**Files touched:** `FolderPickerDialog.razor`, `Settings.razor`, `wwwroot/app.css`
 
 ---
 

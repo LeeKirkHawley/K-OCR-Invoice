@@ -1,0 +1,268 @@
+@page "/super-admin"
+@using K_OCR.Configuration
+@using K_OCR.Models.Api.SuperAdmin
+@inject WorkspaceState State
+@inject KocrApiClient Api
+@inject ToastService Toast
+@inject IConfigurationService ConfigService
+
+<div class="admin-page">
+    <h1>Super Admin Console</h1>
+
+    @if (!State.IsSuperAdmin)
+    {
+        <div class="alert alert-warning">
+            Super admin privileges are required to view organizations.
+        </div>
+    }
+    else
+    {
+        <p>Create organizations, issue temporary credentials, and revoke access.</p>
+        <div class="admin-grid">
+            <section class="admin-panel">
+                <h2>Create organization</h2>
+                <p>New organizations get an administrative user with a temporary password.</p>
+                <EditForm Model="_createModel" OnValidSubmit="CreateOrganizationAsync">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+                    <div class="mb-3">
+                        <label class="form-label">Organization name</label>
+                        <InputText class="form-control" @bind-Value="_createModel.Name" />
+                        <ValidationMessage For="() => _createModel.Name" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <InputTextArea class="form-control" @bind-Value="_createModel.Description" rows="2" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Admin email</label>
+                        <InputText class="form-control" @bind-Value="_createModel.AdminEmail" />
+                        <ValidationMessage For="() => _createModel.AdminEmail" />
+                    </div>
+                    <button type="submit" class="btn btn-primary" disabled="@_isCreating">
+                        @_isCreating ? "Creating…" : "Create organization"
+                    </button>
+                </EditForm>
+                @if (_creationResult is not null)
+                {
+                    <div class="creation-result">
+                        <h3>Share these credentials</h3>
+                        <p>
+                            Temporary password: <code>@_creationResult.TempPassword</code><br />
+                            Invitation token: <code>@_creationResult.InvitationToken</code>
+                        </p>
+                        <p class="small">
+                            The user can use this token on the Authentication page to set a permanent password.
+                        </p>
+                    </div>
+                }
+            </section>
+
+            <section class="admin-panel">
+                <h2>Organizations</h2>
+                @if (_isLoading)
+                {
+                    <div class="text-muted">Loading organizations…</div>
+                }
+                else if (_organizations.Length == 0)
+                {
+                    <div class="text-muted">No organizations have been created yet.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Users</th>
+                                    <th>Created</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var org in _organizations)
+                                {
+                                    <tr>
+                                        <td><strong>@org.Name</strong><br /><small>@org.Description</small></td>
+                                        <td>@org.UserCount</td>
+                                        <td>@org.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                                        <td>
+                                            <span class="status-pill @(org.IsActive ? "status-active" : "status-inactive")">
+                                                @(org.IsActive ? "Active" : "Revoked")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    disabled="@(!org.IsActive || _revokingOrgId == org.OrganizationId)"
+                                                    @onclick="() => RevokeOrganizationAsync(org.OrganizationId)">
+                                                @( _revokingOrgId == org.OrganizationId ? "Revoking…" : "Revoke" )
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+
+            <section class="admin-panel admin-email-panel">
+                <div class="email-bypass-label"> EMAIL IS CURRENTLY BYPASSED </div>
+                <h2>Email configuration</h2>
+                <p class="small">These SMTP settings will be used once authentication emails are enabled.</p>
+                <EditForm Model="_emailSettings" OnValidSubmit="SaveEmailSettingsAsync">
+                    <div class="mb-3">
+                        <label class="form-label">SMTP host</label>
+                        <InputText class="form-control" @bind-Value="_emailSettings.SmtpHost" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Port</label>
+                        <InputNumber class="form-control" @bind-Value="_emailSettings.Port" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <InputText class="form-control" @bind-Value="_emailSettings.Username" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <InputText class="form-control" type="password" @bind-Value="_emailSettings.Password" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">From address</label>
+                        <InputText class="form-control" @bind-Value="_emailSettings.FromAddress" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">From name</label>
+                        <InputText class="form-control" @bind-Value="_emailSettings.FromName" />
+                    </div>
+                    <div class="form-check mb-3">
+                        <InputCheckbox class="form-check-input" @bind-Value="_emailSettings.EnableSsl" id="emailEnableSsl" />
+                        <label class="form-check-label" for="emailEnableSsl">Use TLS/SSL</label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <InputCheckbox class="form-check-input" @bind-Value="_emailSettings.BypassEmail" id="emailBypass" />
+                        <label class="form-check-label" for="emailBypass">Keep email sending bypassed</label>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary" disabled="@_isSavingEmailSettings">
+                            @_isSavingEmailSettings ? "Saving…" : "Save email settings"
+                        </button>
+                        @if (!string.IsNullOrEmpty(_emailSettingsMessage))
+                        {
+                            <span class="text-muted small">@_emailSettingsMessage</span>
+                        }
+                    </div>
+                </EditForm>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly CreateOrganizationRequest _createModel = new();
+    private OrganizationOverview[] _organizations = Array.Empty<OrganizationOverview>();
+    private CreateOrganizationResult? _creationResult;
+    private bool _isLoading;
+    private bool _isCreating;
+    private string? _revokingOrgId;
+    private EmailSettings _emailSettings = new();
+    private bool _isSavingEmailSettings;
+    private string? _emailSettingsMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (State.IsSuperAdmin)
+        {
+            await LoadOrganizationsAsync();
+            await LoadEmailSettingsAsync();
+        }
+    }
+
+    private async Task LoadOrganizationsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _organizations = await Api.GetAsync<OrganizationOverview[]>("api/super-admin/organizations");
+        }
+        catch (HttpRequestException ex)
+        {
+            Toast.ShowError($"Unable to load organizations: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadEmailSettingsAsync()
+    {
+        var settings = await ConfigService.LoadSettingsAsync();
+        _emailSettings = settings.Email ?? new EmailSettings();
+    }
+
+    private async Task SaveEmailSettingsAsync()
+    {
+        _isSavingEmailSettings = true;
+        _emailSettingsMessage = null;
+        try
+        {
+            var settings = await ConfigService.LoadSettingsAsync();
+            settings.Email = _emailSettings;
+            await ConfigService.SaveSettingsAsync(settings);
+            _emailSettingsMessage = "Settings saved (email still bypassed).";
+        }
+        catch (Exception ex)
+        {
+            _emailSettingsMessage = $"Save failed: {ex.Message}";
+        }
+        finally
+        {
+            _isSavingEmailSettings = false;
+        }
+    }
+
+    private async Task CreateOrganizationAsync()
+    {
+        _isCreating = true;
+        try
+        {
+            _creationResult = await Api.PostAsync<CreateOrganizationRequest, CreateOrganizationResult>(
+                "api/super-admin/organizations", _createModel);
+            Toast.ShowSuccess("Organization created — share the credentials securely.");
+            _createModel.Name = string.Empty;
+            _createModel.Description = string.Empty;
+            _createModel.AdminEmail = string.Empty;
+            await LoadOrganizationsAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toast.ShowError($"Create failed: {ex.Message}");
+        }
+        finally
+        {
+            _isCreating = false;
+        }
+    }
+
+    private async Task RevokeOrganizationAsync(string organizationId)
+    {
+        _revokingOrgId = organizationId;
+        try
+        {
+            await Api.PostAsync($"api/super-admin/organizations/{organizationId}/revoke", new { });
+            Toast.ShowSuccess("Organization revoked.");
+            await LoadOrganizationsAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toast.ShowError($"Revoke failed: {ex.Message}");
+        }
+        finally
+        {
+            _revokingOrgId = null;
+        }
+    }
+}

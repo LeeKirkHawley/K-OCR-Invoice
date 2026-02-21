@@ -11,6 +11,7 @@ public class AppSettings
     public double? SplitterLeftPaneWidth { get; set; }
     public double? SplitterCenterPaneWidth { get; set; }
     public double? SplitterRightPaneWidth { get; set; }
+    public EmailSettings Email { get; set; } = new();
 
     /// <summary>
     /// Minimum Azure Document Intelligence confidence score (0.0 – 1.0) required
@@ -30,4 +31,16 @@ public class DatabaseSettings
     public bool EnableSensitiveDataLogging { get; set; } = false;
     public bool EnableDetailedErrors { get; set; } = false;
     public bool UseWalMode { get; set; } = false; // WAL mode can cause issues on external drives
+}
+
+public class EmailSettings
+{
+    public bool BypassEmail { get; set; } = true;
+    public string? SmtpHost { get; set; }
+    public int Port { get; set; } = 587;
+    public bool EnableSsl { get; set; } = true;
+    public string? Username { get; set; }
+    public string? Password { get; set; }
+    public string? FromAddress { get; set; } = "no-reply@kocr.local";
+    public string? FromName { get; set; } = "K-OCR";
 }

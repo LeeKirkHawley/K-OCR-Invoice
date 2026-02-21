@@ -4,6 +4,7 @@
 @inject IInvoiceProcessingService ProcessingService
 @inject IConfigurationService ConfigService
 @inject ToastService Toast
+@inject NavigationManager Navigation
 @implements IAsyncDisposable
 
 <PageTitle>@(State.SelectedFile?.FileName is { } fn ? $"{fn} — K-OCR" : "K-OCR")</PageTitle>
@@ -12,6 +13,18 @@
     <div class="kocr-top-left">
         <span class="kocr-title">K-OCR</span>
         <span class="kocr-status">@State.StatusMessage</span>
+    </div>
+    <div class="kocr-top-right">
+        @if (State.IsAuthenticated)
+        {
+            <span class="kocr-user-email">@State.CurrentUserEmail</span>
+            <span class="kocr-user-tenant">Tenant: @(State.TenantName ?? "Global")</span>
+            <button class="btn btn-sm btn-outline-light ms-2" @onclick="Logout">Sign out</button>
+        }
+        else
+        {
+            <NavLink class="btn btn-sm btn-outline-light" href="/auth">Sign in</NavLink>
+        }
     </div>
     <nav class="navbar navbar-expand-lg kocr-menu-bar">
         <div class="container-fluid px-0">
@@ -78,6 +91,30 @@
                             Tools
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="toolsMenu">
+                            @if (State.IsSuperAdmin)
+                            {
+                                <li>
+                                    <NavLink class="dropdown-item" href="/super-admin">
+                                        Super Admin Console
+                                    </NavLink>
+                                </li>
+                            }
+
+                            @if (State.IsOrganizationAdmin)
+                            {
+                                <li>
+                                    <NavLink class="dropdown-item" href="/organization/users">
+                                        Organization Users
+                                    </NavLink>
+                                </li>
+                            }
+
+                            <li>
+                                <NavLink class="dropdown-item" href="/auth">
+                                    Authentication Setup
+                                </NavLink>
+                            </li>
+                            <li><hr class="dropdown-divider" /></li>
                             <li>
                                 <NavLink class="dropdown-item" href="/settings">
                                     Settings
@@ -251,6 +288,12 @@
     private void Exit()
     {
         // TODO: Implement exit logic (clear state or redirect)
+    }
+
+    private void Logout()
+    {
+        State.ClearAuthentication();
+        Navigation.NavigateTo("/auth");
     }
 
     private async Task ClearAllData()

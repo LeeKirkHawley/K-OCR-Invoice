@@ -1,3 +1,112 @@
+.kocr-top-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+    color: #c7c7c7;
+    font-size: 12px;
+}
+
+.kocr-user-email {
+    font-weight: 600;
+    color: #f5f5f5;
+}
+
+.kocr-user-tenant {
+    font-size: 11px;
+    color: #8fb8ff;
+    white-space: nowrap;
+}
+
+.auth-page,
+.admin-page {
+    padding: 24px;
+    height: 100%;
+    overflow-y: auto;
+    background: #1e1e1e;
+}
+
+.auth-grid,
+.admin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.auth-panel,
+.admin-panel {
+    padding: 16px;
+    background: #2b2b2b;
+    border-radius: 8px;
+    border: 1px solid #3b3b3b;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+}
+
+.auth-panel h2,
+.admin-panel h2 {
+    margin-top: 0;
+    font-size: 18px;
+    color: #f5f5f5;
+}
+
+.admin-panel.admin-email-panel {
+    background: #201f25;
+}
+
+.email-bypass-label {
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: #7a0f0f;
+    color: #ffe8e0;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+}
+
+.auth-panel p,
+.admin-panel p {
+    margin-bottom: 12px;
+    color: #cdd3d7;
+}
+
+.creation-result {
+    margin-top: 18px;
+    padding: 12px;
+    border: 1px solid #3d5c7d;
+    background: #1d2631;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.creation-result code {
+    background: #0f1520;
+    color: #9df2ff;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.admin-page table {
+    color: #e5e5e5;
+}
+
+.status-pill {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.status-active {
+    background: #1b5c1b;
+    color: #a7ffd1;
+}
+
+.status-inactive {
+    background: #4e2929;
+    color: #ffb1b1;
+}
 /* ─── Reset & base ─────────────────────────────────────────── */
 *, *::before, *::after {
     box-sizing: border-box;

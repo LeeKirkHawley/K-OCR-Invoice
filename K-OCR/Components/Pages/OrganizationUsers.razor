@@ -1,0 +1,145 @@
+@page "/organization/users"
+@using System
+@using K_OCR.Models.Api.OrganizationAdmin
+@inject WorkspaceState State
+@inject KocrApiClient Api
+@inject ToastService Toast
+
+<div class="admin-page">
+    <h1>Organization users</h1>
+
+    @if (!State.IsOrganizationAdmin)
+    {
+        <div class="alert alert-warning">
+            Organization admin privileges (or super-admin) are required to view this page.
+        </div>
+    }
+    else
+    {
+        <p>Invite new users to your tenant and monitor the current roster.</p>
+        <div class="admin-grid">
+            <section class="admin-panel">
+                <h2>Invite user</h2>
+                <p>Invited users receive a temporary password and token to set their own credentials.</p>
+                <EditForm Model="_inviteModel" OnValidSubmit="InviteUserAsync">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <InputText class="form-control" @bind-Value="_inviteModel.Email" />
+                        <ValidationMessage For="() => _inviteModel.Email" />
+                    </div>
+                    <button type="submit" class="btn btn-primary" disabled="@_isInviting">
+                        @_isInviting ? "Inviting…" : "Send invite"
+                    </button>
+                </EditForm>
+                @if (_inviteResult is not null)
+                {
+                    <div class="creation-result">
+                        <h3>Share with the new user</h3>
+                        <p>
+                            Temporary password: <code>@_inviteResult.TempPassword</code><br />
+                            Invitation token: <code>@_inviteResult.InvitationToken</code>
+                        </p>
+                        <p class="small">
+                            The token can be redeemed via the Authentication page to force a password reset.
+                        </p>
+                    </div>
+                }
+            </section>
+
+            <section class="admin-panel">
+                <h2>Current users</h2>
+                @if (_isLoading)
+                {
+                    <div class="text-muted">Loading users…</div>
+                }
+                else if (_users.Length == 0)
+                {
+                    <div class="text-muted">No users have been invited yet.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Roles</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var user in _users)
+                                {
+                                    <tr>
+                                        <td>@user.Email</td>
+                                        <td>@string.Join(", ", user.Roles)</td>
+                                        <td>
+                                            <span class="status-pill @(user.IsActive ? "status-active" : "status-inactive")">
+                                                @(user.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly InviteUserRequest _inviteModel = new();
+    private InviteUserResult? _inviteResult;
+    private OrganizationUserOverview[] _users = Array.Empty<OrganizationUserOverview>();
+    private bool _isLoading;
+    private bool _isInviting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (State.IsOrganizationAdmin)
+        {
+            await LoadUsersAsync();
+        }
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _users = await Api.GetAsync<OrganizationUserOverview[]>("api/organization/users");
+        }
+        catch (HttpRequestException ex)
+        {
+            Toast.ShowError($"Unable to load users: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task InviteUserAsync()
+    {
+        _isInviting = true;
+        try
+        {
+            _inviteResult = await Api.PostAsync<InviteUserRequest, InviteUserResult>("api/organization/users", _inviteModel);
+            Toast.ShowSuccess("Invitation generated.");
+            _inviteModel.Email = string.Empty;
+            await LoadUsersAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toast.ShowError($"Invite failed: {ex.Message}");
+        }
+        finally
+        {
+            _isInviting = false;
+        }
+    }
+}

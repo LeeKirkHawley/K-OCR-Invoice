@@ -3,9 +3,15 @@ using K_OCR.Services;
 using K_OCR.Data;
 using K_OCR.Configuration;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
+var apiBaseUrl = configuration["Api:BaseUrl"];
+var apiUri = Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var parsedUri)
+    ? parsedUri
+    : new Uri("https://localhost:5001");
 
 // Add Blazor Server components
 builder.Services.AddRazorComponents()
@@ -31,6 +37,13 @@ builder.Services.AddDbContext<KOCRDbContext>(options =>
         options.EnableDetailedErrors();
 });
 builder.Services.AddScoped<DatabaseService>();
+
+builder.Services.AddHttpClient("KocrApi", client =>
+{
+    client.BaseAddress = apiUri;
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+});
+builder.Services.AddScoped<KocrApiClient>();
 
 // Services with no DB dependency — safe as Singleton
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();

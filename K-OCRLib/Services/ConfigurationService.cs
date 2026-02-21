@@ -44,6 +44,7 @@ public class ConfigurationService : IConfigurationService
             });
             
             settings = settings ?? GetDefaultSettings();
+            settings.Email ??= new EmailSettings();
             
             // Set default ProjectArtifacts if ProjectDirectory is set but ProjectArtifacts is not
             if (!string.IsNullOrEmpty(settings.ProjectDirectory) && string.IsNullOrEmpty(settings.ProjectArtifacts))

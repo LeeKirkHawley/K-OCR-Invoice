@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using K_OCR.Models;
+using K_OCR.Security;
 
 namespace K_OCR.Services;
 
@@ -37,6 +41,24 @@ public class WorkspaceState
 
     /// <summary>Short message shown in the top bar (e.g. "42 files · 3 processed").</summary>
     public string StatusMessage { get; private set; } = string.Empty;
+
+    /// <summary>The JWT issued for the current session.</summary>
+    public string? AuthToken { get; private set; }
+
+    public string? TenantId { get; private set; }
+
+    public string? TenantName { get; private set; }
+
+    public string? CurrentUserEmail { get; private set; }
+
+    private IReadOnlyList<string> _roles = Array.Empty<string>();
+    public IReadOnlyList<string> Roles => _roles;
+
+    public bool IsAuthenticated => !string.IsNullOrWhiteSpace(AuthToken);
+
+    public bool IsSuperAdmin => Roles.Contains(RoleNames.SuperAdmin);
+
+    public bool IsOrganizationAdmin => IsSuperAdmin || Roles.Contains(RoleNames.OrganizationAdmin);
 
     // ── Event ─────────────────────────────────────────────────────────────────
 
@@ -149,6 +171,36 @@ public class WorkspaceState
     public void SetStatus(string message)
     {
         StatusMessage = message;
+        NotifyChange();
+    }
+
+    /// <summary>Capture authentication tokens, tenant context, and roles.</summary>
+    public void SetAuthentication(
+        string? token,
+        string? tenantId,
+        string? tenantName,
+        string? userEmail,
+        IEnumerable<string>? roles)
+    {
+        AuthToken        = string.IsNullOrWhiteSpace(token) ? null : token.Trim();
+        TenantId         = string.IsNullOrWhiteSpace(tenantId) ? null : tenantId.Trim();
+        TenantName       = string.IsNullOrWhiteSpace(tenantName) ? null : tenantName.Trim();
+        CurrentUserEmail = string.IsNullOrWhiteSpace(userEmail) ? null : userEmail.Trim();
+        _roles = roles?
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? Array.Empty<string>();
+        NotifyChange();
+    }
+
+    public void ClearAuthentication()
+    {
+        AuthToken        = null;
+        TenantId         = null;
+        TenantName       = null;
+        CurrentUserEmail = null;
+        _roles           = Array.Empty<string>();
         NotifyChange();
     }
 
