@@ -108,6 +108,20 @@ window.kocrExport = {
 
 // ── Validation panel field-row focus helpers ─────────────────────────────────
 window.kocrFields = {
+    // Finds the matching [data-nav-row] element in the validation panel, scrolls it
+    // into view, focuses it, and updates the stored key for Tab navigation.
+    focusNavRow: function (key) {
+        function tryFocus() {
+            const row = document.querySelector('[data-nav-row="' + key + '"]');
+            if (!row) return;
+            row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            row.focus();
+            window._focusedNavRowKey = key;
+        }
+        // Defer one frame so Blazor re-render (triggered by SetSelectedField) finishes first
+        requestAnimationFrame(tryFocus);
+    },
+
     focusFirst: function () {
         const first = document.querySelector('[data-nav-row]');
         if (!first) return;

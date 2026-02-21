@@ -74,7 +74,10 @@ else
                                     foreach (var box in kvp.Value.Where(b => b.PageNumber == pageNo))
                                     {
                                         <polygon points="@FormatBboxPoints(box.Points)"
-                                                 class="viewer-bbox @bboxClass" />
+                                                 class="viewer-bbox @bboxClass"
+                                                 style="pointer-events:all;cursor:pointer"
+                                                 @onclick="() => OnBboxClickedAsync(fld)"
+                                                 @onclick:stopPropagation="true" />
                                     }
                                 }
                                 @for (int ii = 0; ii < inv.Items.Count; ii++)
@@ -91,7 +94,10 @@ else
                                     foreach (var box in lineItem.BoundingBoxes.Where(b => b.PageNumber == pageNo))
                                     {
                                         <polygon points="@FormatBboxPoints(box.Points)"
-                                                 class="viewer-bbox @itemClass" />
+                                                 class="viewer-bbox @itemClass"
+                                                 style="pointer-events:all;cursor:pointer"
+                                                 @onclick="() => OnBboxClickedAsync(itemKey)"
+                                                 @onclick:stopPropagation="true" />
                                     }
                                 }
                             </svg>
@@ -209,6 +215,14 @@ else
         {
             _loading = false;
         }
+    }
+
+    // ── Bbox click → select field + focus matching validation row ─────────────
+
+    private async Task OnBboxClickedAsync(string key)
+    {
+        State.SetSelectedField(key);
+        await JS.InvokeVoidAsync("kocrFields.focusNavRow", key);
     }
 
     // ── Zoom controls ─────────────────────────────────────────────────────────

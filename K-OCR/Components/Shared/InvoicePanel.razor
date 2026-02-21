@@ -127,11 +127,12 @@
 
                 @for (int i = 0; i < inv.Items.Count; i++)
                 {
-                    var idx      = i;
-                    var item     = inv.Items[idx];
+                    var idx       = i;
+                    var item      = inv.Items[idx];
                     var liSuspect = IsLineItemSuspect(item);
+                    var liSel     = State.SelectedFieldName == $"Item_{idx}";
 
-                    <div class="inv-line-item @(liSuspect ? "inv-li-suspect" : "")"
+                    <div class="inv-line-item @(liSuspect ? "inv-li-suspect" : "") @(liSel ? "inv-li-selected" : "")"
                          tabindex="0"
                          data-nav-row="Item_@idx"
                          @onclick="() => ToggleLineItemSelection(idx)"
