@@ -7,7 +7,8 @@
         "launchBrowser": true,
         "applicationUrl": "http://localhost:5082",
         "environmentVariables": {
-          "ASPNETCORE_ENVIRONMENT": "Development"
+          "ASPNETCORE_ENVIRONMENT": "Development",
+          "LD_LIBRARY_PATH": "/usr/lib/x86_64-linux-gnu"
         }
       },
       "https": {
@@ -16,7 +17,8 @@
         "launchBrowser": true,
         "applicationUrl": "https://localhost:7282;http://localhost:5082",
         "environmentVariables": {
-          "ASPNETCORE_ENVIRONMENT": "Development"
+          "ASPNETCORE_ENVIRONMENT": "Development",
+          "LD_LIBRARY_PATH": "/usr/lib/x86_64-linux-gnu"
         }
       }
     }

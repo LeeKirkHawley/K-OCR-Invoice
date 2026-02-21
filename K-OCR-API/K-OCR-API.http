@@ -1,6 +1,0 @@
-@K_OCR_API_HostAddress = http://localhost:5055
-
-GET {{K_OCR_API_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

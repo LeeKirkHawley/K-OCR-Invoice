@@ -8,6 +8,8 @@
 
 <PageTitle>K-OCR</PageTitle>
 
+<FolderPickerDialog @ref="_folderPicker" />
+
 <div class="file-list-panel">
 
     <!-- ── Toolbar ──────────────────────────────────────────── -->
@@ -21,7 +23,7 @@
                disabled="@_loading"
                title="Folder path" />
         <button class="btn btn-open"
-                @onclick="LoadDirectoryAsync"
+                @onclick="OpenFolderPickerAsync"
                 disabled="@_loading"
                 title="Open folder">
             📂
@@ -100,6 +102,8 @@
                     var progress = State.OcrProgress.GetValueOrDefault(file.FilePath);
                     <div class="file-list-item @(file.FilePath == State.SelectedFilePath ? "selected" : "")"
                          @onclick="() => SelectFileAsync(file)"
+                         @oncontextmenu="(e) => OpenContextMenu(e, file)"
+                         @oncontextmenu:preventDefault="true"
                          title="@file.FilePath">
                         <span class="file-status-dot @file.DotClass" title="@file.StatusLabel"></span>
                         <span class="file-name">@file.FileName</span>
@@ -115,10 +119,79 @@
 
 </div>
 
+@if (_ctxMenuVisible)
+{
+    <div class="ctx-menu-backdrop" @onclick="CloseContextMenu"></div>
+    <div class="ctx-menu" style="left:@(_ctxMenuX)px;top:@(_ctxMenuY)px">
+        <button class="ctx-menu-item"
+                disabled="@State.IsOcrRunning"
+                @onclick="ContextOcrNowAsync">
+            ⚡ OCR Now
+        </button>
+        <div class="ctx-menu-separator"></div>
+        <button class="ctx-menu-item"
+                @onclick="CopyPathToClipboard">
+            📋 Copy path
+        </button>
+    </div>
+}
+
 @code {
     private string  _folderPath   = string.Empty;
     private bool    _loading;
     private string? _errorMessage;
+    private FolderPickerDialog? _folderPicker;
+
+    // ── Context menu ──────────────────────────────────────────────────────
+    private bool           _ctxMenuVisible;
+    private double         _ctxMenuX;
+    private double         _ctxMenuY;
+    private FileListEntry? _ctxMenuTarget;
+
+    private void OpenContextMenu(MouseEventArgs e, FileListEntry file)
+    {
+        _ctxMenuTarget  = file;
+        _ctxMenuX       = e.ClientX;
+        _ctxMenuY       = e.ClientY;
+        _ctxMenuVisible = true;
+    }
+
+    private void CloseContextMenu()
+    {
+        _ctxMenuVisible = false;
+        _ctxMenuTarget  = null;
+    }
+
+    private async Task ContextOcrNowAsync()
+    {
+        var file = _ctxMenuTarget;
+        CloseContextMenu();
+        if (file is null || State.IsOcrRunning) return;
+        await SelectFileAsync(file);
+        await OcrNowAsync();
+    }
+
+    private void CopyPathToClipboard()
+    {
+        if (_ctxMenuTarget is not null)
+            State.SelectFile(_ctxMenuTarget.FilePath);
+        CloseContextMenu();
+    }
+
+    private async Task OpenFolderPickerAsync()
+    {
+        if (_folderPicker is null) return;
+        var settings  = await ConfigService.LoadSettingsAsync();
+        var startPath = !string.IsNullOrWhiteSpace(_folderPath)    ? _folderPath
+                      : !string.IsNullOrWhiteSpace(settings.DefaultStartFolder) ? settings.DefaultStartFolder
+                      : AppContext.BaseDirectory;
+        var chosen = await _folderPicker.ShowAsync(startPath);
+        if (chosen is not null)
+        {
+            _folderPath = chosen;
+            await LoadDirectoryAsync();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {

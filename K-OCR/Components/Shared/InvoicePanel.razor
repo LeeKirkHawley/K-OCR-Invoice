@@ -97,6 +97,7 @@
                 <div class="inv-field-row @(suspect ? "inv-suspect" : isOk ? "inv-ok" : "") @(isSel ? "inv-field-selected" : "")"
                      tabindex="0"
                      role="button"
+                     data-nav-row="@k"
                      @onclick="() => ToggleFieldSelection(k)"
                      @onkeydown="@(e => OnFieldKeyDown(e, k))"
                      title="@tip">
@@ -130,7 +131,11 @@
                     var item     = inv.Items[idx];
                     var liSuspect = IsLineItemSuspect(item);
 
-                    <div class="inv-line-item @(liSuspect ? "inv-li-suspect" : "")">
+                    <div class="inv-line-item @(liSuspect ? "inv-li-suspect" : "")"
+                         tabindex="0"
+                         data-nav-row="Item_@idx"
+                         @onclick="() => ToggleLineItemSelection(idx)"
+                         @onkeydown="@(e => OnLineItemKeyDown(e, idx))">
                         <div class="inv-li-row inv-li-desc-row">
                             <span class="inv-li-label">Description</span>
                             @if (_editMode)
@@ -205,6 +210,7 @@
     private bool        _exporting;
     private int         _suspectCount;
     private int         _suspectFieldIdx = -1;   // tracks position for Tab cycling
+    private bool        _shouldFocusFirstField;   // set true to focus first field row after render
     private bool        _rawTab;                  // true = showing Raw JSON tab
     private string?     _rawJson;                 // lazy-loaded raw JSON text
     private bool        _rawJsonLoading;          // spinner while DB fetch is in flight
@@ -243,6 +249,15 @@
 
     public void Dispose() => State.OnChange -= OnStateChanged;
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldFocusFirstField && !_editMode)
+        {
+            _shouldFocusFirstField = false;
+            await JS.InvokeVoidAsync("kocrFields.focusFirst");
+        }
+    }
+
     private void OnStateChanged() => InvokeAsync(() =>
     {
         if (!ReferenceEquals(State.SelectedInvoice, _invoice))
@@ -254,6 +269,7 @@
             _rawTab            = false;
             _rawJson           = null;
             _lineItemsCollapsed = false;
+            _shouldFocusFirstField = _invoice is not null;
             PopulateEditValues();
             ComputeSuspectCount();
         }
@@ -345,6 +361,7 @@
             _invoice.Items.AddRange(restored);
         }
         _editMode = false;
+        _shouldFocusFirstField = true;
         PopulateEditValues();
     }
 
@@ -425,6 +442,7 @@
             PopulateEditValues();
             ComputeSuspectCount();
             _editMode = false;
+            _shouldFocusFirstField = true;
         }
         catch (Exception ex) { Toast.ShowError($"Save failed: {ex.Message}"); }
         finally
@@ -544,7 +562,27 @@
             State.SetSelectedField(suspects[_suspectFieldIdx]);
         });
     }
+    // ── Nav-row focus (Tab navigation → highlight matching bbox) ─────────────────────
 
+    /// <summary>
+    /// Called by the JS Tab handler whenever it moves keyboard focus to a
+    /// [data-nav-row] element.  Selects the matching field so its bounding
+    /// box is highlighted in the document viewer.
+    /// </summary>
+    public Task OnNavRowFocusedAsync(string key) => InvokeAsync(() =>
+    {
+        if (_editMode || _invoice is null) return;
+        if (key.StartsWith("Item_") && int.TryParse(key[5..], out var idx))
+        {
+            var item = _invoice.Items.ElementAtOrDefault(idx);
+            if (item?.BoundingBoxes.Count > 0)
+                State.SetSelectedField(key);
+        }
+        else if (_invoice.FieldBoundingBoxes.ContainsKey(key))
+        {
+            State.SetSelectedField(key);
+        }
+    });
     // ── Raw JSON tab ─────────────────────────────────────────────────────────
 
     private async Task SwitchTabAsync(bool showRaw)

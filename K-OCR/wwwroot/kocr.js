@@ -106,7 +106,35 @@ window.kocrExport = {
     }
 };
 
-// ── Global keyboard shortcut handler ─────────────────────────────────────────
+// ── Validation panel field-row focus helpers ─────────────────────────────────
+window.kocrFields = {
+    focusFirst: function () {
+        const first = document.querySelector('[data-nav-row]');
+        if (!first) return;
+        first.focus();
+        const key = first.dataset.navRow;
+        window._focusedNavRowKey = key;
+        if (key && window._kocrDotNetRef)
+            requestAnimationFrame(() =>
+                window._kocrDotNetRef.invokeMethodAsync('OnKeyboardShortcut', 'field-focused:' + key));
+    },
+
+    // Scrolls the .viewer-scroll container so the selected bbox polygon is centred.
+    // Accounts for current zoom level because getBoundingClientRect() returns
+    // screen-space coordinates regardless of the SVG viewBox scaling.
+    scrollBboxIntoView: function () {
+        const polygon  = document.querySelector('.viewer-bbox.bbox-selected');
+        const scroller = document.querySelector('.viewer-scroll');
+        if (!polygon || !scroller) return;
+        const pr = polygon.getBoundingClientRect();
+        const sr = scroller.getBoundingClientRect();
+        const targetTop  = scroller.scrollTop  + (pr.top  + pr.height / 2 - sr.top)  - sr.height / 2;
+        const targetLeft = scroller.scrollLeft + (pr.left + pr.width  / 2 - sr.left) - sr.width  / 2;
+        scroller.scrollTo({ top: targetTop, left: targetLeft, behavior: 'smooth' });
+    }
+};
+
+// ── Global keyboard shortcut handler ─────────────────────────────────────────────────
 // Registers document-level keydown shortcuts and calls [JSInvokable]
 // OnKeyboardShortcut on the MainLayout DotNetObjectReference.
 //
@@ -117,6 +145,7 @@ window.kocrExport = {
 //  Shift+Tab     → 'prev-field'  (cycle to previous suspect field, skip in inputs)
 window.kocrKeyboard = {
     init: function (dotNetRef) {
+        window._kocrDotNetRef = dotNetRef;  // stored for focusFirst + scrollBboxIntoView
         document.addEventListener('keydown', function (e) {
             const tag        = document.activeElement?.tagName ?? '';
             const isEditable = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)
@@ -150,11 +179,42 @@ window.kocrKeyboard = {
                 return;
             }
 
-            // Tab / Shift+Tab → cycle suspect fields (only when focus is NOT in a text input)
-            if (e.key === 'Tab' && !isEditable) {
-                e.preventDefault();
-                dotNetRef.invokeMethodAsync('OnKeyboardShortcut',
-                    e.shiftKey ? 'prev-field' : 'next-field');
+            // Tab / Shift+Tab → navigate [data-nav-row] elements (header fields + line items),
+            // wrapping around at the ends.  Server is notified via rAF so re-renders from
+            // bbox selection never interfere with rapid Tab pressing.
+            if (e.key === 'Tab') {
+                const rows = Array.from(document.querySelectorAll('[data-nav-row]'));
+                if (rows.length > 0) {
+                    // Prefer DOM activeElement; fall back to stored key when a re-render
+                    // caused Blazor to patch the focused element and lose the reference.
+                    let currentRow = rows.includes(document.activeElement)
+                        ? document.activeElement
+                        : (window._focusedNavRowKey
+                            ? document.querySelector('[data-nav-row="' + window._focusedNavRowKey + '"]')
+                            : null);
+
+                    if (currentRow) {
+                        e.preventDefault();
+                        const idx     = rows.indexOf(currentRow);
+                        const next    = e.shiftKey
+                            ? (idx - 1 + rows.length) % rows.length
+                            : (idx + 1) % rows.length;
+                        const nextRow = rows[next];
+                        nextRow.focus();
+                        const key = nextRow.dataset.navRow;
+                        window._focusedNavRowKey = key;
+                        // Notify server after next paint so re-renders don't race with Tab
+                        if (key) requestAnimationFrame(() =>
+                            dotNetRef.invokeMethodAsync('OnKeyboardShortcut', 'field-focused:' + key));
+                        return;
+                    }
+                }
+                // No nav row focused — fall back to suspect-field cycling (outside inputs)
+                if (!isEditable) {
+                    e.preventDefault();
+                    dotNetRef.invokeMethodAsync('OnKeyboardShortcut',
+                        e.shiftKey ? 'prev-field' : 'next-field');
+                }
             }
         });
     }

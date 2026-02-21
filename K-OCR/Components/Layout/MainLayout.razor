@@ -240,6 +240,8 @@
         "prev-field" => _invoicePanel?.CycleSuspectFieldAsync(-1) ?? Task.CompletedTask,
         "prev-file"  => NavigateFileAsync(-1),
         "next-file"  => NavigateFileAsync(+1),
+        _ when shortcut.StartsWith("field-focused:") =>
+            _invoicePanel?.OnNavRowFocusedAsync(shortcut["field-focused:".Length..]) ?? Task.CompletedTask,
         _            => Task.CompletedTask
     };
 

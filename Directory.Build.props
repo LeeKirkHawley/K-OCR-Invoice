@@ -3,4 +3,27 @@
     <!-- Suppress missing XML documentation warnings -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+
+  <!--
+    Create symlinks for Tesseract / Leptonica native libraries on Linux.
+    The Tesseract NuGet package ships Windows DLLs only; on Linux we point to
+    the system-installed libraries so InteropDotNet can find them by exact name
+    in the output directory (and its x64/ subdirectory).
+    The condition ensures this is a no-op on Windows/macOS.
+  -->
+  <Target Name="CreateNativeLibSymlinks" AfterTargets="Build"
+          Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Exec Command="mkdir -p '$(OutputPath)x64'" />
+    <!-- libdl – needed by InteropDotNet; merged into libc on Ubuntu 22.04+ -->
+    <Exec Command="ln -sf /lib/x86_64-linux-gnu/libdl.so.2 '$(OutputPath)libdl.so'" />
+    <Exec Command="ln -sf /lib/x86_64-linux-gnu/libdl.so.2 '$(OutputPath)x64/libdl.so'" />
+    <!-- Leptonica -->
+    <Exec Command="ln -sf /usr/lib/x86_64-linux-gnu/liblept.so.5.0.4 '$(OutputPath)libleptonica-1.82.0.so'" />
+    <Exec Command="ln -sf /usr/lib/x86_64-linux-gnu/liblept.so.5.0.4 '$(OutputPath)x64/libleptonica-1.82.0.so'" />
+    <!-- Tesseract -->
+    <Exec Command="ln -sf /usr/lib/x86_64-linux-gnu/libtesseract.so.5 '$(OutputPath)libtesseract50.so'" />
+    <Exec Command="ln -sf /usr/lib/x86_64-linux-gnu/libtesseract.so.5 '$(OutputPath)x64/libtesseract50.so'" />
+    <Message Text="[$(MSBuildProjectName)] Native library symlinks created in $(OutputPath)" Importance="normal" />
+  </Target>
+
 </Project>

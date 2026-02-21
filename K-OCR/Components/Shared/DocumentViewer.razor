@@ -1,6 +1,7 @@
 @inject WorkspaceState State
 @inject IImageService ImageService
 @inject IConfigurationService ConfigService
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 @if (_loading)
@@ -108,6 +109,8 @@ else
     private string?      _error;
     private double       _zoomPct  = 100.0;
     private string?      _lastPath;
+    private string?      _lastSelectedField;
+    private bool         _needsScrollToBbox;
 
     private string ZoomLabel => _zoomPct == 100.0 ? "100%" : $"{_zoomPct:0}%";
 
@@ -123,8 +126,23 @@ else
         InvokeAsync(async () =>
         {
             await CheckAndLoadAsync();
+            if (State.SelectedFieldName != _lastSelectedField)
+            {
+                _lastSelectedField = State.SelectedFieldName;
+                if (_lastSelectedField is not null)
+                    _needsScrollToBbox = true;
+            }
             StateHasChanged();
         });
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_needsScrollToBbox)
+        {
+            _needsScrollToBbox = false;
+            await JS.InvokeVoidAsync("kocrFields.scrollBboxIntoView");
+        }
+    }
 
     private async Task CheckAndLoadAsync()
     {
