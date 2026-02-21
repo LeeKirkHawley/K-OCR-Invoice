@@ -2,7 +2,7 @@
 @using System
 @using K_OCR.Models.Api.OrganizationAdmin
 @inject WorkspaceState State
-@inject KocrApiClient Api
+@inject IOrganizationAdminService OrgAdminSvc
 @inject ToastService Toast
 
 <div class="admin-page">
@@ -30,7 +30,7 @@
                         <ValidationMessage For="() => _inviteModel.Email" />
                     </div>
                     <button type="submit" class="btn btn-primary" disabled="@_isInviting">
-                        @_isInviting ? "Inviting…" : "Send invite"
+                        @(_isInviting ? "Inviting…" : "Send invite")
                     </button>
                 </EditForm>
                 @if (_inviteResult is not null)
@@ -111,9 +111,10 @@
         _isLoading = true;
         try
         {
-            _users = await Api.GetAsync<OrganizationUserOverview[]>("api/organization/users");
+            var tenantId = State.TenantId ?? string.Empty;
+            _users = await OrgAdminSvc.ListUsersAsync(tenantId);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
             Toast.ShowError($"Unable to load users: {ex.Message}");
         }
@@ -128,12 +129,13 @@
         _isInviting = true;
         try
         {
-            _inviteResult = await Api.PostAsync<InviteUserRequest, InviteUserResult>("api/organization/users", _inviteModel);
+            var tenantId = State.TenantId ?? throw new InvalidOperationException("No tenant context.");
+            _inviteResult = await OrgAdminSvc.InviteUserAsync(tenantId, _inviteModel);
             Toast.ShowSuccess("Invitation generated.");
             _inviteModel.Email = string.Empty;
             await LoadUsersAsync();
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
             Toast.ShowError($"Invite failed: {ex.Message}");
         }

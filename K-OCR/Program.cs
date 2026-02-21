@@ -1,17 +1,14 @@
 using K_OCR.Components;
-using K_OCR.Services;
 using K_OCR.Data;
 using K_OCR.Configuration;
+using K_OCR.Identity;
+using K_OCR.Security;
+using K_OCR.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
-var apiBaseUrl = configuration["Api:BaseUrl"];
-var apiUri = Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var parsedUri)
-    ? parsedUri
-    : new Uri("https://localhost:5001");
 
 // Add Blazor Server components
 builder.Services.AddRazorComponents()
@@ -38,12 +35,26 @@ builder.Services.AddDbContext<KOCRDbContext>(options =>
 });
 builder.Services.AddScoped<DatabaseService>();
 
-builder.Services.AddHttpClient("KocrApi", client =>
+// Identity — ApplicationDbContext uses the same database as the OCR data
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlite(databaseSettings.ConnectionString ?? "Data Source=kocr.db"));
+
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
-    client.BaseAddress = apiUri;
-    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-});
-builder.Services.AddScoped<KocrApiClient>();
+    options.User.RequireUniqueEmail = true;
+    options.Password.RequireDigit = true;
+    options.Password.RequiredLength = 8;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireLowercase = true;
+    options.SignIn.RequireConfirmedAccount = false;
+})
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddDefaultTokenProviders();
+
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
+builder.Services.AddScoped<IOrganizationAdminService, OrganizationAdminService>();
 
 // Services with no DB dependency — safe as Singleton
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
@@ -69,11 +80,19 @@ builder.Services.AddScoped<ToastService>();
 
 var app = builder.Build();
 
-// Initialize database — applies EF migrations and creates kocr.db if absent
+// Initialize OCR database
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<DatabaseService>();
     db.Initialize();
+}
+
+// Initialize Identity database and seed super-admin
+using (var scope = app.Services.CreateScope())
+{
+    var identityDb = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    identityDb.Database.Migrate();
+    await EnsureSuperAdminAsync(scope.ServiceProvider);
 }
 
 // Ensure configured project directories exist
@@ -142,3 +161,45 @@ app.MapGet("/api/image", (string path) =>
 });
 
 app.Run();
+
+static async Task EnsureSuperAdminAsync(IServiceProvider services)
+{
+    var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+    var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+
+    foreach (var role in new[] { RoleNames.SuperAdmin, RoleNames.OrganizationAdmin, RoleNames.OrganizationUser })
+        if (!await roleManager.RoleExistsAsync(role))
+            await roleManager.CreateAsync(new IdentityRole(role));
+
+    const string superAdminUserName = "superadmin";
+    const string superAdminPassword = "baadf00d";
+    const string superAdminEmail    = "leekirkhawley@gmail.com";
+
+    var superAdmin = await userManager.FindByNameAsync(superAdminUserName);
+    if (superAdmin is null)
+    {
+        superAdmin = new ApplicationUser
+        {
+            UserName       = superAdminUserName,
+            Email          = superAdminEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = false,
+            IsGlobalAdmin  = true
+        };
+        var result = await userManager.CreateAsync(superAdmin, superAdminPassword);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(
+                "Failed to seed super-admin: " + string.Join("; ", result.Errors.Select(e => e.Description)));
+    }
+    else
+    {
+        var dirty = false;
+        if (!superAdmin.IsGlobalAdmin)  { superAdmin.IsGlobalAdmin  = true;  dirty = true; }
+        if (!superAdmin.EmailConfirmed) { superAdmin.EmailConfirmed = true;  dirty = true; }
+        if (superAdmin.LockoutEnabled)  { superAdmin.LockoutEnabled = false; dirty = true; }
+        if (dirty) await userManager.UpdateAsync(superAdmin);
+    }
+
+    if (!await userManager.IsInRoleAsync(superAdmin, RoleNames.SuperAdmin))
+        await userManager.AddToRoleAsync(superAdmin, RoleNames.SuperAdmin);
+}

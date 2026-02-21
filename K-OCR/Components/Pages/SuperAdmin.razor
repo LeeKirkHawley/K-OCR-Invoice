@@ -2,7 +2,7 @@
 @using K_OCR.Configuration
 @using K_OCR.Models.Api.SuperAdmin
 @inject WorkspaceState State
-@inject KocrApiClient Api
+@inject ISuperAdminService SuperAdminSvc
 @inject ToastService Toast
 @inject IConfigurationService ConfigService
 
@@ -185,9 +185,9 @@
         _isLoading = true;
         try
         {
-            _organizations = await Api.GetAsync<OrganizationOverview[]>("api/super-admin/organizations");
+            _organizations = await SuperAdminSvc.ListOrganizationsAsync();
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
             Toast.ShowError($"Unable to load organizations: {ex.Message}");
         }
@@ -229,15 +229,14 @@
         _isCreating = true;
         try
         {
-            _creationResult = await Api.PostAsync<CreateOrganizationRequest, CreateOrganizationResult>(
-                "api/super-admin/organizations", _createModel);
+            _creationResult = await SuperAdminSvc.CreateOrganizationAsync(_createModel);
             Toast.ShowSuccess("Organization created — share the credentials securely.");
             _createModel.Name = string.Empty;
             _createModel.Description = string.Empty;
             _createModel.AdminEmail = string.Empty;
             await LoadOrganizationsAsync();
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
             Toast.ShowError($"Create failed: {ex.Message}");
         }
@@ -252,11 +251,11 @@
         _revokingOrgId = organizationId;
         try
         {
-            await Api.PostAsync($"api/super-admin/organizations/{organizationId}/revoke", new { });
+            await SuperAdminSvc.RevokeOrganizationAsync(organizationId);
             Toast.ShowSuccess("Organization revoked.");
             await LoadOrganizationsAsync();
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
             Toast.ShowError($"Revoke failed: {ex.Message}");
         }
