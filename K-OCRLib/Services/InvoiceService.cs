@@ -10,47 +10,116 @@ namespace K_OCR.Services
     {
         private readonly SemaphoreSlim _semaphore;
 
-        // Field synonym mappings - add alternative names for standard fields
+        // Both document-level and item-level field synonym mappings are loaded once from
+        // PipelineService/FieldMappings.json (keys: "DocumentFields" and "ItemFields").
+        // Edit that file to add support for new invoice formats — no code changes needed.
         private static Dictionary<string, string[]>? _fieldSynonyms;
-        
-        private static Dictionary<string, string[]> FieldSynonyms
+        private static Dictionary<string, string[]>? _itemFieldSynonyms;
+        private static bool _mappingsLoaded;
+        private static readonly object _mappingsLock = new();
+
+        private static void EnsureMappingsLoaded()
         {
-            get
+            if (_mappingsLoaded) return;
+            lock (_mappingsLock)
             {
-                if (_fieldSynonyms == null)
+                if (_mappingsLoaded) return;
+
+                // Always start from the built-in defaults so they are never lost
+                _fieldSynonyms = new Dictionary<string, string[]>
                 {
-                    // Try to load from config file first
-                    try
+                    { "Total",         new[] { "TotalDue", "TOTAL Due", "AmountDue", "Amount Due", "Total Amount", "Balance Due", "Grand Total" } },
+                    { "Subtotal",      new[] { "SubTotal", "Sub-Total", "Sub Total", "Net Amount", "Amount Before Tax" } },
+                    { "TotalTax",      new[] { "Tax", "Tax Amount", "Sales Tax", "VAT", "GST", "Total Tax Amount" } },
+                    { "InvoiceId",     new[] { "Invoice Number", "Invoice #", "Invoice No", "Invoice No.", "Bill No", "Reference" } },
+                    { "InvoiceDate",   new[] { "Date", "Invoice Date", "Bill Date", "Date Issued" } },
+                    { "DueDate",       new[] { "Due Date", "Payment Due", "Date Due", "Payable By" } },
+                    { "VendorName",    new[] { "Vendor", "Seller", "From", "Bill From", "Company Name", "Billed By" } },
+                    { "CustomerName",  new[] { "Customer", "Buyer", "To", "Bill To", "Billed To", "Client" } },
+                    { "PurchaseOrder", new[] { "PO", "PO Number", "P.O.", "Purchase Order Number", "Order #" } },
+                    { "Shipping",      new[] { "Shipping Cost", "Delivery Fee", "Freight", "Shipping & Handling" } }
+                };
+
+                _itemFieldSynonyms = new Dictionary<string, string[]>
+                {
+                    { "Description", new[] { "Item", "Item Description", "Product", "Service" } },
+                    { "Quantity",    new[] { "Qty", "QTY" } },
+                    { "UnitPrice",   new[] { "Unit Price", "Price", "Rate", "Net price", "Net Price" } },
+                    { "Amount",      new[] { "Line Total", "LineAmount" } }
+                };
+
+                // Merge any custom entries from FieldMappings.json on top of the defaults.
+                // JSON entries are appended to existing synonym lists (duplicates are skipped);
+                // entirely new keys are added as-is.
+                try
+                {
+                    var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipelineService", "FieldMappings.json");
+                    if (File.Exists(configPath))
                     {
-                        var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipelineService", "FieldSynonyms.json");
-                        if (File.Exists(configPath))
+                        var json = File.ReadAllText(configPath);
+                        var root = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string[]>>>(json);
+                        if (root != null)
                         {
-                            var json = File.ReadAllText(configPath);
-                            _fieldSynonyms = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
+                            if (root.TryGetValue("DocumentFields", out var docFields))
+                                MergeInto(_fieldSynonyms, docFields);
+                            if (root.TryGetValue("ItemFields", out var itemFields))
+                                MergeInto(_itemFieldSynonyms, itemFields);
                         }
                     }
-                    catch
-                    {
-                        // Fall back to hardcoded defaults
-                    }
-                    
-                    // If loading failed, use hardcoded defaults
-                    _fieldSynonyms ??= new Dictionary<string, string[]>
-                    {
-                        { "Total", new[] { "TotalDue", "TOTAL Due", "AmountDue", "Amount Due", "Total Amount", "Balance Due", "Grand Total" } },
-                        { "Subtotal", new[] { "SubTotal", "Sub-Total", "Sub Total", "Net Amount", "Amount Before Tax" } },
-                        { "TotalTax", new[] { "Tax", "Tax Amount", "Sales Tax", "VAT", "GST", "Total Tax Amount" } },
-                        { "InvoiceId", new[] { "Invoice Number", "Invoice #", "Invoice No", "Invoice No.", "Bill No", "Reference" } },
-                        { "InvoiceDate", new[] { "Date", "Invoice Date", "Bill Date", "Date Issued" } },
-                        { "DueDate", new[] { "Due Date", "Payment Due", "Date Due", "Payable By" } },
-                        { "VendorName", new[] { "Vendor", "Seller", "From", "Bill From", "Company Name", "Billed By" } },
-                        { "CustomerName", new[] { "Customer", "Buyer", "To", "Bill To", "Billed To", "Client" } },
-                        { "PurchaseOrder", new[] { "PO", "PO Number", "P.O.", "Purchase Order Number", "Order #" } },
-                        { "Shipping", new[] { "Shipping Cost", "Delivery Fee", "Freight", "Shipping & Handling" } }
-                    };
                 }
-                return _fieldSynonyms;
+                catch
+                {
+                    // JSON load failed — built-in defaults remain intact
+                }
+
+                _mappingsLoaded = true;
             }
+        }
+
+        // Merges entries from 'source' into 'target': appends new synonyms to existing keys,
+        // or adds the key wholesale if it doesn't exist yet. Case-insensitive deduplication.
+        private static void MergeInto(Dictionary<string, string[]> target, Dictionary<string, string[]> source)
+        {
+            foreach (var (key, values) in source)
+            {
+                if (target.TryGetValue(key, out var existing))
+                {
+                    var merged = existing.ToList();
+                    foreach (var v in values)
+                        if (!merged.Any(e => string.Equals(e, v, StringComparison.OrdinalIgnoreCase)))
+                            merged.Add(v);
+                    target[key] = merged.ToArray();
+                }
+                else
+                {
+                    target[key] = values;
+                }
+            }
+        }
+
+        private static Dictionary<string, string[]> FieldSynonyms
+        {
+            get { EnsureMappingsLoaded(); return _fieldSynonyms!; }
+        }
+
+        private static Dictionary<string, string[]> ItemFieldSynonyms
+        {
+            get { EnsureMappingsLoaded(); return _itemFieldSynonyms!; }
+        }
+
+        // Returns the actual key in a line-item dictionary that maps to the given standard field
+        // name, checking both exact match and configured synonyms (case-insensitive).
+        private static string? TryGetItemFieldKey(IReadOnlyDictionary<string, Azure.AI.DocumentIntelligence.DocumentField> dict, string standardName)
+        {
+            if (dict.ContainsKey(standardName)) return standardName;
+
+            if (ItemFieldSynonyms.TryGetValue(standardName, out var synonyms))
+            {
+                return dict.Keys.FirstOrDefault(k =>
+                    synonyms.Any(s => string.Equals(k, s, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            return null;
         }
 
         public InvoiceService(int maxConcurrentRequests = 3)
@@ -341,14 +410,20 @@ namespace K_OCR.Services
                         // Capture sub-field confidence scores for line items
                         var itemFieldConfidences = new Dictionary<string, double>();
 
-                        string desc = dict.TryGetValue("Description", out var vDesc)
-                            ? (vDesc?.ValueString ?? vDesc?.Content ?? string.Empty)
-                            : string.Empty;
+                        // Use ItemFieldSynonyms so raw label names (e.g. "Gross worth") can be
+                        // mapped to standard field names via ItemFieldSynonyms.json — no hard-coded
+                        // label names in C#.
+                        Azure.AI.DocumentIntelligence.DocumentField? vDesc = null;
+                        var descKey = TryGetItemFieldKey(dict, "Description");
+                        string desc = string.Empty;
+                        if (descKey != null && dict.TryGetValue(descKey, out vDesc))
+                            desc = vDesc?.ValueString ?? vDesc?.Content ?? string.Empty;
                         if (vDesc?.Confidence.HasValue == true)
                             itemFieldConfidences[nameof(InvoiceItemDto.Description)] = vDesc.Confidence.Value;
 
                         decimal? qty = null;
-                        if (dict.TryGetValue("Quantity", out var vQty))
+                        var qtyKey = TryGetItemFieldKey(dict, "Quantity");
+                        if (qtyKey != null && dict.TryGetValue(qtyKey, out var vQty))
                         {
                             if (vQty.ValueDouble is double qd) qty = (decimal)qd;
                             else if (vQty.ValueInt64 is long ql) qty = ql;
@@ -357,7 +432,8 @@ namespace K_OCR.Services
                         }
 
                         decimal? unitPrice = null;
-                        if (dict.TryGetValue("UnitPrice", out var vUnit))
+                        var unitKey = TryGetItemFieldKey(dict, "UnitPrice");
+                        if (unitKey != null && dict.TryGetValue(unitKey, out var vUnit))
                         {
                             if (vUnit.ValueCurrency?.Amount is double ud) unitPrice = (decimal)ud;
                             else if (vUnit.ValueDouble is double nd) unitPrice = (decimal)nd;
@@ -367,7 +443,8 @@ namespace K_OCR.Services
                         }
 
                         decimal? lineTotal = null;
-                        if (dict.TryGetValue("Amount", out var vAmt))
+                        var amtKey = TryGetItemFieldKey(dict, "Amount");
+                        if (amtKey != null && dict.TryGetValue(amtKey, out var vAmt))
                         {
                             if (vAmt.ValueCurrency?.Amount is double ld) lineTotal = (decimal)ld;
                             else if (vAmt.ValueDouble is double nd2) lineTotal = (decimal)nd2;

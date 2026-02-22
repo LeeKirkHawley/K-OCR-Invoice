@@ -143,6 +143,7 @@
                     var descKey   = $"Item_{idx}_Desc";
                     var qtyKey    = $"Item_{idx}_Qty";
                     var upKey     = $"Item_{idx}_UnitPrice";
+                    var amtKey    = $"Item_{idx}_Amt";
                     var liSel     = State.SelectedFieldName is { } _sf
                                  && _sf.StartsWith($"Item_{idx}_");
 
@@ -211,9 +212,25 @@
                                     <span class="inv-num">@(item.UnitPrice?.ToString("C") ?? "—")</span>
                                 }
                             </div>
-                            <div class="inv-li-num-col">
+                            <div class="inv-li-num-col"
+                                 tabindex="0"
+                                 data-nav-row="@amtKey"
+                                 @onclick="() => SelectField(amtKey)">
                                 <span class="inv-li-label">Amount</span>
-                                <span class="inv-num inv-num-bold">@(item.Amount?.ToString("C") ?? "—")</span>
+                                @if (State.SelectedFieldName == amtKey)
+                                {
+                                    <input type="text"
+                                           class="inv-field-input inv-input-num"
+                                           tabindex="-1"
+                                           data-edit-field="@amtKey"
+                                           value="@(inv.Items[idx].Amount?.ToString("F2"))"
+                                           @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].Amount = v; })"
+                                           @onclick:stopPropagation="true" />
+                                }
+                                else
+                                {
+                                    <span class="inv-num inv-num-bold">@(item.Amount?.ToString("C") ?? "—")</span>
+                                }
                             </div>
                         </div>
                     </div>

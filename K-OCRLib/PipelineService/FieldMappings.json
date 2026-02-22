@@ -1,0 +1,9 @@
+{
+  "DocumentFields": {
+    "Total": [ "Gross worth", "Gross Worth" ]
+  },
+  "ItemFields": {
+    "UnitPrice": [ "Net worth", "Net Worth" ],
+    "Amount":    [ "Gross worth", "Gross Worth" ]
+  }
+}
