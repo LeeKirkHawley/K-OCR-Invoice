@@ -603,6 +603,13 @@ html, body {
 }
 
 /* ─── Status dots ────────────────────────────────────────────── */
+.file-status-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
 .file-status-dot {
     width: 8px;
     height: 8px;
@@ -612,9 +619,8 @@ html, body {
 }
 
 .dot-unprocessed { background: #555;    }   /* grey  — never OCR'd */
-.dot-processed   { background: #4db8ff; }   /* blue  — OCR'd, no Tesseract data */
-.dot-validated   { background: #22c55e; }   /* green — all Tesseract checks passed */
-.dot-suspect     { background: #dc2626; }   /* red   — ≥1 Tesseract check failed */
+.dot-validated   { background: #22c55e; }   /* green — processed / all checks passed */
+.dot-suspect     { background: #dc2626; }   /* red   — ≥1 validation check failed */
 
 /* ─── Folder input ───────────────────────────────────────────── */
 .folder-input {
@@ -996,6 +1002,14 @@ html, body {
     color: #e8e8e8;
     border-bottom-color: #569cd6;
     background: #252526;
+}
+.inv-tab-btn.inv-tab-disabled {
+    color: #555;
+    cursor: default;
+}
+.inv-tab-btn.inv-tab-disabled:hover {
+    color: #666;
+    background: none;
 }
 
 /* Raw JSON pre block */

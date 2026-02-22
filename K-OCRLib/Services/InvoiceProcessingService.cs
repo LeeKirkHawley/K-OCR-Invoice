@@ -96,7 +96,9 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             }
             else
             {
-                processedContext.TesseractOcrText = string.Empty;
+                // Leave TesseractOcrText = null so RunValidation can distinguish
+                // "task threw an exception" (infrastructure failure — skip validation)
+                // from "ran successfully but produced no text" (empty string — flag fields).
                 Console.WriteLine($"[TesseractValidation] Failed for {Path.GetFileName(filePath)}: {tesseractTask.Exception?.GetBaseException().Message}");
             }
 
@@ -204,7 +206,12 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     /// </summary>
     private void RunValidation(PipelineContext context)
     {
-        var tesseractText = context.TesseractOcrText ?? string.Empty;
+        // null  = Tesseract task threw an exception (infrastructure failure)
+        //         → skip Tesseract validation; leave TesseractConfirmed empty
+        // ""    = Tesseract ran but extracted no text
+        //         → ValidateAgainstTesseract will call FlagAllExtracted
+        // other = normal text; validate field by field
+        var tesseractText = context.TesseractOcrText; // intentionally NOT coalesced to ""
 
         List<InvoiceDto>? invoices = null;
 
@@ -221,8 +228,11 @@ public class InvoiceProcessingService : IInvoiceProcessingService
 
         foreach (var invoice in invoices)
         {
-            // Run Tesseract text validation
-            _invoiceValidation.ValidateAgainstTesseract(invoice, tesseractText);
+            // Only run Tesseract validation when text is available.
+            // null  = task failed (infrastructure error) → skip so fields are not incorrectly flagged
+            // ""    = task succeeded but found no text  → ValidateAgainstTesseract flags extracted fields
+            if (tesseractText != null)
+                _invoiceValidation.ValidateAgainstTesseract(invoice, tesseractText);
             
             // Run mathematical validation
             _lineItemValidation.ValidateInvoiceMath(invoice);

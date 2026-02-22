@@ -17,17 +17,34 @@ public class FileListEntry
     /// <summary>OCR ran AND at least one Tesseract cross-validation check failed.</summary>
     public bool HasSuspectFields { get; set; }
 
-    /// <summary>CSS class applied to the status dot.</summary>
-    public string DotClass =>
-        HasSuspectFields ? "dot-suspect"
-        : IsValidated    ? "dot-validated"
-        : IsProcessed    ? "dot-processed"
-        : "dot-unprocessed";
+    /// <summary>Invoice has been saved (user edits) or validation has been accepted.</summary>
+    public bool IsSavedOrAccepted { get; set; }
 
-    /// <summary>Human-readable status for the tooltip.</summary>
-    public string StatusLabel =>
-        HasSuspectFields ? "Suspect fields"
-        : IsValidated    ? "Validated"
-        : IsProcessed    ? "Processed"
-        : "Not processed";
+    // ── Left dot: has this file been OCR-processed? ───────────────────────
+
+    /// <summary>CSS class for the left (processed) status dot.</summary>
+    public string ProcessedDotClass => IsProcessed ? "dot-validated" : "dot-unprocessed";
+
+    /// <summary>Tooltip for the processed dot.</summary>
+    public string ProcessedDotTitle => IsProcessed ? "Processed" : "Not processed";
+
+    // ── Right dot: validation quality ───────────────────────────────────
+
+    /// <summary>
+    /// CSS class for the right (validation) dot.
+    /// Empty string = not rendered (file not yet processed or no validation data).
+    /// </summary>
+    public string ValidationDotClass =>
+        !IsProcessed          ? string.Empty
+        : IsSavedOrAccepted   ? "dot-validated"
+        : HasSuspectFields    ? "dot-suspect"
+        : IsValidated         ? "dot-validated"
+        : string.Empty;
+
+    /// <summary>Tooltip for the validation dot.</summary>
+    public string ValidationDotTitle =>
+        IsSavedOrAccepted  ? "Validated"
+        : HasSuspectFields ? "Suspect fields"
+        : IsValidated      ? "Validated"
+        : string.Empty;
 }

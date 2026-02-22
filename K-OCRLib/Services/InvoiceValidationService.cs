@@ -162,20 +162,33 @@ public class InvoiceValidationService : IInvoiceValidationService
     /// <summary>
     /// Generates the candidate string representations of a decimal that might
     /// appear in raw OCR text.
+    /// All formats use InvariantCulture so server locale never affects the result
+    /// (invoices are assumed to use English number formatting: period decimal,
+    /// comma thousands separator).
     /// </summary>
     private static IEnumerable<string> GenerateDecimalFormats(decimal value)
     {
-        // Plain decimal, e.g. "1234.56"
-        yield return value.ToString("0.##");
-        // Two decimal places, e.g. "1234.00"
-        yield return value.ToString("0.00");
-        // Thousand-separated, e.g. "1,234.56"
-        yield return value.ToString("N2");
-        // No decimals, e.g. "1234"
-        yield return Math.Round(value, 0).ToString("0");
-        // With dollar sign variants
-        yield return "$" + value.ToString("0.##");
-        yield return "$" + value.ToString("N2");
+        var ic      = System.Globalization.CultureInfo.InvariantCulture;
+        var rounded = Math.Round(value, 0);
+
+        // ── Without currency symbol ──────────────────────────────────────
+        // Trailing-zero-stripped decimal, e.g. "1234.56" or "1234" for whole numbers
+        yield return value.ToString("0.##", ic);
+        // Always two decimal places, e.g. "1234.56"
+        yield return value.ToString("0.00", ic);
+        // Thousands-separated, two decimal places, e.g. "1,234.56"
+        yield return value.ToString("N2", ic);
+        // Integer (no decimal), e.g. "1234"
+        yield return rounded.ToString("0", ic);
+        // Thousands-separated integer, e.g. "1,234"
+        yield return rounded.ToString("N0", ic);
+
+        // ── With dollar sign ─────────────────────────────────────────────
+        yield return "$" + value.ToString("0.##", ic);
+        yield return "$" + value.ToString("0.00", ic);
+        yield return "$" + value.ToString("N2",   ic);
+        yield return "$" + rounded.ToString("0",  ic);
+        yield return "$" + rounded.ToString("N0", ic);
     }
 
     /// <summary>

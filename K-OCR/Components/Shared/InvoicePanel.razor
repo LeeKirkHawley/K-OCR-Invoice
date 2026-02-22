@@ -16,8 +16,11 @@
                     @onclick='() => SwitchTabAsync("validation")'>Validation</button>
             <button class="inv-tab-btn @(_activeTab == "raw" ? "active" : "")"
                     @onclick='() => SwitchTabAsync("raw")'>Raw JSON</button>
-            <button class="inv-tab-btn @(_activeTab == "validated" ? "active" : "")"
-                    @onclick='() => SwitchTabAsync("validated")'>Validated JSON</button>
+            <button class="inv-tab-btn @(_activeTab == "validated" ? "active" : "") @(!HasValidatedData ? "inv-tab-disabled" : "")"
+                    @onclick='() => SwitchTabAsync("validated")'
+                    title="@(!HasValidatedData ? "No validated data yet — save edits or accept validation first" : null)">
+                Validated JSON
+            </button>
         </div>
 
         @if (_activeTab == "raw")
@@ -39,13 +42,17 @@
         else if (_activeTab == "validated")
         {
             @* ── Validated JSON tab ───────────────────────── *@
-            @if (_validatedJsonLoading)
+            @if (!HasValidatedData)
+            {
+                <div class="inv-empty">No validated data yet — save edits or accept validation first.</div>
+            }
+            else if (_validatedJsonLoading)
             {
                 <div class="inv-empty"><span class="loading-spinner"></span> Loading…</div>
             }
             else if (_validatedJson is null)
             {
-                <div class="inv-empty">Not yet validated — save fields to populate.</div>
+                <div class="inv-empty">No validated data yet — save edits or accept validation first.</div>
             }
             else
             {
@@ -139,7 +146,8 @@
                 {
                     var idx       = i;
                     var item      = inv.Items[idx];
-                    var liSuspect = IsLineItemSuspect(item);
+                    var liSuspect = IsLineItemSuspect(item, idx);
+                    var liTooltip = liSuspect ? GetLineItemTooltip(item, idx) : null;
                     var descKey   = $"Item_{idx}_Desc";
                     var qtyKey    = $"Item_{idx}_Qty";
                     var upKey     = $"Item_{idx}_UnitPrice";
@@ -147,7 +155,8 @@
                     var liSel     = State.SelectedFieldName is { } _sf
                                  && _sf.StartsWith($"Item_{idx}_");
 
-                    <div class="inv-line-item @(liSuspect ? "inv-li-suspect" : "") @(liSel ? "inv-li-selected" : "")">
+                    <div class="inv-line-item @(liSuspect ? "inv-li-suspect" : "") @(liSel ? "inv-li-selected" : "")"
+                         title="@liTooltip">
                         <div class="inv-li-row inv-li-desc-row"
                              tabindex="0"
                              data-nav-row="@descKey"
@@ -209,7 +218,7 @@
                                 }
                                 else
                                 {
-                                    <span class="inv-num">@(item.UnitPrice?.ToString("C") ?? "—")</span>
+                                    <span class="inv-num">@(item.UnitPrice?.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) ?? "—")</span>
                                 }
                             </div>
                             <div class="inv-li-num-col"
@@ -229,7 +238,7 @@
                                 }
                                 else
                                 {
-                                    <span class="inv-num inv-num-bold">@(item.Amount?.ToString("C") ?? "—")</span>
+                                    <span class="inv-num inv-num-bold">@(item.Amount?.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) ?? "—")</span>
                                 }
                             </div>
                         </div>
@@ -338,10 +347,11 @@
         _editValues["InvoiceDate"]   = _invoice.InvoiceDate   ?? string.Empty;
         _editValues["DueDate"]       = _invoice.DueDate       ?? string.Empty;
         _editValues["PurchaseOrder"] = _invoice.PurchaseOrder ?? string.Empty;
-        _editValues["Subtotal"]      = _invoice.Subtotal?.ToString("F2")  ?? string.Empty;
-        _editValues["TotalTax"]      = _invoice.TotalTax?.ToString("F2")  ?? string.Empty;
-        _editValues["Shipping"]      = _invoice.Shipping?.ToString("F2")  ?? string.Empty;
-        _editValues["Total"]         = _invoice.Total?.ToString("F2")     ?? string.Empty;
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
+        _editValues["Subtotal"]      = _invoice.Subtotal?.ToString("F2", ic) ?? string.Empty;
+        _editValues["TotalTax"]      = _invoice.TotalTax?.ToString("F2", ic) ?? string.Empty;
+        _editValues["Shipping"]      = _invoice.Shipping?.ToString("F2", ic) ?? string.Empty;
+        _editValues["Total"]         = _invoice.Total?.ToString("F2",    ic) ?? string.Empty;
     }
 
     private void ComputeSuspectCount()
@@ -352,7 +362,7 @@
             return;
         }
         _suspectCount = _headerFields.Count(f => IsFieldSuspect(f.Key))
-                      + (_invoice.Items?.Count(IsLineItemSuspect) ?? 0);
+                      + (_invoice.Items?.Select((item, i) => IsLineItemSuspect(item, i)).Count(v => v) ?? 0);
     }
 
     private bool IsFieldSuspect(string fieldName)
@@ -382,11 +392,47 @@
         return reasons.Count > 0 ? string.Join(" · ", reasons) : null;
     }
 
-    private bool IsLineItemSuspect(InvoiceItemDto item)
+    private bool IsLineItemSuspect(InvoiceItemDto item, int index)
     {
         if (_invoice?.IsValidationAccepted == true || _invoice?.IsEditedByUser == true) return false;
-        return item.TesseractConfirmed.Values.Any(v => !v)
-            || item.ConfidenceConfirmed.Values.Any(v => !v);
+        if (item.TesseractConfirmed.Values.Any(v => !v))  return true;
+        if (item.ConfidenceConfirmed.Values.Any(v => !v)) return true;
+        // Check line item math stored on the document-level MathConfirmed
+        var mathKey = $"LineItem[{index}].Amount";
+        if (_invoice?.MathConfirmed?.TryGetValue(mathKey, out var m) == true && !m) return true;
+        return false;
+    }
+
+    private string? GetLineItemTooltip(InvoiceItemDto item, int index)
+    {
+        if (_invoice?.IsValidationAccepted == true || _invoice?.IsEditedByUser == true) return null;
+
+        // Collect per-field failure reasons, keyed by display name
+        var fieldReasons = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var kv in item.TesseractConfirmed.Where(kv => !kv.Value))
+        {
+            if (!fieldReasons.TryGetValue(kv.Key, out var list))
+                fieldReasons[kv.Key] = list = new List<string>();
+            list.Add("Tesseract mismatch");
+        }
+        foreach (var kv in item.ConfidenceConfirmed.Where(kv => !kv.Value))
+        {
+            if (!fieldReasons.TryGetValue(kv.Key, out var list))
+                fieldReasons[kv.Key] = list = new List<string>();
+            list.Add("Low Azure confidence");
+        }
+        var mathKey = $"LineItem[{index}].Amount";
+        if (_invoice?.MathConfirmed?.TryGetValue(mathKey, out var m) == true && !m)
+        {
+            if (!fieldReasons.TryGetValue("Amount", out var list))
+                fieldReasons["Amount"] = list = new List<string>();
+            list.Add("Math error");
+        }
+
+        if (fieldReasons.Count == 0) return null;
+        return string.Join(" · ", fieldReasons.Select(kv =>
+            $"{kv.Key}: {string.Join(", ", kv.Value)}"));
     }
 
     // ── Field selection & inline editing ─────────────────────────────────────
@@ -419,6 +465,16 @@
             // Update reference without resetting _editValues (user may still be editing)
             _invoice = updated;
             State.SetSelectedInvoice(updated);
+
+            // Update the file list dot immediately
+            var current = State.SelectedFile;
+            if (current is not null)
+            {
+                current.IsSavedOrAccepted = true;
+                current.HasSuspectFields  = false;
+                State.UpdateFileEntry(current);
+            }
+
             ComputeSuspectCount();
             _validatedJson = null;
             if (_activeTab == "validated") await LoadValidatedJsonAsync();
@@ -475,6 +531,16 @@
             var settings = await ConfigService.LoadSettingsAsync();
             await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, _invoice, settings.ProjectArtifacts);
             State.SetSelectedInvoice(_invoice);
+
+            // Update the file list dot immediately
+            var current = State.SelectedFile;
+            if (current is not null)
+            {
+                current.IsSavedOrAccepted  = true;
+                current.HasSuspectFields   = false;
+                State.UpdateFileEntry(current);
+            }
+
             _suspectCount = 0;
             _validatedJson = null;
             if (_activeTab == "validated") await LoadValidatedJsonAsync();
@@ -580,12 +646,17 @@
     });
     // ── Raw JSON tab ─────────────────────────────────────────────────────────
 
+    // True only when the invoice has user edits or accepted validation — i.e. when
+    // validated JSON actually exists in the database.
+    private bool HasValidatedData =>
+        _invoice is { IsEditedByUser: true } or { IsValidationAccepted: true };
+
     private async Task SwitchTabAsync(string tab)
     {
         _activeTab = tab;
         if (tab == "raw" && _rawJson is null && !_rawJsonLoading)
             await ReloadRawJsonAsync();
-        else if (tab == "validated" && _validatedJson is null && !_validatedJsonLoading)
+        else if (tab == "validated" && HasValidatedData && _validatedJson is null && !_validatedJsonLoading)
             await LoadValidatedJsonAsync();
     }
 

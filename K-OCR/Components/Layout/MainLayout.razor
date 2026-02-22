@@ -168,7 +168,13 @@
                         disabled="@(!State.CanNavigatePrev)"
                         aria-label="Previous file"
                         title="Previous file (Alt+←)">◀</button>
-                <span class="file-status-dot @selected.DotClass" title="@selected.StatusLabel"></span>
+                <span class="file-status-dots">
+                    <span class="file-status-dot @selected.ProcessedDotClass" title="@selected.ProcessedDotTitle"></span>
+                    @if (!string.IsNullOrEmpty(selected.ValidationDotClass))
+                    {
+                        <span class="file-status-dot @selected.ValidationDotClass" title="@selected.ValidationDotTitle"></span>
+                    }
+                </span>
                 <span class="kocr-file-preview-name" title="@selected.FilePath">@selected.FileName</span>
                 <button class="file-nav-btn"
                         @onclick="() => NavigateFileAsync(+1)"

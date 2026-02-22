@@ -105,7 +105,13 @@
                          @oncontextmenu="(e) => OpenContextMenu(e, file)"
                          @oncontextmenu:preventDefault="true"
                          title="@file.FilePath">
-                        <span class="file-status-dot @file.DotClass" title="@file.StatusLabel"></span>
+                        <span class="file-status-dots">
+                            <span class="file-status-dot @file.ProcessedDotClass" title="@file.ProcessedDotTitle"></span>
+                            @if (!string.IsNullOrEmpty(file.ValidationDotClass))
+                            {
+                                <span class="file-status-dot @file.ValidationDotClass" title="@file.ValidationDotTitle"></span>
+                            }
+                        </span>
                         <span class="file-name">@file.FileName</span>
                         @if (progress is not null)
                         {
@@ -339,6 +345,8 @@
                 || (invoice.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
             entry.IsValidated = !entry.HasSuspectFields;
         }
+        if (invoice != null)
+            entry.IsSavedOrAccepted = invoice.IsValidationAccepted || invoice.IsEditedByUser;
         return entry;
     }
 
@@ -414,10 +422,16 @@
                                 invoice = list?.FirstOrDefault();
                             }
 
-                            if (invoice?.TesseractConfirmed?.Count > 0)
+                            if (invoice != null)
+                                entry.IsSavedOrAccepted = invoice.IsValidationAccepted || invoice.IsEditedByUser;
+
+                            if (!entry.IsSavedOrAccepted && invoice?.TesseractConfirmed?.Count > 0)
                             {
-                                entry.HasSuspectFields = invoice.TesseractConfirmed.Values.Any(v => !v);
-                                entry.IsValidated      = !entry.HasSuspectFields;
+                                entry.HasSuspectFields =
+                                    invoice.TesseractConfirmed.Values.Any(v => !v)
+                                    || (invoice.MathConfirmed?.Values.Any(v => !v) ?? false)
+                                    || (invoice.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
+                                entry.IsValidated = !entry.HasSuspectFields;
                             }
                         }
                         catch { /* ignore parse errors */ }
