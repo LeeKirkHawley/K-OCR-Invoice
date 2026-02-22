@@ -85,8 +85,9 @@ else
                                     var itemIdx  = ii;
                                     var lineItem = inv.Items[itemIdx];
                                     if (lineItem.BoundingBoxes.Count == 0) { continue; }
-                                    var itemKey      = $"Item_{itemIdx}";
-                                    var itemSelected = itemKey == State.SelectedFieldName;
+                                    var itemKey      = $"Item_{itemIdx}_Desc";
+                                    var sel          = State.SelectedFieldName;
+                                    var itemSelected = sel is not null && sel.StartsWith($"Item_{itemIdx}_");
                                     var itemSuspect  = ItemIsSuspect(inv, lineItem);
                                     var itemClass    = itemSelected ? "bbox-selected"
                                                      : itemSuspect  ? "bbox-suspect"

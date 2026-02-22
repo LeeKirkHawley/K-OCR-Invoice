@@ -12,15 +12,17 @@
     {
         @* ── Tab bar ─────────────────────────────────────────────── *@
         <div class="inv-tabs">
-            <button class="inv-tab-btn @(!_rawTab ? "active" : "")"
-                    @onclick="() => SwitchTabAsync(false)">Validation</button>
-            <button class="inv-tab-btn @(_rawTab ? "active" : "")"
-                    @onclick="() => SwitchTabAsync(true)">Raw JSON</button>
+            <button class="inv-tab-btn @(_activeTab == "validation" ? "active" : "")"
+                    @onclick='() => SwitchTabAsync("validation")'>Validation</button>
+            <button class="inv-tab-btn @(_activeTab == "raw" ? "active" : "")"
+                    @onclick='() => SwitchTabAsync("raw")'>Raw JSON</button>
+            <button class="inv-tab-btn @(_activeTab == "validated" ? "active" : "")"
+                    @onclick='() => SwitchTabAsync("validated")'>Validated JSON</button>
         </div>
 
-        @if (_rawTab)
+        @if (_activeTab == "raw")
         {
-            @* ── Raw JSON tab ─────────────────────────────────── *@
+            @* ── Raw JSON tab ─────────────────────────────── *@
             @if (_rawJsonLoading)
             {
                 <div class="inv-empty"><span class="loading-spinner"></span> Loading…</div>
@@ -32,6 +34,22 @@
             else
             {
                 <pre class="raw-json-pre">@_rawJson</pre>
+            }
+        }
+        else if (_activeTab == "validated")
+        {
+            @* ── Validated JSON tab ───────────────────────── *@
+            @if (_validatedJsonLoading)
+            {
+                <div class="inv-empty"><span class="loading-spinner"></span> Loading…</div>
+            }
+            else if (_validatedJson is null)
+            {
+                <div class="inv-empty">Not yet validated — save fields to populate.</div>
+            }
+            else
+            {
+                <pre class="raw-json-pre">@_validatedJson</pre>
             }
         }
         else
@@ -59,31 +77,21 @@
         }
 
         @* ── Action toolbar ─────────────────────────────────────────── *@
-        @if (!inv.IsValidationAccepted)
-        {
-            <div class="inv-actions">
-                @if (_editMode)
-                {
-                    <button class="btn inv-btn-save" @onclick="SaveEditAsync" disabled="@_saving">
-                        @(_saving ? "Saving…" : "💾 Save")
-                    </button>
-                    <button class="btn inv-btn-cancel" @onclick="CancelEdit" disabled="@_saving">
-                        Cancel
-                    </button>
-                }
-                else
-                {
-                    <button class="btn inv-btn-edit" @onclick="EnterEditMode">✏ Edit</button>
-                    <button class="btn inv-btn-accept" @onclick="AcceptValidationAsync" disabled="@_saving">
-                        @(_saving ? "Saving…" : "✓ Accept")
-                    </button>
-                    <button class="btn inv-btn-export" @onclick="ExportDocxAsync" disabled="@_exporting"
-                            title="Download invoice as Word document">
-                        @(_exporting ? "Exporting…" : "⬇ DOCX")
-                    </button>
-                }
-            </div>
-        }
+        <div class="inv-actions">
+            <button class="btn inv-btn-save" @onclick="SaveAsync" disabled="@_saving">
+                @(_saving ? "Saving…" : "💾 Save")
+            </button>
+            @if (!inv.IsValidationAccepted)
+            {
+                <button class="btn inv-btn-accept" @onclick="AcceptValidationAsync" disabled="@_saving">
+                    ✓ Validation Accepted
+                </button>
+            }
+            <button class="btn inv-btn-export" @onclick="ExportDocxAsync" disabled="@_exporting"
+                    title="Download invoice as Word document">
+                @(_exporting ? "Exporting…" : "⬇ DOCX")
+            </button>
+        </div>
 
         @* ── Header fields ──────────────────────────────────────────── *@
         <div class="inv-fields-section">
@@ -93,21 +101,23 @@
                 var suspect = IsFieldSuspect(k);
                 var isOk    = IsFieldChecked(k);
                 var tip     = GetFieldTooltip(k);
-                var isSel   = State.SelectedFieldName == k && _invoice?.FieldBoundingBoxes.ContainsKey(k) == true;
+                var isSel   = State.SelectedFieldName == k;
                 <div class="inv-field-row @(suspect ? "inv-suspect" : isOk ? "inv-ok" : "") @(isSel ? "inv-field-selected" : "")"
                      tabindex="0"
                      role="button"
                      data-nav-row="@k"
-                     @onclick="() => ToggleFieldSelection(k)"
-                     @onkeydown="@(e => OnFieldKeyDown(e, k))"
+                     @onclick="() => SelectField(k)"
                      title="@tip">
                     <label class="inv-field-label @(suspect ? "inv-suspect-label" : "")">@label</label>
-                    @if (_editMode)
+                    @if (State.SelectedFieldName == k)
                     {
                         <input type="text"
                                class="inv-field-input @(suspect ? "inv-suspect-input" : "")"
+                               tabindex="-1"
+                               data-edit-field="@k"
                                value="@_editValues.GetValueOrDefault(k, string.Empty)"
-                               @onchange="@(e => _editValues[k] = e.Value?.ToString() ?? string.Empty)" />
+                               @oninput="@(e => _editValues[k] = e.Value?.ToString() ?? string.Empty)"
+                               @onclick:stopPropagation="true" />
                     }
                     else
                     {
@@ -130,21 +140,27 @@
                     var idx       = i;
                     var item      = inv.Items[idx];
                     var liSuspect = IsLineItemSuspect(item);
-                    var liSel     = State.SelectedFieldName == $"Item_{idx}";
+                    var descKey   = $"Item_{idx}_Desc";
+                    var qtyKey    = $"Item_{idx}_Qty";
+                    var upKey     = $"Item_{idx}_UnitPrice";
+                    var liSel     = State.SelectedFieldName is { } _sf
+                                 && _sf.StartsWith($"Item_{idx}_");
 
-                    <div class="inv-line-item @(liSuspect ? "inv-li-suspect" : "") @(liSel ? "inv-li-selected" : "")"
-                         tabindex="0"
-                         data-nav-row="Item_@idx"
-                         @onclick="() => ToggleLineItemSelection(idx)"
-                         @onkeydown="@(e => OnLineItemKeyDown(e, idx))">
-                        <div class="inv-li-row inv-li-desc-row">
+                    <div class="inv-line-item @(liSuspect ? "inv-li-suspect" : "") @(liSel ? "inv-li-selected" : "")">
+                        <div class="inv-li-row inv-li-desc-row"
+                             tabindex="0"
+                             data-nav-row="@descKey"
+                             @onclick="() => SelectField(descKey)">
                             <span class="inv-li-label">Description</span>
-                            @if (_editMode)
+                            @if (State.SelectedFieldName == descKey)
                             {
                                 <input type="text"
                                        class="inv-field-input"
+                                       tabindex="-1"
+                                       data-edit-field="@descKey"
                                        value="@item.Description"
-                                       @onchange="@(e => inv.Items[idx].Description = e.Value?.ToString() ?? string.Empty)" />
+                                       @oninput="@(e => inv.Items[idx].Description = e.Value?.ToString() ?? string.Empty)"
+                                       @onclick:stopPropagation="true" />
                             }
                             else
                             {
@@ -155,28 +171,40 @@
                         </div>
 
                         <div class="inv-li-row inv-li-nums-row">
-                            <div class="inv-li-num-col">
+                            <div class="inv-li-num-col"
+                                 tabindex="0"
+                                 data-nav-row="@qtyKey"
+                                 @onclick="() => SelectField(qtyKey)">
                                 <span class="inv-li-label">Qty</span>
-                                @if (_editMode)
+                                @if (State.SelectedFieldName == qtyKey)
                                 {
                                     <input type="text"
                                            class="inv-field-input inv-input-num"
+                                           tabindex="-1"
+                                           data-edit-field="@qtyKey"
                                            value="@(inv.Items[idx].Quantity?.ToString("G"))"
-                                           @onchange="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].Quantity = v; })" />
+                                           @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].Quantity = v; })"
+                                           @onclick:stopPropagation="true" />
                                 }
                                 else
                                 {
                                     <span class="inv-num">@(item.Quantity?.ToString("G") ?? "—")</span>
                                 }
                             </div>
-                            <div class="inv-li-num-col">
+                            <div class="inv-li-num-col"
+                                 tabindex="0"
+                                 data-nav-row="@upKey"
+                                 @onclick="() => SelectField(upKey)">
                                 <span class="inv-li-label">Unit Price</span>
-                                @if (_editMode)
+                                @if (State.SelectedFieldName == upKey)
                                 {
                                     <input type="text"
                                            class="inv-field-input inv-input-num"
+                                           tabindex="-1"
+                                           data-edit-field="@upKey"
                                            value="@(inv.Items[idx].UnitPrice?.ToString("F2"))"
-                                           @onchange="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].UnitPrice = v; })" />
+                                           @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].UnitPrice = v; })"
+                                           @onclick:stopPropagation="true" />
                                 }
                                 else
                                 {
@@ -206,15 +234,16 @@
 
 @code {
     private InvoiceDto? _invoice;
-    private bool        _editMode;
     private bool        _saving;
     private bool        _exporting;
     private int         _suspectCount;
-    private int         _suspectFieldIdx = -1;   // tracks position for Tab cycling
     private bool        _shouldFocusFirstField;   // set true to focus first field row after render
-    private bool        _rawTab;                  // true = showing Raw JSON tab
-    private string?     _rawJson;                 // lazy-loaded raw JSON text
-    private bool        _rawJsonLoading;          // spinner while DB fetch is in flight
+    private string?     _fieldToFocusInput;       // key of input to auto-focus after next render
+    private string      _activeTab = "validation"; // "validation" | "raw" | "validated"
+    private string?     _rawJson;                 // lazy-loaded original OCR text (OcrText)
+    private bool        _rawJsonLoading;
+    private string?     _validatedJson;           // lazy-loaded validated JSON text (ValidatedOcrText)
+    private bool        _validatedJsonLoading;
     private bool        _lineItemsCollapsed;      // true = line items body is hidden
 
     // Header field definitions — Key matches InvoiceDto property name exactly
@@ -235,9 +264,6 @@
     // String-backed mutable state — display + edit values share this dictionary
     private readonly Dictionary<string, string> _editValues = new();
 
-    // JSON snapshot of line items taken when entering edit mode (for CancelEdit restore)
-    private string _lineItemsJson = "[]";
-
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     protected override void OnInitialized()
@@ -252,7 +278,13 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_shouldFocusFirstField && !_editMode)
+        if (_fieldToFocusInput is not null)
+        {
+            var key = _fieldToFocusInput;
+            _fieldToFocusInput = null;
+            await JS.InvokeVoidAsync("kocrFields.focusEditInput", key);
+        }
+        else if (_shouldFocusFirstField)
         {
             _shouldFocusFirstField = false;
             await JS.InvokeVoidAsync("kocrFields.focusFirst");
@@ -263,12 +295,11 @@
     {
         if (!ReferenceEquals(State.SelectedInvoice, _invoice))
         {
-            _invoice         = State.SelectedInvoice;
-            _editMode        = false;
-            _saving          = false;
-            _suspectFieldIdx   = -1;
-            _rawTab            = false;
-            _rawJson           = null;
+            _invoice            = State.SelectedInvoice;
+            _saving             = false;
+            _activeTab          = "validation";
+            _rawJson            = null;
+            _validatedJson      = null;
             _lineItemsCollapsed = false;
             _shouldFocusFirstField = _invoice is not null;
             PopulateEditValues();
@@ -341,109 +372,39 @@
             || item.ConfidenceConfirmed.Values.Any(v => !v);
     }
 
-    // ── Edit mode ─────────────────────────────────────────────────────────────
-
-    private void EnterEditMode()
-    {
-        // Snapshot line items so CancelEdit can restore them
-        _lineItemsJson = Newtonsoft.Json.JsonConvert.SerializeObject(_invoice?.Items ?? []);
-        State.SetSelectedField(null); // clear bounding box highlight while editing
-        _editMode = true;
-    }
-
-    private void CancelEdit()
-    {
-        // Restore line items from snapshot (in-place, since Items list has init on the property)
-        if (_invoice is not null)
-        {
-            var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<List<InvoiceItemDto>>(_lineItemsJson)
-                           ?? [];
-            _invoice.Items.Clear();
-            _invoice.Items.AddRange(restored);
-        }
-        _editMode = false;
-        _shouldFocusFirstField = true;
-        PopulateEditValues();
-    }
-
-    // ── Field selection (bounding box highlight) ──────────────────────────────
+    // ── Field selection & inline editing ─────────────────────────────────────
 
     /// <summary>
-    /// Toggle the field selection: first click selects (highlights bbox on image),
-    /// second click on the same field deselects.
-    /// Fields without bounding box data are silently ignored.
+    /// Selects a field for inline editing and bbox highlighting.
+    /// Triggers auto-focus of the corresponding input after the next render.
     /// </summary>
-    private void ToggleFieldSelection(string fieldName)
+    private void SelectField(string fieldName)
     {
-        if (_invoice?.FieldBoundingBoxes.ContainsKey(fieldName) != true) return;
-        State.SetSelectedField(State.SelectedFieldName == fieldName ? null : fieldName);
+        State.SetSelectedField(fieldName);
+        _fieldToFocusInput = fieldName;
     }
-
-    private void OnFieldKeyDown(KeyboardEventArgs e, string fieldName)
-    {
-        if (e.Key is "Enter" or " ") ToggleFieldSelection(fieldName);
-    }
-
-    private void ToggleLineItemSelection(int idx)
-    {
-        if (_editMode) return; // don’t toggle bbox while an input has focus
-        var key = $"Item_{idx}";
-        State.SetSelectedField(State.SelectedFieldName == key ? null : key);
-    }
-
-    private void OnLineItemKeyDown(KeyboardEventArgs e, int idx)
-    {
-        if (e.Key is "Enter" or " ") ToggleLineItemSelection(idx);
-    }
-
     // ── Actions ───────────────────────────────────────────────────────────────
 
-    private async Task SaveEditAsync()
+    /// <summary>
+    /// Saves current field values to the database. Called by the Save button and Ctrl+S.
+    /// </summary>
+    private async Task SaveAsync()
     {
-        if (_invoice is null || State.SelectedFilePath is null) return;
+        if (_invoice is null || State.SelectedFilePath is null || _saving) return;
         _saving = true;
+        StateHasChanged();
         try
         {
-            decimal? ParseDec(string key) =>
-                decimal.TryParse(_editValues.GetValueOrDefault(key),
-                                 System.Globalization.NumberStyles.Any,
-                                 System.Globalization.CultureInfo.InvariantCulture,
-                                 out var v) ? v : null;
-
-            var updated = new InvoiceDto
-            {
-                VendorName           = _editValues.GetValueOrDefault("VendorName",    string.Empty),
-                CustomerName         = _editValues.GetValueOrDefault("CustomerName",  string.Empty),
-                InvoiceId            = _editValues.GetValueOrDefault("InvoiceId",     string.Empty),
-                InvoiceDate          = _editValues.GetValueOrDefault("InvoiceDate",   string.Empty),
-                DueDate              = _editValues.GetValueOrDefault("DueDate",       string.Empty),
-                PurchaseOrder        = _editValues.GetValueOrDefault("PurchaseOrder", string.Empty),
-                Subtotal             = ParseDec("Subtotal"),
-                TotalTax             = ParseDec("TotalTax"),
-                Shipping             = ParseDec("Shipping"),
-                Total                = ParseDec("Total"),
-                Items                = _invoice.Items,         // mutated in-place during edit
-                FieldBoundingBoxes   = _invoice.FieldBoundingBoxes,
-                FieldConfidences     = _invoice.FieldConfidences,
-                OriginalPageWidth    = _invoice.OriginalPageWidth,
-                OriginalPageHeight   = _invoice.OriginalPageHeight,
-                PageCount            = _invoice.PageCount,
-                TesseractConfirmed   = _invoice.TesseractConfirmed,
-                ConfidenceConfirmed  = _invoice.ConfidenceConfirmed,
-                MathConfirmed        = _invoice.MathConfirmed,
-                IsEditedByUser       = true,
-                IsValidationAccepted = false,
-            };
-
+            var updated = BuildUpdatedInvoice();
             var settings = await ConfigService.LoadSettingsAsync();
             await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, updated, settings.ProjectArtifacts);
 
-            State.SetSelectedInvoice(updated);
+            // Update reference without resetting _editValues (user may still be editing)
             _invoice = updated;
-            PopulateEditValues();
+            State.SetSelectedInvoice(updated);
             ComputeSuspectCount();
-            _editMode = false;
-            _shouldFocusFirstField = true;
+            _validatedJson = null;
+            if (_activeTab == "validated") await LoadValidatedJsonAsync();
         }
         catch (Exception ex) { Toast.ShowError($"Save failed: {ex.Message}"); }
         finally
@@ -451,6 +412,40 @@
             _saving = false;
             StateHasChanged();
         }
+    }
+
+    private InvoiceDto BuildUpdatedInvoice()
+    {
+        decimal? ParseDec(string key) =>
+            decimal.TryParse(_editValues.GetValueOrDefault(key),
+                             System.Globalization.NumberStyles.Any,
+                             System.Globalization.CultureInfo.InvariantCulture,
+                             out var v) ? v : null;
+
+        return new InvoiceDto
+        {
+            VendorName           = _editValues.GetValueOrDefault("VendorName",    string.Empty),
+            CustomerName         = _editValues.GetValueOrDefault("CustomerName",  string.Empty),
+            InvoiceId            = _editValues.GetValueOrDefault("InvoiceId",     string.Empty),
+            InvoiceDate          = _editValues.GetValueOrDefault("InvoiceDate",   string.Empty),
+            DueDate              = _editValues.GetValueOrDefault("DueDate",       string.Empty),
+            PurchaseOrder        = _editValues.GetValueOrDefault("PurchaseOrder", string.Empty),
+            Subtotal             = ParseDec("Subtotal"),
+            TotalTax             = ParseDec("TotalTax"),
+            Shipping             = ParseDec("Shipping"),
+            Total                = ParseDec("Total"),
+            Items                = _invoice!.Items,
+            FieldBoundingBoxes   = _invoice.FieldBoundingBoxes,
+            FieldConfidences     = _invoice.FieldConfidences,
+            OriginalPageWidth    = _invoice.OriginalPageWidth,
+            OriginalPageHeight   = _invoice.OriginalPageHeight,
+            PageCount            = _invoice.PageCount,
+            TesseractConfirmed   = _invoice.TesseractConfirmed,
+            ConfidenceConfirmed  = _invoice.ConfidenceConfirmed,
+            MathConfirmed        = _invoice.MathConfirmed,
+            IsEditedByUser       = true,
+            IsValidationAccepted = false,
+        };
     }
 
     private async Task AcceptValidationAsync()
@@ -464,6 +459,8 @@
             await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, _invoice, settings.ProjectArtifacts);
             State.SetSelectedInvoice(_invoice);
             _suspectCount = 0;
+            _validatedJson = null;
+            if (_activeTab == "validated") await LoadValidatedJsonAsync();
         }
         catch (Exception ex) { Toast.ShowError($"Accept failed: {ex.Message}"); }
         finally
@@ -519,24 +516,15 @@
 
     // ── Keyboard shortcut entry points (called from MainLayout via JS interop) ───
 
-    /// <summary>Ctrl+S — saves the invoice if edit mode is currently active.</summary>
-    public Task TriggerSaveAsync() =>
-        _editMode ? SaveEditAsync() : Task.CompletedTask;
+    /// <summary>Ctrl+S — saves current field values immediately.</summary>
+    public Task TriggerSaveAsync() => SaveAsync();
 
     /// <summary>Ctrl+E — exports the current invoice as DOCX.</summary>
     public Task TriggerExportAsync() => ExportDocxAsync();
 
-    /// <summary>
-    /// Escape — cancels edit mode if active, otherwise deselects the highlighted bbox field.
-    /// </summary>
+    /// <summary>Escape — deselects the currently focused/editing field.</summary>
     public Task TriggerEscapeAsync() =>
-        InvokeAsync(() =>
-        {
-            if (_editMode && !_saving)
-                CancelEdit();
-            else
-                State.SetSelectedField(null);
-        });
+        InvokeAsync(() => State.SetSelectedField(null));
 
     /// <summary>
     /// Tab / Shift+Tab — moves the bbox highlight to the next (+1) or previous (-1)
@@ -544,7 +532,7 @@
     /// </summary>
     public Task CycleSuspectFieldAsync(int delta)
     {
-        if (_editMode || _invoice is null) return Task.CompletedTask;
+        if (_invoice is null) return Task.CompletedTask;
 
         return InvokeAsync(() =>
         {
@@ -556,81 +544,118 @@
 
             if (suspects.Count == 0) return;
 
-            // Wrap around correctly for both positive and negative delta
-            _suspectFieldIdx = ((_suspectFieldIdx + delta) % suspects.Count
-                                 + suspects.Count) % suspects.Count;
-
-            State.SetSelectedField(suspects[_suspectFieldIdx]);
+            var currentIdx = suspects.IndexOf(State.SelectedFieldName ?? string.Empty);
+            var nextIdx    = ((currentIdx + delta) % suspects.Count + suspects.Count) % suspects.Count;
+            State.SetSelectedField(suspects[nextIdx]);
         });
     }
     // ── Nav-row focus (Tab navigation → highlight matching bbox) ─────────────────────
 
     /// <summary>
-    /// Called by the JS Tab handler whenever it moves keyboard focus to a
-    /// [data-nav-row] element.  Selects the matching field so its bounding
-    /// box is highlighted in the document viewer.
+    /// Called by the JS Tab handler (and focusNavRow) whenever focus moves to a
+    /// [data-nav-row] element.  Selects the field for editing and bbox highlight.
     /// </summary>
     public Task OnNavRowFocusedAsync(string key) => InvokeAsync(() =>
     {
-        if (_editMode || _invoice is null) return;
-        if (key.StartsWith("Item_") && int.TryParse(key[5..], out var idx))
-        {
-            var item = _invoice.Items.ElementAtOrDefault(idx);
-            if (item?.BoundingBoxes.Count > 0)
-                State.SetSelectedField(key);
-        }
-        else if (_invoice.FieldBoundingBoxes.ContainsKey(key))
-        {
-            State.SetSelectedField(key);
-        }
+        if (_invoice is null) return;
+        State.SetSelectedField(key);
+        _fieldToFocusInput = key;
     });
     // ── Raw JSON tab ─────────────────────────────────────────────────────────
 
-    private async Task SwitchTabAsync(bool showRaw)
+    private async Task SwitchTabAsync(string tab)
     {
-        _rawTab = showRaw;
-        if (showRaw && _rawJson is null && !_rawJsonLoading && State.SelectedFilePath is not null)
+        _activeTab = tab;
+        if (tab == "raw" && _rawJson is null && !_rawJsonLoading)
+            await ReloadRawJsonAsync();
+        else if (tab == "validated" && _validatedJson is null && !_validatedJsonLoading)
+            await LoadValidatedJsonAsync();
+    }
+
+    private async Task ReloadRawJsonAsync()
+    {
+        if (State.SelectedFilePath is null) return;
+        _rawJsonLoading = true;
+        StateHasChanged();
+        try
         {
-            _rawJsonLoading = true;
-            StateHasChanged();
-            try
+            var ocrFile = await DatabaseSvc.GetOCRFileByPathAsync(State.SelectedFilePath);
+            if (ocrFile is not null)
             {
-                var ocrFile = await DatabaseSvc.GetOCRFileByPathAsync(State.SelectedFilePath);
-                if (ocrFile is not null)
+                var raw = ocrFile.OcrText; // always the original OCR output
+                if (!string.IsNullOrWhiteSpace(raw))
                 {
-                    var raw = ocrFile.ValidatedOcrText ?? ocrFile.OcrText;
-                    if (!string.IsNullOrWhiteSpace(raw))
+                    try
                     {
-                        try
-                        {
-                            using var doc = System.Text.Json.JsonDocument.Parse(raw);
-                            _rawJson = System.Text.Json.JsonSerializer.Serialize(
-                                doc.RootElement,
-                                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                        }
-                        catch
-                        {
-                            _rawJson = raw; // not valid JSON — show as-is
-                        }
+                        using var doc = System.Text.Json.JsonDocument.Parse(raw);
+                        _rawJson = System.Text.Json.JsonSerializer.Serialize(
+                            doc.RootElement,
+                            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
                     }
-                    else
-                    {
-                        _rawJson = "(no OCR text stored for this file)";
-                    }
+                    catch { _rawJson = raw; }
                 }
                 else
                 {
-                    _rawJson = "(file not found in database)";
+                    _rawJson = "(no OCR text stored for this file)";
                 }
             }
-            catch (Exception ex)
+            else
             {
-                _rawJson = $"Error loading raw data: {ex.Message}";
-            }
-            finally
-            {
-                _rawJsonLoading = false;
+                _rawJson = "(file not found in database)";
             }
         }
+        catch (Exception ex) { _rawJson = $"Error loading raw data: {ex.Message}"; }
+        finally { _rawJsonLoading = false; }
+    }
+
+    private async Task LoadValidatedJsonAsync()
+    {
+        if (State.SelectedFilePath is null) return;
+        _validatedJsonLoading = true;
+        StateHasChanged();
+        try
+        {
+            var ocrFile = await DatabaseSvc.GetOCRFileByPathAsync(State.SelectedFilePath);
+            if (ocrFile is null)
+            {
+                _validatedJson = "(file not found in database)";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(ocrFile.ValidatedOcrText))
+            {
+                _validatedJson = null; // "not yet validated" shown by UI
+                return;
+            }
+
+            // ValidatedOcrText contains only the Layout array (List<InvoiceDto>).
+            // For display, merge it back into the full PipelineContext from OcrText so
+            // the Validated JSON tab shows the same top-level shape as the Raw JSON tab.
+            try
+            {
+                var rawOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+
+                if (!string.IsNullOrWhiteSpace(ocrFile.OcrText))
+                {
+                    // Parse the raw context as a generic JSON object so we can swap Layout
+                    var rawObj = Newtonsoft.Json.Linq.JObject.Parse(ocrFile.OcrText);
+                    var valLayout = Newtonsoft.Json.Linq.JToken.Parse(ocrFile.ValidatedOcrText);
+                    rawObj["Layout"] = valLayout;
+                    _validatedJson = rawObj.ToString(Newtonsoft.Json.Formatting.Indented);
+                }
+                else
+                {
+                    // No raw context — just pretty-print the validated JSON as-is
+                    using var doc = System.Text.Json.JsonDocument.Parse(ocrFile.ValidatedOcrText);
+                    _validatedJson = System.Text.Json.JsonSerializer.Serialize(doc.RootElement, rawOptions);
+                }
+            }
+            catch
+            {
+                _validatedJson = ocrFile.ValidatedOcrText;
+            }
+        }
+        catch (Exception ex) { _validatedJson = $"Error loading validated data: {ex.Message}"; }
+        finally { _validatedJsonLoading = false; }
     }
 }

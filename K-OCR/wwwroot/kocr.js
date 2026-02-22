@@ -122,6 +122,17 @@ window.kocrFields = {
         requestAnimationFrame(tryFocus);
     },
 
+    // After Blazor renders an inline edit input, focus it so the user can type immediately.
+    focusEditInput: function (key) {
+        requestAnimationFrame(() => {
+            const input = document.querySelector('[data-edit-field="' + key + '"]');
+            if (input) {
+                input.focus();
+                input.select();
+            }
+        });
+    },
+
     focusFirst: function () {
         const first = document.querySelector('[data-nav-row]');
         if (!first) return;
@@ -194,18 +205,23 @@ window.kocrKeyboard = {
             }
 
             // Tab / Shift+Tab → navigate [data-nav-row] elements (header fields + line items),
-            // wrapping around at the ends.  Server is notified via rAF so re-renders from
-            // bbox selection never interfere with rapid Tab pressing.
+            // wrapping around at the ends.  Works whether focus is on the row div itself
+            // or on the [data-edit-field] input inside it.
             if (e.key === 'Tab') {
                 const rows = Array.from(document.querySelectorAll('[data-nav-row]'));
                 if (rows.length > 0) {
-                    // Prefer DOM activeElement; fall back to stored key when a re-render
-                    // caused Blazor to patch the focused element and lose the reference.
-                    let currentRow = rows.includes(document.activeElement)
-                        ? document.activeElement
-                        : (window._focusedNavRowKey
-                            ? document.querySelector('[data-nav-row="' + window._focusedNavRowKey + '"]')
-                            : null);
+                    // Find the active nav-row: either the focused element itself, or the
+                    // row that contains the currently-focused edit input.
+                    const active = document.activeElement;
+                    let currentRow = null;
+                    if (rows.includes(active)) {
+                        currentRow = active;
+                    } else if (active && active.dataset && active.dataset.editField) {
+                        // active element is an edit input inside a nav-row
+                        currentRow = active.closest('[data-nav-row]');
+                    } else if (window._focusedNavRowKey) {
+                        currentRow = document.querySelector('[data-nav-row="' + window._focusedNavRowKey + '"]');
+                    }
 
                     if (currentRow) {
                         e.preventDefault();
@@ -217,13 +233,12 @@ window.kocrKeyboard = {
                         nextRow.focus();
                         const key = nextRow.dataset.navRow;
                         window._focusedNavRowKey = key;
-                        // Notify server after next paint so re-renders don't race with Tab
                         if (key) requestAnimationFrame(() =>
                             dotNetRef.invokeMethodAsync('OnKeyboardShortcut', 'field-focused:' + key));
                         return;
                     }
                 }
-                // No nav row focused — fall back to suspect-field cycling (outside inputs)
+                // No nav row found — fall back to suspect-field cycling (outside inputs)
                 if (!isEditable) {
                     e.preventDefault();
                     dotNetRef.invokeMethodAsync('OnKeyboardShortcut',

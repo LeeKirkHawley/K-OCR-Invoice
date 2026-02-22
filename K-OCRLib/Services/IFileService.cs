@@ -13,6 +13,12 @@ namespace K_OCR.Services
         /// Save pipeline context to database
         /// </summary>
         Task SaveContextAsync(string imagePath, PipelineContext context, string? artifactsDirectory = null);
+
+        /// <summary>
+        /// Save only the validated Layout (user edits) to ValidatedOcrText without
+        /// touching OcrText, which always remains the original OCR output.
+        /// </summary>
+        Task SaveValidatedLayoutAsync(string imagePath, List<K_OCR.Models.InvoiceDto> invoices);
         
         /// <summary>
         /// Check if cached JSON exists for an image

@@ -162,43 +162,9 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     
     public async Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice, string? artifactsDirectory = null)
     {
-        // Load the existing context to preserve other data
-        var context = await _fileService.LoadCachedContextAsync(originalFilePath, artifactsDirectory);
-        
-        if (context != null)
-        {
-            // Update the Layout property with the validated invoice
-            // The Layout can be either JArray or List<InvoiceDto>
-            if (context.Layout is JArray)
-            {
-                context.Layout = new List<InvoiceDto> { invoice };
-            }
-            else if (context.Layout is List<InvoiceDto> list)
-            {
-                if (list.Count > 0)
-                    list[0] = invoice;
-                else
-                    list.Add(invoice);
-            }
-            else
-            {
-                context.Layout = new List<InvoiceDto> { invoice };
-            }
-            
-            // Save back to file
-            await _fileService.SaveContextAsync(originalFilePath, context, artifactsDirectory);
-        }
-        else
-        {
-            // No existing context - create a new one
-            var newContext = new PipelineContext
-            {
-                InputPath = originalFilePath,
-                Layout = new List<InvoiceDto> { invoice }
-            };
-            
-            await _fileService.SaveContextAsync(originalFilePath, newContext, artifactsDirectory);
-        }
+        // Only update ValidatedOcrText — OcrText always stays as the original OCR output.
+        var invoices = new List<InvoiceDto> { invoice };
+        await _fileService.SaveValidatedLayoutAsync(originalFilePath, invoices);
     }
     
     public async Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath, string? artifactsDirectory = null)

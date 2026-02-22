@@ -114,6 +114,30 @@ namespace K_OCR.Services
             }
         }
         
+        public async Task SaveValidatedLayoutAsync(string imagePath, List<K_OCR.Models.InvoiceDto> invoices)
+        {
+            var validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(invoices, Newtonsoft.Json.Formatting.Indented);
+
+            var existing = await _databaseService.GetOCRFileByPathAsync(imagePath);
+            if (existing != null)
+            {
+                existing.ValidatedOcrText = validatedJson;
+                await _databaseService.SaveOCRFileAsync(existing);
+            }
+            else
+            {
+                // No OCR row yet — create a minimal one (edge case: validate before OCR)
+                var ocrFile = new OCRFile
+                {
+                    FilePath         = imagePath,
+                    OcrText          = string.Empty,
+                    ValidatedOcrText = validatedJson,
+                    IsFullyProcessed = false
+                };
+                await _databaseService.SaveOCRFileAsync(ocrFile);
+            }
+        }
+
         public bool HasCachedJson(string imagePath)
         {
             var ocrFile = _databaseService.GetOCRFileByPathAsync(imagePath).GetAwaiter().GetResult();
