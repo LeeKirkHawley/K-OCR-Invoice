@@ -3,6 +3,24 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Launch K-OCR (Blazor)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "Build K-OCR (Blazor) Only",
+            "program": "${workspaceFolder}/K-OCR/bin/Debug/net10.0/K-OCR.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/K-OCR",
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            },
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            }
+        },
+        {
             "name": "Launch K-OCRDesktop (Avalonia)",
             "type": "coreclr",
             "request": "launch",
@@ -15,22 +33,8 @@
             "env": {
                 "SESSION_MANAGER": "",
                 "WAYLAND_DISPLAY": "",
-                "AVALONIA_LOG_LEVEL": "Trace"
-            }
-        },
-        {
-            "name": "Launch K-OCR-API",
-            "type": "coreclr",
-            "request": "launch",
-            "preLaunchTask": "build",
-            "program": "${workspaceFolder}/K-OCR-API/bin/Debug/net10.0/K-OCR-API.dll",
-            "args": [],
-            "cwd": "${workspaceFolder}/K-OCR-API",
-            "stopAtEntry": false,
-            "console": "integratedTerminal",
-            "serverReadyAction": {
-                "action": "openExternally",
-                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+                "AVALONIA_LOG_LEVEL": "Trace",
+                "LD_LIBRARY_PATH": "/usr/lib:/usr/lib/x86_64-linux-gnu:${workspaceFolder}/K-OCRDesktop/bin/Debug/net10.0",
             }
         },
         {

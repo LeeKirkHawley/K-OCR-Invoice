@@ -6,8 +6,7 @@
             "dependsOn": [
                 "Build K-OCRLib Only",
                 "Build K-OCRIntegrationTests Only",
-                "Build K-OCRDesktop Only",
-                "Build K-OCR-API Only"
+                "Build K-OCRDesktop Only"
             ],
             "dependsOrder": "sequence",
             "group": {
@@ -17,12 +16,12 @@
             "problemMatcher": []
         },
         {
-            "label": "Build K-OCR-API Only",
+            "label": "Build K-OCR (Blazor) Only",
             "command": "dotnet",
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/K-OCR-API/K-OCR-API.csproj",
+                "${workspaceFolder}/K-OCR/K-OCR.csproj",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary"
             ],
