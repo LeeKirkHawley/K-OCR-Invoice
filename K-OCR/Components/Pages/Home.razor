@@ -182,10 +182,13 @@
     {
         if (_folderPicker is null) return;
         var settings  = await ConfigService.LoadSettingsAsync();
-        var startPath = !string.IsNullOrWhiteSpace(_folderPath)    ? _folderPath
-                      : !string.IsNullOrWhiteSpace(settings.DefaultStartFolder) ? settings.DefaultStartFolder
-                      : AppContext.BaseDirectory;
-        var chosen = await _folderPicker.ShowAsync(startPath);
+        // Root at the configured base directory; fall back to ProjectDirectory if base isn't set.
+        var rootPath  = !string.IsNullOrWhiteSpace(settings.DefaultStartFolder) ? settings.DefaultStartFolder
+                      : !string.IsNullOrWhiteSpace(settings.ProjectDirectory)   ? settings.ProjectDirectory
+                      : null;
+        var startPath = !string.IsNullOrWhiteSpace(_folderPath) ? _folderPath
+                      : rootPath;
+        var chosen = await _folderPicker.ShowAsync(startPath, rootPath);
         if (chosen is not null)
         {
             _folderPath = chosen;

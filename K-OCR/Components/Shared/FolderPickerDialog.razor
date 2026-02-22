@@ -20,8 +20,21 @@
 
             <!-- ── Current path ───────────────────────────── -->
             <div class="fpicker-path" title="@_currentPath">
-                <span class="fpicker-path-icon">📁</span>
-                <span class="fpicker-path-text">@_currentPath</span>
+                @if (_rootPath is not null)
+                {
+                    <span class="fpicker-path-icon">🏠</span>
+                    <span class="fpicker-path-root" title="@_rootPath">@FolderName(_rootPath)</span>
+                    @if (!string.Equals(_currentPath, _rootPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="fpicker-path-sep"> / </span>
+                        <span class="fpicker-path-text">@RelativePath</span>
+                    }
+                }
+                else
+                {
+                    <span class="fpicker-path-icon">📁</span>
+                    <span class="fpicker-path-text">@_currentPath</span>
+                }
             </div>
 
             <!-- ── Toolbar: Up + New Folder ───────────────── -->
@@ -104,29 +117,49 @@
     private bool   _loading;
     private bool   _creating;
     private string _currentPath  = string.Empty;
+    private string? _rootPath;         // when set, navigation cannot go above this directory
     private string _newFolderName = string.Empty;
     private string? _error;
     private List<string> _entries = new();
     private TaskCompletionSource<string?>? _tcs;
 
+    // Up is allowed only when there is a parent and we haven't reached the root
     private bool CanGoUp =>
         !string.IsNullOrEmpty(_currentPath) &&
-        Directory.GetParent(_currentPath) is not null;
+        Directory.GetParent(_currentPath) is not null &&
+        (_rootPath is null || !string.Equals(_currentPath, _rootPath, StringComparison.OrdinalIgnoreCase));
+
+    // Path shown in the breadcrumb: relative to root when rooted, full otherwise
+    private string RelativePath =>
+        _rootPath is not null &&
+        _currentPath.StartsWith(_rootPath, StringComparison.OrdinalIgnoreCase)
+            ? _currentPath[_rootPath.Length..]
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            : _currentPath;
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Show the picker starting at <paramref name="startPath"/> (falls back to
-    /// the user's home directory).  Returns the chosen path, or null if the
-    /// user cancels.
+    /// Show the picker starting at <paramref name="startPath"/>.
+    /// When <paramref name="rootPath"/> is provided the dialog is constrained to
+    /// that directory — the user cannot navigate above it, and paths are shown
+    /// relative to it.  Falls back to the user's home directory if neither is
+    /// a valid existing path.
     /// </summary>
-    public Task<string?> ShowAsync(string? startPath = null)
+    public Task<string?> ShowAsync(string? startPath = null, string? rootPath = null)
     {
         _tcs = new TaskCompletionSource<string?>();
 
+        _rootPath = Directory.Exists(rootPath) ? rootPath : null;
+
         _currentPath = Directory.Exists(startPath)
             ? startPath!
-            : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            : _rootPath ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        // If startPath is outside the root, reset to root
+        if (_rootPath is not null &&
+            !_currentPath.StartsWith(_rootPath, StringComparison.OrdinalIgnoreCase))
+            _currentPath = _rootPath;
 
         _newFolderName = string.Empty;
         _error         = null;

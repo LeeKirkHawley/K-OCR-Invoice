@@ -94,6 +94,21 @@
             <h3 class="settings-section-title">Directories</h3>
 
             <div class="settings-field">
+                <label class="settings-label">Base Directory</label>
+                <div class="settings-browse-row">
+                    <input type="text" class="settings-input"
+                           @bind="_settings.DefaultStartFolder"
+                           placeholder="/path/to/tenant-root" />
+                    <button class="btn fpicker-browse-btn"
+                            @onclick="() => BrowseDirAsync(null)"
+                            title="Browse for folder">
+                        Browse…
+                    </button>
+                </div>
+                <span class="settings-hint">The root folder shown in the directory picker. All tenant project folders should live here.</span>
+            </div>
+
+            <div class="settings-field">
                 <label class="settings-label">Project Directory</label>
                 <div class="settings-browse-row">
                     <input type="text" class="settings-input"
@@ -105,7 +120,7 @@
                         Browse…
                     </button>
                 </div>
-                <span class="settings-hint">Root folder that K-OCR will open by default.</span>
+                <span class="settings-hint">The project folder K-OCR opens by default (must be inside Base Directory).</span>
             </div>
 
             <div class="settings-field">
@@ -277,16 +292,29 @@
         }
     }
 
-    private async Task BrowseDirAsync(bool isProjectDir)
+    private async Task BrowseDirAsync(bool? isProjectDir)
     {
         if (_folderPicker is null) return;
-        var current = isProjectDir ? _settings.ProjectDirectory : _settings.ProjectArtifacts;
-        var chosen  = await _folderPicker.ShowAsync(current);
+        // Base directory: unconstrained — user picks the root itself
+        // Project directory: constrained to base directory if set
+        // Artifacts directory: always unconstrained
+        string? current  = isProjectDir switch
+        {
+            null  => _settings.DefaultStartFolder,
+            true  => _settings.ProjectDirectory,
+            false => _settings.ProjectArtifacts
+        };
+        string? rootPath = isProjectDir == true && !string.IsNullOrWhiteSpace(_settings.DefaultStartFolder)
+                         ? _settings.DefaultStartFolder
+                         : null;
+        var chosen = await _folderPicker.ShowAsync(current, rootPath);
         if (chosen is null) return;
-        if (isProjectDir)
-            _settings.ProjectDirectory = chosen;
-        else
-            _settings.ProjectArtifacts = chosen;
+        switch (isProjectDir)
+        {
+            case null:  _settings.DefaultStartFolder = chosen; break;
+            case true:  _settings.ProjectDirectory   = chosen; break;
+            case false: _settings.ProjectArtifacts   = chosen; break;
+        }
     }
 
     private void Cancel() => Nav.NavigateTo("/");
