@@ -77,18 +77,6 @@
                         </ul>
                     </li>
 
-                    <!-- Edit menu -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="javascript:void(0)" id="editMenu"
-                        role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            Edit
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="editMenu">
-                            <li><a class="dropdown-item" href="#" @onclick="Copy">Copy</a></li>
-                            <li><a class="dropdown-item" href="#" @onclick="Paste">Paste</a></li>
-                        </ul>
-                    </li>
-
                     <!-- Tools menu -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="javascript:void(0)" id="toolsMenu"
@@ -232,6 +220,10 @@
             _selfRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("kocrLayout.initSplitters", _selfRef);
             await JS.InvokeVoidAsync("kocrKeyboard.init", _selfRef);
+            if (!State.IsAuthenticated)
+            {
+                AuthSvc.RequestOpen();
+            }
         }
     }
 

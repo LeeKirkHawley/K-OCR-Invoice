@@ -118,17 +118,17 @@ public partial class MainWindowViewModel : ViewModelBase
     //     await Task.CompletedTask;
     // }
 
-    [RelayCommand]
-    private void Copy()
-    {
-        // Copy logic
-    }
+    // [RelayCommand]
+    // private void Copy()
+    // {
+    //     // Copy logic
+    // }
 
-    [RelayCommand]
-    private void Paste()
-    {
-        // Paste logic
-    }
+    // [RelayCommand]
+    // private void Paste()
+    // {
+    //     // Paste logic
+    // }
 
     [RelayCommand]
     private void Exit()

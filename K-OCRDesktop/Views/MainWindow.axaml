@@ -54,10 +54,6 @@
             <MenuItem Header="_Export">
                 <MenuItem Header="_Docx" Command="{Binding ExportDocxCommand}"/>
             </MenuItem>
-            <MenuItem Header="_Edit">
-                <MenuItem Header="_Copy" Command="{Binding CopyCommand}"/>
-                <MenuItem Header="_Paste" Command="{Binding PasteCommand}"/>
-            </MenuItem>
             <MenuItem Header="_Tools">
                 <MenuItem Header="_Settings" Click="OnSettings"/>
                 <Separator/>
