@@ -408,11 +408,317 @@ html, body {
     color: #fff;
 }
 
+/* ─── Settings dialog overlay ───────────────────────────────── */
+.settings-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 9999 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-dialog {
+    background: #252526;
+    border: 1px solid #444;
+    border-radius: 8px;
+    width: 720px;
+    max-width: 95vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+}
+
+/* ─── Super Admin dialog overlay ────────────────────────────── */
+.superadmin-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 9999 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.superadmin-dialog {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 8px;
+    width: 960px;
+    max-width: 96vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+}
+
+.superadmin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.superadmin-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #f5f5f5;
+    margin: 0;
+}
+
+.superadmin-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+/* ─── Batch Process dialog ────────────────────────────────── */
+.batch-dialog {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 8px;
+    width: 640px;
+    max-width: 95vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+}
+
+.batch-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.batch-dir-box {
+    background: #2a2a2a;
+    border: 1px solid #3b3b3b;
+    border-radius: 6px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.batch-dir-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #888;
+}
+
+.batch-dir-path {
+    font-size: 12px;
+    color: #ccc;
+    word-break: break-all;
+}
+
+.batch-empty {
+    color: #888;
+    font-style: italic;
+    font-size: 13px;
+    padding: 12px 0;
+}
+
+.batch-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.batch-tool-btn {
+    background: #2d2d2d;
+    border: 1px solid #444;
+    color: #ccc;
+    padding: 4px 12px;
+    font-size: 12px;
+    border-radius: 4px;
+}
+
+.batch-tool-btn:hover:not(:disabled) {
+    background: #3a3a3a;
+    color: #fff;
+}
+
+.batch-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: #999;
+    font-style: italic;
+}
+
+.batch-file-list {
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow-y: auto;
+    max-height: 320px;
+    background: #161616;
+}
+
+.batch-file-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #222;
+    transition: background 0.1s;
+}
+
+.batch-file-row:last-child {
+    border-bottom: none;
+}
+
+.batch-file-row:hover:not(.batch-row-disabled) {
+    background: #252525;
+}
+
+.batch-row-disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.batch-checkbox {
+    flex-shrink: 0;
+    accent-color: #4e9eff;
+    width: 14px;
+    height: 14px;
+}
+
+.batch-filename {
+    flex: 1;
+    font-size: 13px;
+    color: #ddd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.batch-result-mark {
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.batch-done { color: #22c55e; }
+.batch-fail { color: #dc2626; }
+
+.batch-progress {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.batch-progress-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #ccc;
+}
+
+.batch-progress-file {
+    color: #888;
+    font-style: italic;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.batch-progress-track {
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.batch-progress-fill {
+    height: 100%;
+    background: #4e9eff;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.batch-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 24px;
+    border-top: 1px solid #333;
+    flex-shrink: 0;
+}
+
+/* ─── Auth dialog overlay ────────────────────────────────────── */
+.auth-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.auth-dialog {
+    background: #252526;
+    border: 1px solid #444;
+    border-radius: 8px;
+    width: 740px;
+    max-width: 95vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+}
+
+.auth-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.auth-dialog-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e8e8e8;
+}
+
+.auth-dialog-body {
+    padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.auth-dialog-body .auth-grid {
+    margin-top: 0;
+}
+
 /* ─── Settings page ─────────────────────────────────────────── */
 .settings-page {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
     background: #1e1e1e;
 }

@@ -4,6 +4,11 @@
 @inject IInvoiceProcessingService ProcessingService
 @inject IConfigurationService ConfigService
 @inject ToastService Toast
+@inject SettingsDialogService SettingsSvc
+@inject AuthDialogService AuthSvc
+@inject SuperAdminDialogService SuperAdminDialogSvc
+@inject OrgUsersDialogService OrgUsersDialogSvc
+@inject BatchProcessDialogService BatchSvc
 @inject NavigationManager Navigation
 @implements IAsyncDisposable
 
@@ -23,7 +28,7 @@
         }
         else
         {
-            <NavLink class="btn btn-sm btn-outline-light" href="/auth">Sign in</NavLink>
+            <button class="btn btn-sm btn-outline-light" @onclick="() => AuthSvc.RequestOpen()">Sign in</button>
         }
     </div>
     <nav class="navbar navbar-expand-lg kocr-menu-bar">
@@ -38,15 +43,15 @@
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <!-- File menu -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="fileMenu"
+                        <a class="nav-link dropdown-toggle" href="javascript:void(0)" id="fileMenu"
                         role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             File
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="fileMenu">
                             <li>
-                                <a class="dropdown-item" href="#" @onclick="BatchProcess">
+                                <button class="dropdown-item" @onclick="() => BatchSvc.RequestOpen()">
                                     Batch Process…
-                                </a>
+                                </button>
                             </li>
                             <li><hr class="dropdown-divider" /></li>
                             <li>
@@ -59,7 +64,7 @@
 
                     <!-- Export menu -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="exportMenu"
+                        <a class="nav-link dropdown-toggle" href="javascript:void(0)" id="exportMenu"
                         role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             Export
                         </a>
@@ -74,7 +79,7 @@
 
                     <!-- Edit menu -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="editMenu"
+                        <a class="nav-link dropdown-toggle" href="javascript:void(0)" id="editMenu"
                         role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             Edit
                         </a>
@@ -86,7 +91,7 @@
 
                     <!-- Tools menu -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="toolsMenu"
+                        <a class="nav-link dropdown-toggle" href="javascript:void(0)" id="toolsMenu"
                         role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             Tools
                         </a>
@@ -94,31 +99,31 @@
                             @if (State.IsSuperAdmin)
                             {
                                 <li>
-                                    <NavLink class="dropdown-item" href="/super-admin">
+                                    <button class="dropdown-item" @onclick="() => SuperAdminDialogSvc.RequestOpen()">
                                         Super Admin Console
-                                    </NavLink>
+                                    </button>
                                 </li>
                             }
 
                             @if (State.IsOrganizationAdmin)
                             {
                                 <li>
-                                    <NavLink class="dropdown-item" href="/organization/users">
+                                    <button class="dropdown-item" @onclick="() => OrgUsersDialogSvc.RequestOpen()">
                                         Organization Users
-                                    </NavLink>
+                                    </button>
                                 </li>
                             }
 
                             <li>
-                                <NavLink class="dropdown-item" href="/auth">
+                                <button class="dropdown-item" @onclick="() => AuthSvc.RequestOpen()">
                                     Authentication Setup
-                                </NavLink>
+                                </button>
                             </li>
                             <li><hr class="dropdown-divider" /></li>
                             <li>
-                                <NavLink class="dropdown-item" href="/settings">
+                                <button class="dropdown-item" @onclick="OpenSettingsAsync">
                                     Settings
-                                </NavLink>
+                                </button>
                             </li>
                             <li><hr class="dropdown-divider" /></li>
                             <li>
@@ -131,7 +136,7 @@
 
                     <!-- Help menu -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="helpMenu"
+                        <a class="nav-link dropdown-toggle" href="javascript:void(0)" id="helpMenu"
                         role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             Help
                         </a>
@@ -150,7 +155,7 @@
 </div>
 
 <div class="kocr-shell" @ref="_shellRef">
-    <!-- Left pane — @Body renders here (file list / settings page) -->
+    <!-- Left pane — @Body renders here (file list) -->
     <div class="kocr-pane kocr-pane-left">
         @Body
     </div>
@@ -201,12 +206,19 @@
     <span class="dismiss">🗙</span>
 </div>
 
+<Settings />
+<Auth />
+<SuperAdmin />
+<OrganizationUsers />
+<BatchProcess />
 <ToastContainer />
 
 @code {
     private ElementReference _shellRef;
     private DotNetObjectReference<MainLayout>? _selfRef;
     private InvoicePanel? _invoicePanel;
+
+    private void OpenSettingsAsync() => SettingsSvc.RequestOpen();
 
     protected override void OnInitialized()
     {
@@ -269,12 +281,6 @@
     }
 
     // --- Menu handler stubs ---
-    private async Task BatchProcess()
-    {
-        // TODO: Implement batch processing logic
-        await Task.CompletedTask;
-    }
-
     private async Task ExportDocx()
     {
         // TODO: Implement export to Docx logic
@@ -301,7 +307,6 @@
     private void Logout()
     {
         State.ClearAuthentication();
-        Navigation.NavigateTo("/auth");
     }
 
     private async Task ClearAllData()

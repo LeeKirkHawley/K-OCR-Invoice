@@ -1,86 +1,99 @@
-@page "/auth"
 @using System.ComponentModel.DataAnnotations
 @using K_OCR.Models.Api.Auth
 @inject IAuthService AuthService
 @inject WorkspaceState State
-@inject NavigationManager Navigation
 @inject ToastService Toast
+@inject AuthDialogService AuthSvc
+@implements IDisposable
 
-<div class="auth-page">
-    <h1>Authentication</h1>
+@if (_visible)
+{
+    <div class="auth-overlay" @onclick="Cancel">
+        <div class="auth-dialog" @onclick:stopPropagation="true">
 
-    @if (State.IsAuthenticated)
-    {
-        <div class="alert alert-success auth-status">
-            <span><strong>@State.CurrentUserEmail</strong></span>
-            <span class="auth-status-tenant">Tenant: @(State.TenantName ?? "Global")</span>
-            <button class="btn btn-sm btn-outline-secondary" @onclick="Logout">Sign out</button>
+            <div class="auth-dialog-header">
+                <span class="auth-dialog-title">Authentication</span>
+                <button class="fpicker-close" @onclick="Cancel" aria-label="Close">✕</button>
+            </div>
+
+            <div class="auth-dialog-body">
+
+                @if (State.IsAuthenticated)
+                {
+                    <div class="alert alert-success auth-status">
+                        <span><strong>@State.CurrentUserEmail</strong></span>
+                        <span class="auth-status-tenant">Tenant: @(State.TenantName ?? "Global")</span>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="Logout">Sign out</button>
+                    </div>
+                }
+
+                <div class="auth-grid">
+                    <section class="auth-panel">
+                        <h2>Sign in</h2>
+                        <p>Provide your email and password to request a JWT with tenant claims.</p>
+                        @if (!string.IsNullOrEmpty(_loginError))
+                        {
+                            <div class="alert alert-danger">@_loginError</div>
+                        }
+                        <EditForm Model="_loginModel" OnValidSubmit="HandleLogin">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary />
+                            <div class="mb-3">
+                                <label class="form-label">Email</label>
+                                <InputText class="form-control" @bind-Value="_loginModel.Email" />
+                                <ValidationMessage For="() => _loginModel.Email" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Password</label>
+                                <InputText class="form-control" type="password" @bind-Value="_loginModel.Password" />
+                                <ValidationMessage For="() => _loginModel.Password" />
+                            </div>
+                            <button type="submit" class="btn btn-primary" disabled="@_isProcessingLogin">
+                                @(_isProcessingLogin ? "Signing in…" : "Sign in")
+                            </button>
+                        </EditForm>
+                    </section>
+
+                    <section class="auth-panel">
+                        <h2>Reset password</h2>
+                        <p>Use the invitation token to set a permanent password for new organization users.</p>
+                        @if (!string.IsNullOrEmpty(_resetError))
+                        {
+                            <div class="alert alert-danger">@_resetError</div>
+                        }
+                        @if (!string.IsNullOrEmpty(_resetSuccess))
+                        {
+                            <div class="alert alert-success">@_resetSuccess</div>
+                        }
+                        <EditForm Model="_resetModel" OnValidSubmit="HandleReset">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary />
+                            <div class="mb-3">
+                                <label class="form-label">Email</label>
+                                <InputText class="form-control" @bind-Value="_resetModel.Email" />
+                                <ValidationMessage For="() => _resetModel.Email" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Invitation token</label>
+                                <InputText class="form-control" @bind-Value="_resetModel.Token" />
+                                <ValidationMessage For="() => _resetModel.Token" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">New password</label>
+                                <InputText class="form-control" type="password" @bind-Value="_resetModel.NewPassword" />
+                                <ValidationMessage For="() => _resetModel.NewPassword" />
+                            </div>
+                            <button type="submit" class="btn btn-outline-primary" disabled="@_isProcessingReset">
+                                @(_isProcessingReset ? "Updating…" : "Update password")
+                            </button>
+                        </EditForm>
+                    </section>
+                </div>
+
+            </div>
         </div>
-    }
-
-    <div class="auth-grid">
-        <section class="auth-panel">
-            <h2>Sign in</h2>
-            <p>Provide your email and password to request a JWT with tenant claims.</p>
-            @if (!string.IsNullOrEmpty(_loginError))
-            {
-                <div class="alert alert-danger">@_loginError</div>
-            }
-            <EditForm Model="_loginModel" OnValidSubmit="HandleLogin">
-                <DataAnnotationsValidator />
-                <ValidationSummary />
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <InputText class="form-control" @bind-Value="_loginModel.Email" />
-                    <ValidationMessage For="() => _loginModel.Email" />
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Password</label>
-                    <InputText class="form-control" type="password" @bind-Value="_loginModel.Password" />
-                    <ValidationMessage For="() => _loginModel.Password" />
-                </div>
-                <button type="submit" class="btn btn-primary" disabled="@_isProcessingLogin">
-                    @(_isProcessingLogin ? "Signing in…" : "Sign in")
-                </button>
-            </EditForm>
-        </section>
-
-        <section class="auth-panel">
-            <h2>Reset password</h2>
-            <p>Use the invitation token to set a permanent password for new organization users.</p>
-            @if (!string.IsNullOrEmpty(_resetError))
-            {
-                <div class="alert alert-danger">@_resetError</div>
-            }
-            @if (!string.IsNullOrEmpty(_resetSuccess))
-            {
-                <div class="alert alert-success">@_resetSuccess</div>
-            }
-            <EditForm Model="_resetModel" OnValidSubmit="HandleReset">
-                <DataAnnotationsValidator />
-                <ValidationSummary />
-                <div class="mb-3">
-                    <label class="form-label">Email</label>
-                    <InputText class="form-control" @bind-Value="_resetModel.Email" />
-                    <ValidationMessage For="() => _resetModel.Email" />
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Invitation token</label>
-                    <InputText class="form-control" @bind-Value="_resetModel.Token" />
-                    <ValidationMessage For="() => _resetModel.Token" />
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">New password</label>
-                    <InputText class="form-control" type="password" @bind-Value="_resetModel.NewPassword" />
-                    <ValidationMessage For="() => _resetModel.NewPassword" />
-                </div>
-                <button type="submit" class="btn btn-outline-primary" disabled="@_isProcessingReset">
-                    @(_isProcessingReset ? "Updating…" : "Update password")
-                </button>
-            </EditForm>
-        </section>
     </div>
-</div>
+}
 
 @code {
     private readonly LoginRequest _loginModel = new();
@@ -90,6 +103,31 @@
     private string? _resetSuccess;
     private bool _isProcessingLogin;
     private bool _isProcessingReset;
+    private bool _visible;
+
+    protected override void OnInitialized()
+    {
+        AuthSvc.OpenRequested += OnOpenRequested;
+    }
+
+    public void Dispose()
+    {
+        AuthSvc.OpenRequested -= OnOpenRequested;
+    }
+
+    private void OnOpenRequested()
+    {
+        _loginError  = null;
+        _resetError  = null;
+        _resetSuccess = null;
+        _visible = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void Cancel()
+    {
+        _visible = false;
+    }
 
     private async Task HandleLogin()
     {
@@ -104,7 +142,7 @@
                 response.Email,
                 response.Roles);
             Toast.ShowSuccess($"Signed in as {response.Email}");
-            Navigation.NavigateTo("/");
+            _visible = false;
         }
         catch (Exception ex)
         {
@@ -142,6 +180,6 @@
     private void Logout()
     {
         State.ClearAuthentication();
-        Navigation.NavigateTo("/auth", forceLoad: true);
+        _visible = false;
     }
 }

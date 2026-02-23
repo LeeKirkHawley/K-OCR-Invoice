@@ -1,0 +1,212 @@
+@using System.IO
+@inject WorkspaceState State
+@inject IInvoiceProcessingService ProcessingService
+@inject IConfigurationService ConfigService
+@inject ToastService Toast
+@inject BatchProcessDialogService BatchSvc
+@implements IDisposable
+
+@if (_visible)
+{
+<div class="superadmin-overlay" @onclick="Close">
+    <div class="batch-dialog" @onclick:stopPropagation="true">
+
+        <div class="superadmin-header">
+            <h2 class="superadmin-title">Batch Process Invoices</h2>
+            <button class="btn btn-cancel" @onclick="Close" disabled="@_running">✕</button>
+        </div>
+
+        <div class="batch-body">
+
+            <!-- Current directory -->
+            <div class="batch-dir-box">
+                <span class="batch-dir-label">Current Directory</span>
+                <span class="batch-dir-path">@(State.CurrentDirectory ?? "No directory open")</span>
+            </div>
+
+            @if (_files.Count == 0)
+            {
+                <div class="batch-empty">
+                    No image files found. Open a project folder first.
+                </div>
+            }
+            else
+            {
+                <!-- Toolbar -->
+                <div class="batch-toolbar">
+                    <button class="btn btn-sm batch-tool-btn" @onclick="SelectAll"  disabled="@_running">Select All</button>
+                    <button class="btn btn-sm batch-tool-btn" @onclick="ClearAll"   disabled="@_running">Clear All</button>
+                    <span class="batch-count">@SelectedCount file@(SelectedCount == 1 ? "" : "s") selected</span>
+                </div>
+
+                <!-- File list -->
+                <div class="batch-file-list">
+                    @foreach (var item in _files)
+                    {
+                        <label class="batch-file-row @(_running ? "batch-row-disabled" : "")">
+                            <input type="checkbox"
+                                   class="batch-checkbox"
+                                   checked="@item.Selected"
+                                   disabled="@_running"
+                                   @onchange="() => item.Selected = !item.Selected" />
+                            <span class="file-status-dot @(item.Entry.IsProcessed ? "dot-validated" : "dot-unprocessed")"
+                                  title="@(item.Entry.IsProcessed ? "Already processed" : "Not yet processed")"></span>
+                            <span class="batch-filename">@item.Entry.FileName</span>
+                            @if (_completedFiles.Contains(item.Entry.FilePath))
+                            {
+                                <span class="batch-result-mark batch-done">✓</span>
+                            }
+                            else if (_failedFiles.Contains(item.Entry.FilePath))
+                            {
+                                <span class="batch-result-mark batch-fail">✗</span>
+                            }
+                        </label>
+                    }
+                </div>
+
+                <!-- Progress bar (visible while running) -->
+                @if (_running || _completed > 0)
+                {
+                    <div class="batch-progress">
+                        <div class="batch-progress-header">
+                            <span>Processed: @_completed of @_total</span>
+                            @if (!string.IsNullOrEmpty(_currentFile))
+                            {
+                                <span class="batch-progress-file">@_currentFile</span>
+                            }
+                        </div>
+                        <div class="batch-progress-track">
+                            <div class="batch-progress-fill"
+                                 style="width: @(_total > 0 ? (_completed * 100 / _total) : 0)%"></div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- Footer -->
+        <div class="batch-footer">
+            <button class="btn btn-primary"
+                    @onclick="RunAsync"
+                    disabled="@(_running || SelectedCount == 0)">
+                @(_running ? "Processing…" : "▶  Run")
+            </button>
+            <button class="btn btn-cancel" @onclick="Close" disabled="@_running">Cancel</button>
+        </div>
+
+    </div>
+</div>
+}
+
+@code {
+    private record FileItem(FileListEntry Entry) { public bool Selected { get; set; } }
+
+    private bool    _visible;
+    private bool    _running;
+    private List<FileItem> _files = new();
+    private int     _completed;
+    private int     _total;
+    private string  _currentFile = "";
+    private HashSet<string> _completedFiles = new();
+    private HashSet<string> _failedFiles    = new();
+
+    private int SelectedCount => _files.Count(f => f.Selected);
+
+    protected override void OnInitialized()
+    {
+        BatchSvc.OpenRequested += OnOpenRequested;
+    }
+
+    public void Dispose()
+    {
+        BatchSvc.OpenRequested -= OnOpenRequested;
+    }
+
+    private void OnOpenRequested()
+    {
+        _files          = State.Files.Select(f => new FileItem(f)).ToList();
+        _completed      = 0;
+        _total          = 0;
+        _currentFile    = "";
+        _completedFiles = new();
+        _failedFiles    = new();
+        _running        = false;
+        _visible        = true;
+        StateHasChanged();
+    }
+
+    private void Close()
+    {
+        if (_running) return;
+        _visible = false;
+        StateHasChanged();
+    }
+
+    private void SelectAll() { foreach (var f in _files) f.Selected = true; }
+    private void ClearAll()  { foreach (var f in _files) f.Selected = false; }
+
+    private async Task RunAsync()
+    {
+        var selectedPaths = _files.Where(f => f.Selected).Select(f => f.Entry.FilePath).ToList();
+        if (selectedPaths.Count == 0) return;
+
+        var settings = await ConfigService.LoadSettingsAsync();
+        if (string.IsNullOrEmpty(settings.ProjectArtifacts))
+        {
+            Toast.ShowError("Artifacts directory is not configured. Set it in Settings before processing.");
+            return;
+        }
+
+        _running = true;
+        _completed = 0;
+        _total = selectedPaths.Count;
+        _currentFile = "";
+        _completedFiles.Clear();
+        _failedFiles.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var progress = new Progress<(int completed, int total, string currentFile)>(p =>
+            {
+                _completed   = p.completed;
+                _total       = p.total;
+                _currentFile = Path.GetFileName(p.currentFile);
+                InvokeAsync(StateHasChanged);
+            });
+
+            var results = await ProcessingService.ProcessBatchAsync(
+                selectedPaths,
+                useCache: false,
+                progress,
+                settings.ProjectArtifacts);
+
+            foreach (var kv in results)
+            {
+                if (kv.Value.IsSuccess) _completedFiles.Add(kv.Key);
+                else                    _failedFiles.Add(kv.Key);
+            }
+
+            // Mark processed files in workspace state so dots update
+            foreach (var item in _files.Where(f => _completedFiles.Contains(f.Entry.FilePath)))
+                item.Entry.IsProcessed = true;
+
+            var succeeded = _completedFiles.Count;
+            var failed    = _failedFiles.Count;
+
+            if (failed == 0)
+                Toast.ShowSuccess($"Processed {succeeded} invoice{(succeeded == 1 ? "" : "s")} successfully.");
+            else
+                Toast.ShowWarning($"{succeeded} succeeded, {failed} failed.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Batch processing failed: {ex.Message}");
+        }
+        finally
+        {
+            _running = false;
+            StateHasChanged();
+        }
+    }
+}

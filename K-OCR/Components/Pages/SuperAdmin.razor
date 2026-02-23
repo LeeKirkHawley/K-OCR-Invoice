@@ -1,14 +1,21 @@
-@page "/super-admin"
 @using K_OCR.Configuration
 @using K_OCR.Models.Api.SuperAdmin
 @inject WorkspaceState State
 @inject ISuperAdminService SuperAdminSvc
 @inject ToastService Toast
 @inject IConfigurationService ConfigService
+@inject SuperAdminDialogService SuperAdminDialogSvc
+@implements IDisposable
 
-<div class="admin-page">
-    <h1>Super Admin Console</h1>
-
+@if (_visible)
+{
+<div class="superadmin-overlay" @onclick="Close">
+    <div class="superadmin-dialog" @onclick:stopPropagation="true">
+        <div class="superadmin-header">
+            <h1 class="superadmin-title">Super Admin Console</h1>
+            <button class="btn btn-cancel" @onclick="Close">✕</button>
+        </div>
+        <div class="superadmin-content">
     @if (!State.IsSuperAdmin)
     {
         <div class="alert alert-warning">
@@ -158,9 +165,13 @@
             </section>
         </div>
     }
+        </div>
+    </div>
 </div>
+}
 
 @code {
+    private bool _visible;
     private readonly CreateOrganizationRequest _createModel = new();
     private OrganizationOverview[] _organizations = Array.Empty<OrganizationOverview>();
     private CreateOrganizationResult? _creationResult;
@@ -171,13 +182,37 @@
     private bool _isSavingEmailSettings;
     private string? _emailSettingsMessage;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
+    {
+        SuperAdminDialogSvc.OpenRequested += OnOpenRequested;
+    }
+
+    public void Dispose()
+    {
+        SuperAdminDialogSvc.OpenRequested -= OnOpenRequested;
+    }
+
+    private void OnOpenRequested()
+    {
+        _visible = true;
+        StateHasChanged();
+        _ = LoadDataAsync();
+    }
+
+    private void Close()
+    {
+        _visible = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadDataAsync()
     {
         if (State.IsSuperAdmin)
         {
             await LoadOrganizationsAsync();
             await LoadEmailSettingsAsync();
         }
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadOrganizationsAsync()

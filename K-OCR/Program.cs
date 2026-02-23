@@ -77,6 +77,11 @@ builder.Services.AddScoped<IInvoiceProcessingService, InvoiceProcessingService>(
 // Per-circuit Blazor state
 builder.Services.AddScoped<WorkspaceState>();
 builder.Services.AddScoped<ToastService>();
+builder.Services.AddScoped<SettingsDialogService>();
+builder.Services.AddScoped<AuthDialogService>();
+builder.Services.AddScoped<SuperAdminDialogService>();
+builder.Services.AddScoped<OrgUsersDialogService>();
+builder.Services.AddScoped<BatchProcessDialogService>();
 
 var app = builder.Build();
 

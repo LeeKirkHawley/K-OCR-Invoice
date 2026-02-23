@@ -1,13 +1,20 @@
-@page "/organization/users"
 @using System
 @using K_OCR.Models.Api.OrganizationAdmin
 @inject WorkspaceState State
 @inject IOrganizationAdminService OrgAdminSvc
 @inject ToastService Toast
+@inject OrgUsersDialogService OrgUsersDialogSvc
+@implements IDisposable
 
-<div class="admin-page">
-    <h1>Organization users</h1>
-
+@if (_visible)
+{
+<div class="superadmin-overlay" @onclick="Close">
+    <div class="superadmin-dialog" @onclick:stopPropagation="true">
+        <div class="superadmin-header">
+            <h1 class="superadmin-title">Organization Users</h1>
+            <button class="btn btn-cancel" @onclick="Close">✕</button>
+        </div>
+        <div class="superadmin-content">
     @if (!State.IsOrganizationAdmin)
     {
         <div class="alert alert-warning">
@@ -89,21 +96,41 @@
             </section>
         </div>
     }
+        </div>
+    </div>
 </div>
+}
 
 @code {
+    private bool _visible;
     private readonly InviteUserRequest _inviteModel = new();
     private InviteUserResult? _inviteResult;
     private OrganizationUserOverview[] _users = Array.Empty<OrganizationUserOverview>();
     private bool _isLoading;
     private bool _isInviting;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
+        OrgUsersDialogSvc.OpenRequested += OnOpenRequested;
+    }
+
+    public void Dispose()
+    {
+        OrgUsersDialogSvc.OpenRequested -= OnOpenRequested;
+    }
+
+    private void OnOpenRequested()
+    {
+        _visible = true;
+        StateHasChanged();
         if (State.IsOrganizationAdmin)
-        {
-            await LoadUsersAsync();
-        }
+            _ = LoadUsersAsync();
+    }
+
+    private void Close()
+    {
+        _visible = false;
+        StateHasChanged();
     }
 
     private async Task LoadUsersAsync()
