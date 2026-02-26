@@ -10,6 +10,8 @@
 @inject OrgUsersDialogService OrgUsersDialogSvc
 @inject BatchProcessDialogService BatchSvc
 @inject NavigationManager Navigation
+@inject IAuthService AuthService
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @implements IAsyncDisposable
 
 <PageTitle>@(State.SelectedFile?.FileName is { } fn ? $"{fn} — K-OCR" : "K-OCR")</PageTitle>
@@ -222,7 +224,29 @@
             await JS.InvokeVoidAsync("kocrKeyboard.init", _selfRef);
             if (!State.IsAuthenticated)
             {
-                AuthSvc.RequestOpen();
+#if DEBUG
+                if (Env.IsDevelopment())
+                {
+                    try
+                    {
+                        var response = await AuthService.LoginAsync(new K_OCR.Models.Api.Auth.LoginRequest
+                        {
+                            Email    = "leekirkhawley@gmail.com",
+                            Password = "baadf00d"
+                        });
+                        State.SetAuthentication(response.TenantId, response.TenantName, response.Email, response.Roles);
+                    }
+                    catch
+                    {
+                        // Auto-login failed (user not seeded yet) — fall back to login dialog
+                        AuthSvc.RequestOpen();
+                    }
+                }
+                else
+#endif
+                {
+                    AuthSvc.RequestOpen();
+                }
             }
         }
     }

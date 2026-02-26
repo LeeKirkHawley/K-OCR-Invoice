@@ -317,17 +317,7 @@
                                           Foreground="#4CAF50"
                                           IsVisible="{Binding IsValidationAccepted}"/>
                                 
-                                <!-- Edited By User Text -->
-                                <TextBlock Grid.Row="0" 
-                                          Text="✓ Edited by Generic User"
-                                          HorizontalAlignment="Center"
-                                          Margin="10,10,10,5"
-                                          Padding="20,8"
-                                          FontWeight="Bold"
-                                          FontSize="14"
-                                          Foreground="#2196F3"
-                                          IsVisible="{Binding IsEditedByUser}"/>
-                                
+
                                 <!-- Dynamic document fields display -->
                                 <ScrollViewer Grid.Row="1"
                                              VerticalScrollBarVisibility="Auto"

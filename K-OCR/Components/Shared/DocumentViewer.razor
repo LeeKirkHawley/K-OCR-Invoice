@@ -251,7 +251,7 @@ else
     /// <summary>True if the field has any failed validation check (and acceptance has not been set).</summary>
     private static bool BboxIsSuspect(InvoiceDto inv, string fieldName)
     {
-        if (inv.IsValidationAccepted || inv.IsEditedByUser) return false;
+        if (inv.IsValidationAccepted) return false;
         if (inv.TesseractConfirmed.TryGetValue(fieldName,  out var t) && !t) return true;
         if (inv.ConfidenceConfirmed.TryGetValue(fieldName, out var c) && !c) return true;
         if (inv.MathConfirmed.TryGetValue(fieldName,       out var m) && !m) return true;
@@ -261,7 +261,7 @@ else
     /// <summary>True if a line item has any failed per-field validation check.</summary>
     private static bool ItemIsSuspect(InvoiceDto inv, InvoiceItemDto item)
     {
-        if (inv.IsValidationAccepted || inv.IsEditedByUser) return false;
+        if (inv.IsValidationAccepted) return false;
         return item.TesseractConfirmed.Values.Any(v => !v)
             || item.ConfidenceConfirmed.Values.Any(v => !v);
     }

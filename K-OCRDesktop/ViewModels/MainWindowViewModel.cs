@@ -316,13 +316,11 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(LineItemsCount));
         OnPropertyChanged(nameof(LineItems));
         OnPropertyChanged(nameof(IsValidationAccepted));
-        OnPropertyChanged(nameof(IsEditedByUser));
         OnPropertyChanged(nameof(ShowValidationButtons));
     }
     
     public bool IsValidationAccepted => CurrentInvoice?.IsValidationAccepted ?? false;
-    public bool IsEditedByUser => CurrentInvoice?.IsEditedByUser ?? false;
-    public bool ShowValidationButtons => !IsValidationAccepted && !IsEditedByUser;
+    public bool ShowValidationButtons => !IsValidationAccepted;
 
     public void LoadImageFilesFromFolder(string folderPath, DatabaseService? databaseService = null)
     {

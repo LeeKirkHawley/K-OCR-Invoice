@@ -1963,10 +1963,10 @@ try
             // Create/update PipelineContext with validated data
             var updatedInvoice = viewModel.CurrentInvoice != null ? CreateUpdatedInvoice(viewModel) : null;
             
-            // Mark as edited by user when they save
-            if (updatedInvoice != null && !updatedInvoice.IsValidationAccepted)
+            // After saving we treat the invoice as validated/accepted
+            if (updatedInvoice != null)
             {
-                updatedInvoice.IsEditedByUser = true;
+                updatedInvoice.IsValidationAccepted = true;
             }
             
             var pipelineContext = new PipelineContext

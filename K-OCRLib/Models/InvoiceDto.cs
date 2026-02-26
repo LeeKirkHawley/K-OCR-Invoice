@@ -106,10 +106,5 @@ namespace K_OCR.Models
         /// </summary>
         public bool IsValidationAccepted { get; set; }
         
-        /// <summary>
-        /// Indicates whether the user has edited this invoice and all validations now pass.
-        /// When true, the invoice was edited by the user and has no validation errors.
-        /// </summary>
-        public bool IsEditedByUser { get; set; }
     }
 }

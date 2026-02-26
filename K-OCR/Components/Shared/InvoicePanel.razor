@@ -69,12 +69,6 @@
                 <span class="inv-banner-icon">✓</span> Validation accepted
             </div>
         }
-        else if (inv.IsEditedByUser)
-        {
-            <div class="inv-status-banner inv-banner-edited">
-                <span class="inv-banner-icon">✓</span> Edited by user
-            </div>
-        }
         else if (_suspectCount > 0)
         {
             <div class="inv-status-banner inv-banner-suspect">
@@ -86,10 +80,7 @@
         @* ── Action toolbar ─────────────────────────────────────────── *@
         <div class="inv-actions">
             <button class="btn inv-btn-save" @onclick="SaveAsync" disabled="@(_saving || inv.IsValidationAccepted)">
-                @(_saving ? "Saving…" : "Save Changes")
-            </button>
-            <button class="btn inv-btn-accept" @onclick="AcceptValidationAsync" disabled="@(_saving || inv.IsValidationAccepted)">
-                ✓ Validation Accepted
+                @(_saving ? "Saving…" : "Save And Validate")
             </button>
             <button class="btn inv-btn-edit" @onclick="EditAsync" disabled="@(!inv.IsValidationAccepted || _saving)" title="Edit validated data">
                 Edit
@@ -116,7 +107,7 @@
                      @onclick="() => SelectField(k)"
                      title="@tip">
                     <label class="inv-field-label @(suspect ? "inv-suspect-label" : "")">@label</label>
-                    @if (State.SelectedFieldName == k)
+                    @if (State.SelectedFieldName == k && CanEditFields)
                     {
                         <input type="text"
                                class="inv-field-input @(suspect ? "inv-suspect-input" : "")"
@@ -162,7 +153,7 @@
                              data-nav-row="@descKey"
                              @onclick="() => SelectField(descKey)">
                             <span class="inv-li-label">Description</span>
-                            @if (State.SelectedFieldName == descKey)
+                            @if (State.SelectedFieldName == descKey && CanEditFields)
                             {
                                 <input type="text"
                                        class="inv-field-input"
@@ -186,7 +177,7 @@
                                  data-nav-row="@qtyKey"
                                  @onclick="() => SelectField(qtyKey)">
                                 <span class="inv-li-label">Qty</span>
-                                @if (State.SelectedFieldName == qtyKey)
+                                @if (State.SelectedFieldName == qtyKey && CanEditFields)
                                 {
                                     <input type="text"
                                            class="inv-field-input inv-input-num"
@@ -206,7 +197,7 @@
                                  data-nav-row="@upKey"
                                  @onclick="() => SelectField(upKey)">
                                 <span class="inv-li-label">Unit Price</span>
-                                @if (State.SelectedFieldName == upKey)
+                                @if (State.SelectedFieldName == upKey && CanEditFields)
                                 {
                                     <input type="text"
                                            class="inv-field-input inv-input-num"
@@ -226,7 +217,7 @@
                                  data-nav-row="@amtKey"
                                  @onclick="() => SelectField(amtKey)">
                                 <span class="inv-li-label">Amount</span>
-                                @if (State.SelectedFieldName == amtKey)
+                                @if (State.SelectedFieldName == amtKey && CanEditFields)
                                 {
                                     <input type="text"
                                            class="inv-field-input inv-input-num"
@@ -328,6 +319,8 @@
             _validatedJson      = null;
             _lineItemsCollapsed = false;
             _shouldFocusFirstField = _invoice is not null;
+            // clear any previously selected field so inputs don't appear
+            State.SetSelectedField(null);
             PopulateEditValues();
             ComputeSuspectCount();
         }
@@ -356,7 +349,7 @@
 
     private void ComputeSuspectCount()
     {
-        if (_invoice is null || _invoice.IsValidationAccepted || _invoice.IsEditedByUser)
+        if (_invoice is null || _invoice.IsValidationAccepted)
         {
             _suspectCount = 0;
             return;
@@ -365,9 +358,16 @@
                       + (_invoice.Items?.Select((item, i) => IsLineItemSuspect(item, i)).Count(v => v) ?? 0);
     }
 
+    /// <summary>
+    /// True when inline field edits are allowed.  After validation is accepted the
+    /// panel should be read‑only until the user clicks the "Edit" button (which
+    /// clears <see cref="InvoiceDto.IsValidationAccepted"/>).
+    /// </summary>
+    private bool CanEditFields => _invoice is not { IsValidationAccepted: true }; 
+
     private bool IsFieldSuspect(string fieldName)
     {
-        if (_invoice is null || _invoice.IsValidationAccepted || _invoice.IsEditedByUser) return false;
+        if (_invoice is null || _invoice.IsValidationAccepted) return false;
         if (_invoice.TesseractConfirmed.TryGetValue(fieldName,  out var t) && !t) return true;
         if (_invoice.ConfidenceConfirmed.TryGetValue(fieldName, out var c) && !c) return true;
         if (_invoice.MathConfirmed.TryGetValue(fieldName,       out var m) && !m) return true;
@@ -394,7 +394,7 @@
 
     private bool IsLineItemSuspect(InvoiceItemDto item, int index)
     {
-        if (_invoice?.IsValidationAccepted == true || _invoice?.IsEditedByUser == true) return false;
+        if (_invoice?.IsValidationAccepted == true) return false;
         if (item.TesseractConfirmed.Values.Any(v => !v))  return true;
         if (item.ConfidenceConfirmed.Values.Any(v => !v)) return true;
         // Check line item math stored on the document-level MathConfirmed
@@ -405,7 +405,7 @@
 
     private string? GetLineItemTooltip(InvoiceItemDto item, int index)
     {
-        if (_invoice?.IsValidationAccepted == true || _invoice?.IsEditedByUser == true) return null;
+if (_invoice?.IsValidationAccepted == true) return null;
 
         // Collect per-field failure reasons, keyed by display name
         var fieldReasons = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -461,7 +461,6 @@
             var updated = BuildUpdatedInvoice();
             // Saving via Save Changes should mark the invoice as validated/accepted
             updated.IsValidationAccepted = true;
-            updated.IsEditedByUser = false;
             var settings = await ConfigService.LoadSettingsAsync();
             await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, updated, settings.ProjectArtifacts);
 
@@ -519,49 +518,16 @@
             TesseractConfirmed   = _invoice.TesseractConfirmed,
             ConfidenceConfirmed  = _invoice.ConfidenceConfirmed,
             MathConfirmed        = _invoice.MathConfirmed,
-            IsEditedByUser       = true,
             IsValidationAccepted = false,
         };
     }
 
-    private async Task AcceptValidationAsync()
-    {
-        if (_invoice is null || State.SelectedFilePath is null) return;
-        _saving = true;
-        try
-        {
-            _invoice.IsValidationAccepted = true;
-            var settings = await ConfigService.LoadSettingsAsync();
-            await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, _invoice, settings.ProjectArtifacts);
-            State.SetSelectedInvoice(_invoice);
-
-            // Update the file list dot immediately
-            var current = State.SelectedFile;
-            if (current is not null)
-            {
-                current.IsSavedOrAccepted  = true;
-                current.HasSuspectFields   = false;
-                State.UpdateFileEntry(current);
-            }
-
-            _suspectCount = 0;
-            _validatedJson = null;
-            if (_activeTab == "validated") await LoadValidatedJsonAsync();
-        }
-        catch (Exception ex) { Toast.ShowError($"Accept failed: {ex.Message}"); }
-        finally
-        {
-            _saving = false;
-            StateHasChanged();
-        }
-    }
 
     private Task EditAsync()
     {
         if (_invoice is null) return Task.CompletedTask;
 
-        // Mark the invoice as edited/dirty so further changes can be made
-        _invoice.IsEditedByUser = true;
+        // Mark the invoice dirty so further changes can be made
         _invoice.IsValidationAccepted = false;
         State.SetSelectedInvoice(_invoice);
         _shouldFocusFirstField = true;
@@ -666,7 +632,7 @@
     // True only when the invoice has user edits or accepted validation — i.e. when
     // validated JSON actually exists in the database.
     private bool HasValidatedData =>
-        _invoice is { IsEditedByUser: true } or { IsValidationAccepted: true };
+        _invoice is { IsValidationAccepted: true }; 
 
     private async Task SwitchTabAsync(string tab)
     {

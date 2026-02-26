@@ -346,7 +346,7 @@
             entry.IsValidated = !entry.HasSuspectFields;
         }
         if (invoice != null)
-            entry.IsSavedOrAccepted = invoice.IsValidationAccepted || invoice.IsEditedByUser;
+            entry.IsSavedOrAccepted = invoice.IsValidationAccepted;
         return entry;
     }
 
@@ -423,7 +423,7 @@
                             }
 
                             if (invoice != null)
-                                entry.IsSavedOrAccepted = invoice.IsValidationAccepted || invoice.IsEditedByUser;
+                                entry.IsSavedOrAccepted = invoice.IsValidationAccepted;
 
                             if (!entry.IsSavedOrAccepted && invoice?.TesseractConfirmed?.Count > 0)
                             {
