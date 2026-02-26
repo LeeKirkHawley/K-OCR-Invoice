@@ -85,15 +85,15 @@
 
         @* ── Action toolbar ─────────────────────────────────────────── *@
         <div class="inv-actions">
-            <button class="btn inv-btn-save" @onclick="SaveAsync" disabled="@_saving">
-                @(_saving ? "Saving…" : "💾 Save")
+            <button class="btn inv-btn-save" @onclick="SaveAsync" disabled="@(_saving || inv.IsValidationAccepted)">
+                @(_saving ? "Saving…" : "Save Changes")
             </button>
-            @if (!inv.IsValidationAccepted)
-            {
-                <button class="btn inv-btn-accept" @onclick="AcceptValidationAsync" disabled="@_saving">
-                    ✓ Validation Accepted
-                </button>
-            }
+            <button class="btn inv-btn-accept" @onclick="AcceptValidationAsync" disabled="@(_saving || inv.IsValidationAccepted)">
+                ✓ Validation Accepted
+            </button>
+            <button class="btn inv-btn-edit" @onclick="EditAsync" disabled="@(!inv.IsValidationAccepted || _saving)" title="Edit validated data">
+                Edit
+            </button>
             <button class="btn inv-btn-export" @onclick="ExportDocxAsync" disabled="@_exporting"
                     title="Download invoice as Word document">
                 @(_exporting ? "Exporting…" : "⬇ DOCX")
@@ -459,6 +459,9 @@
         try
         {
             var updated = BuildUpdatedInvoice();
+            // Saving via Save Changes should mark the invoice as validated/accepted
+            updated.IsValidationAccepted = true;
+            updated.IsEditedByUser = false;
             var settings = await ConfigService.LoadSettingsAsync();
             await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, updated, settings.ProjectArtifacts);
 
@@ -551,6 +554,20 @@
             _saving = false;
             StateHasChanged();
         }
+    }
+
+    private Task EditAsync()
+    {
+        if (_invoice is null) return Task.CompletedTask;
+
+        // Mark the invoice as edited/dirty so further changes can be made
+        _invoice.IsEditedByUser = true;
+        _invoice.IsValidationAccepted = false;
+        State.SetSelectedInvoice(_invoice);
+        _shouldFocusFirstField = true;
+        ComputeSuspectCount();
+        _validatedJson = null;
+        return InvokeAsync(StateHasChanged);
     }
 
     // ── DOCX export ───────────────────────────────────────────────────────────
