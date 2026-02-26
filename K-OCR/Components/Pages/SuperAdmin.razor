@@ -47,7 +47,7 @@
                         <ValidationMessage For="() => _createModel.AdminEmail" />
                     </div>
                     <button type="submit" class="btn btn-primary" disabled="@_isCreating">
-                        @_isCreating ? "Creating…" : "Create organization"
+                        @(_isCreating ? "Creating…" : "Create organization")
                     </button>
                 </EditForm>
                 @if (_creationResult is not null)
@@ -154,7 +154,7 @@
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <button type="submit" class="btn btn-sm btn-primary" disabled="@_isSavingEmailSettings">
-                            @_isSavingEmailSettings ? "Saving…" : "Save email settings"
+                            @(_isSavingEmailSettings ? "Saving…" : "Save email settings")
                         </button>
                         @if (!string.IsNullOrEmpty(_emailSettingsMessage))
                         {

@@ -12,7 +12,7 @@
         <div class="auth-dialog" @onclick:stopPropagation="true">
 
             <div class="auth-dialog-header">
-                <span class="auth-dialog-title">Authentication</span>
+                <span class="auth-dialog-title">Sign in to K-OCR</span>
                 <button class="fpicker-close" @onclick="Cancel" aria-label="Close">✕</button>
             </div>
 
@@ -21,16 +21,17 @@
                 @if (State.IsAuthenticated)
                 {
                     <div class="alert alert-success auth-status">
-                        <span><strong>@State.CurrentUserEmail</strong></span>
-                        <span class="auth-status-tenant">Tenant: @(State.TenantName ?? "Global")</span>
+                        <span>Signed in as <strong>@State.CurrentUserEmail</strong></span>
+                        @if (!string.IsNullOrEmpty(State.TenantName))
+                        {
+                            <span class="auth-status-tenant">@State.TenantName</span>
+                        }
                         <button class="btn btn-sm btn-outline-secondary" @onclick="Logout">Sign out</button>
                     </div>
                 }
-
-                <div class="auth-grid">
+                else
+                {
                     <section class="auth-panel">
-                        <h2>Sign in</h2>
-                        <p>Provide your email and password to request a JWT with tenant claims.</p>
                         @if (!string.IsNullOrEmpty(_loginError))
                         {
                             <div class="alert alert-danger">@_loginError</div>
@@ -52,43 +53,50 @@
                                 @(_isProcessingLogin ? "Signing in…" : "Sign in")
                             </button>
                         </EditForm>
-                    </section>
 
-                    <section class="auth-panel">
-                        <h2>Reset password</h2>
-                        <p>Use the invitation token to set a permanent password for new organization users.</p>
-                        @if (!string.IsNullOrEmpty(_resetError))
+                        <div class="mt-3">
+                            <a href="javascript:void(0)" class="small" @onclick="() => _showReset = !_showReset">
+                                @(_showReset ? "Hide" : "First time? Set your password using an invitation token")
+                            </a>
+                        </div>
+
+                        @if (_showReset)
                         {
-                            <div class="alert alert-danger">@_resetError</div>
+                            <hr />
+                            <h6 class="mt-2">Set password with invitation token</h6>
+                            @if (!string.IsNullOrEmpty(_resetError))
+                            {
+                                <div class="alert alert-danger">@_resetError</div>
+                            }
+                            @if (!string.IsNullOrEmpty(_resetSuccess))
+                            {
+                                <div class="alert alert-success">@_resetSuccess</div>
+                            }
+                            <EditForm Model="_resetModel" OnValidSubmit="HandleReset">
+                                <DataAnnotationsValidator />
+                                <ValidationSummary />
+                                <div class="mb-3">
+                                    <label class="form-label">Email</label>
+                                    <InputText class="form-control" @bind-Value="_resetModel.Email" />
+                                    <ValidationMessage For="() => _resetModel.Email" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Invitation token</label>
+                                    <InputText class="form-control" @bind-Value="_resetModel.Token" />
+                                    <ValidationMessage For="() => _resetModel.Token" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">New password</label>
+                                    <InputText class="form-control" type="password" @bind-Value="_resetModel.NewPassword" />
+                                    <ValidationMessage For="() => _resetModel.NewPassword" />
+                                </div>
+                                <button type="submit" class="btn btn-outline-primary" disabled="@_isProcessingReset">
+                                    @(_isProcessingReset ? "Updating…" : "Set password")
+                                </button>
+                            </EditForm>
                         }
-                        @if (!string.IsNullOrEmpty(_resetSuccess))
-                        {
-                            <div class="alert alert-success">@_resetSuccess</div>
-                        }
-                        <EditForm Model="_resetModel" OnValidSubmit="HandleReset">
-                            <DataAnnotationsValidator />
-                            <ValidationSummary />
-                            <div class="mb-3">
-                                <label class="form-label">Email</label>
-                                <InputText class="form-control" @bind-Value="_resetModel.Email" />
-                                <ValidationMessage For="() => _resetModel.Email" />
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Invitation token</label>
-                                <InputText class="form-control" @bind-Value="_resetModel.Token" />
-                                <ValidationMessage For="() => _resetModel.Token" />
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">New password</label>
-                                <InputText class="form-control" type="password" @bind-Value="_resetModel.NewPassword" />
-                                <ValidationMessage For="() => _resetModel.NewPassword" />
-                            </div>
-                            <button type="submit" class="btn btn-outline-primary" disabled="@_isProcessingReset">
-                                @(_isProcessingReset ? "Updating…" : "Update password")
-                            </button>
-                        </EditForm>
                     </section>
-                </div>
+                }
 
             </div>
         </div>
@@ -104,6 +112,7 @@
     private bool _isProcessingLogin;
     private bool _isProcessingReset;
     private bool _visible;
+    private bool _showReset;
 
     protected override void OnInitialized()
     {
@@ -120,6 +129,7 @@
         _loginError  = null;
         _resetError  = null;
         _resetSuccess = null;
+        _showReset = false;
         _visible = true;
         InvokeAsync(StateHasChanged);
     }
