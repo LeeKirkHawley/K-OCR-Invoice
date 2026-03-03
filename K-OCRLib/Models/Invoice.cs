@@ -47,6 +47,15 @@ namespace K_OCR.Models
 
         public DateTime ProcessedDate { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Tenant that owns this record. Null only for records created before multi-tenancy
+        /// was introduced. Populated by <c>DatabaseService</c> from the current
+        /// <c>ITenantContext</c> on every insert; filtered by <c>KOCRDbContext</c>
+        /// global query filter in Step 7.
+        /// </summary>
+        [MaxLength(450)]
+        public string? OrganizationId { get; set; }
+
         // Navigation properties
         public virtual ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();
         public virtual ICollection<DocumentField> DocumentFields { get; set; } = new List<DocumentField>();

@@ -1,4 +1,6 @@
 ﻿@inherits LayoutComponentBase
+@using System.Security.Claims
+@using K_OCR.Security
 @inject IJSRuntime JS
 @inject WorkspaceState State
 @inject IInvoiceProcessingService ProcessingService
@@ -10,8 +12,6 @@
 @inject OrgUsersDialogService OrgUsersDialogSvc
 @inject BatchProcessDialogService BatchSvc
 @inject NavigationManager Navigation
-@inject IAuthService AuthService
-@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @implements IAsyncDisposable
 
 <PageTitle>@(State.SelectedFile?.FileName is { } fn ? $"{fn} — K-OCR" : "K-OCR")</PageTitle>
@@ -204,15 +204,34 @@
 <ToastContainer />
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
     private ElementReference _shellRef;
     private DotNetObjectReference<MainLayout>? _selfRef;
     private InvoicePanel? _invoicePanel;
 
     private void OpenSettingsAsync() => SettingsSvc.RequestOpen();
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         State.OnChange += OnStateChanged;
+
+        // Re-hydrate WorkspaceState from the auth cookie on every new circuit.
+        // This is what makes authentication survive a browser refresh: the cookie
+        // is validated by RevalidatingAuthenticationStateProvider and the claims
+        // (including custom OrganizationId / TenantName added by
+        // ApplicationUserClaimsPrincipalFactory) are used to restore session state.
+        var authState = await AuthStateTask;
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            var principal  = authState.User;
+            var email      = principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
+            var tenantId   = principal.FindFirstValue(AppClaimTypes.OrganizationId);
+            var tenantName = principal.FindFirstValue(AppClaimTypes.TenantName);
+            var roles      = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
+            State.SetAuthentication(tenantId, tenantName, email, roles);
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -223,31 +242,7 @@
             await JS.InvokeVoidAsync("kocrLayout.initSplitters", _selfRef);
             await JS.InvokeVoidAsync("kocrKeyboard.init", _selfRef);
             if (!State.IsAuthenticated)
-            {
-#if DEBUG
-                if (Env.IsDevelopment())
-                {
-                    try
-                    {
-                        var response = await AuthService.LoginAsync(new K_OCR.Models.Api.Auth.LoginRequest
-                        {
-                            Email    = "leekirkhawley@gmail.com",
-                            Password = "baadf00d"
-                        });
-                        State.SetAuthentication(response.TenantId, response.TenantName, response.Email, response.Roles);
-                    }
-                    catch
-                    {
-                        // Auto-login failed (user not seeded yet) — fall back to login dialog
-                        AuthSvc.RequestOpen();
-                    }
-                }
-                else
-#endif
-                {
-                    AuthSvc.RequestOpen();
-                }
-            }
+                AuthSvc.RequestOpen();
         }
     }
 
@@ -323,6 +318,7 @@
     private void Logout()
     {
         State.ClearAuthentication();
+        Navigation.NavigateTo("/account/logout", forceLoad: true);
     }
 
     private async Task ClearAllData()

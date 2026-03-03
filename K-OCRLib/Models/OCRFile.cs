@@ -29,6 +29,15 @@ namespace K_OCR.Models
 
         public bool IsFullyProcessed { get; set; } = false;
 
+        /// <summary>
+        /// Tenant that owns this record. Null only for records created before multi-tenancy
+        /// was introduced. Populated by <c>DatabaseService</c> from the current
+        /// <c>ITenantContext</c> on every insert; filtered by <c>KOCRDbContext</c>
+        /// global query filter in Step 7.
+        /// </summary>
+        [MaxLength(450)]
+        public string? OrganizationId { get; set; }
+
         // Navigation properties for related OCR blocks (not stored in DB)
         [NotMapped]
         public List<OcrBlock> LineBlocks { get; set; } = new List<OcrBlock>();

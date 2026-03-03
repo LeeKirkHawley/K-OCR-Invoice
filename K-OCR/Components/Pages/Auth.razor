@@ -4,6 +4,8 @@
 @inject WorkspaceState State
 @inject ToastService Toast
 @inject AuthDialogService AuthSvc
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
 @implements IDisposable
 
 @if (_visible)
@@ -145,14 +147,32 @@
         _isProcessingLogin = true;
         try
         {
-            var response = await AuthService.LoginAsync(_loginModel);
-            State.SetAuthentication(
-                response.TenantId,
-                response.TenantName,
-                response.Email,
-                response.Roles);
-            Toast.ShowSuccess($"Signed in as {response.Email}");
-            _visible = false;
+            // Run the fetch in the browser so the server's Set-Cookie response
+            // header lands in the browser's cookie jar, not on the server.
+            var result = await JS.InvokeAsync<System.Text.Json.JsonElement>(
+                "kocrAuth.loginAsync", _loginModel.Email, _loginModel.Password);
+
+            if (result.GetProperty("success").GetBoolean())
+            {
+                var email      = result.GetProperty("email").GetString() ?? string.Empty;
+                var tenantId   = result.TryGetProperty("tenantId",   out var tid) && tid.ValueKind   != System.Text.Json.JsonValueKind.Null ? tid.GetString()   : null;
+                var tenantName = result.TryGetProperty("tenantName", out var tn)  && tn.ValueKind    != System.Text.Json.JsonValueKind.Null ? tn.GetString()    : null;
+                var roles      = result.GetProperty("roles").EnumerateArray()
+                                       .Select(r => r.GetString() ?? string.Empty)
+                                       .ToArray();
+
+                State.SetAuthentication(tenantId, tenantName, email, roles);
+                // Reload the page so the browser sends the auth cookie on the new
+                // HTTP request. The new circuit starts with an authenticated
+                // AuthenticationState, and AuthorizeRouteView renders Home.razor.
+                Navigation.NavigateTo("/", forceLoad: true);
+            }
+            else
+            {
+                _loginError = result.TryGetProperty("error", out var err) && err.ValueKind != System.Text.Json.JsonValueKind.Null
+                    ? err.GetString()
+                    : "Login failed.";
+            }
         }
         catch (Exception ex)
         {
@@ -191,5 +211,8 @@
     {
         State.ClearAuthentication();
         _visible = false;
+        // Navigate to the HTTP logout endpoint so SignInManager.SignOutAsync clears the
+        // auth cookie. forceLoad issues a real GET request that can receive response headers.
+        Navigation.NavigateTo("/account/logout", forceLoad: true);
     }
 }

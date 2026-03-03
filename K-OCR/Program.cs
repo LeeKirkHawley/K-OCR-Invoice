@@ -4,6 +4,7 @@ using K_OCR.Configuration;
 using K_OCR.Identity;
 using K_OCR.Security;
 using K_OCR.Services;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,6 +53,28 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
+// Replace the default claims factory so OrganizationId and TenantName are baked
+// into the auth cookie at sign-in time and available from AuthenticationState.
+builder.Services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>,
+    ApplicationUserClaimsPrincipalFactory>();
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddRazorPages();
+
+// Override the default ServerAuthenticationStateProvider with one that periodically
+// revalidates the security stamp so locked/deleted accounts are evicted from active circuits.
+builder.Services.AddScoped<AuthenticationStateProvider, RevalidatingAuthenticationStateProvider>();
+
+// Redirect unauthenticated requests to the login page and configure session lifetime
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath      = "/account/login";
+    options.LogoutPath     = "/account/logout";
+    options.AccessDeniedPath = "/account/login";
+    options.SlidingExpiration = true;
+    options.ExpireTimeSpan = TimeSpan.FromHours(8);
+});
+
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
 builder.Services.AddScoped<IOrganizationAdminService, OrganizationAdminService>();
@@ -76,6 +99,10 @@ builder.Services.AddScoped<IInvoiceProcessingService, InvoiceProcessingService>(
 
 // Per-circuit Blazor state
 builder.Services.AddScoped<WorkspaceState>();
+
+// TenantContext must be registered before KOCRDbContext resolves it.
+// Scoped lifetime mirrors WorkspaceState (one per Blazor circuit).
+builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<SettingsDialogService>();
 builder.Services.AddScoped<AuthDialogService>();
@@ -124,9 +151,14 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+// Authentication must precede Authorization; both must precede Blazor's antiforgery middleware.
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+app.MapRazorPages();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

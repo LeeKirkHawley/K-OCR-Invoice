@@ -238,13 +238,28 @@ window.kocrKeyboard = {
                         return;
                     }
                 }
-                // No nav row found — fall back to suspect-field cycling (outside inputs)
-                if (!isEditable) {
-                    e.preventDefault();
-                    dotNetRef.invokeMethodAsync('OnKeyboardShortcut',
-                        e.shiftKey ? 'prev-field' : 'next-field');
-                }
-            }
-        });
-    }
-};
+                            // No nav row found — fall back to suspect-field cycling (outside inputs)
+                            if (!isEditable) {
+                                e.preventDefault();
+                                dotNetRef.invokeMethodAsync('OnKeyboardShortcut',
+                                    e.shiftKey ? 'prev-field' : 'next-field');
+                            }
+                        }
+                        });
+                    }
+                };
+
+                // ── Authentication helpers ────────────────────────────────────────────────────
+                // loginAsync posts credentials from the *browser* so that the server's
+                // Set-Cookie response header is received by the browser's cookie jar.
+                // A server-side HttpClient call would receive the cookie on the server instead.
+                window.kocrAuth = {
+                    loginAsync: async function (email, password) {
+                        const response = await fetch('/account/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, password })
+                        });
+                        return await response.json();
+                    }
+                };

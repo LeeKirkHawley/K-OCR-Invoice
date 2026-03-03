@@ -5,9 +5,12 @@ namespace K_OCR.Data
 {
     public class KOCRDbContext : DbContext
     {
-        public KOCRDbContext(DbContextOptions<KOCRDbContext> options)
+        private readonly ITenantContext _tenantContext;
+
+        public KOCRDbContext(DbContextOptions<KOCRDbContext> options, ITenantContext tenantContext)
             : base(options)
         {
+            _tenantContext = tenantContext;
         }
 
         // DbSets for your entities
@@ -41,6 +44,41 @@ namespace K_OCR.Data
             modelBuilder.Entity<DocumentPage>()
                 .HasIndex(p => new { p.OCRFileId, p.PageNumber })
                 .IsUnique();
+
+            // ── Global query filters ──────────────────────────────────────────
+            // Evaluated per-query using the scoped ITenantContext instance.
+            // Super-admins bypass the filter and see every tenant's data.
+            // Org users see only their own organisation's records.
+            // Unauthenticated contexts (OrganizationId = null, IsSuperAdmin = false)
+            // see only pre-tenancy rows (OrganizationId IS NULL) — the UI blocks
+            // data access before authentication anyway (Step 8).
+            modelBuilder.Entity<Invoice>()
+                .HasQueryFilter(i => _tenantContext.IsSuperAdmin
+                                  || i.OrganizationId == _tenantContext.OrganizationId);
+
+            modelBuilder.Entity<OCRFile>()
+                .HasQueryFilter(f => _tenantContext.IsSuperAdmin
+                                  || f.OrganizationId == _tenantContext.OrganizationId);
+        }
+
+        /// <summary>
+        /// Automatically stamps <c>OrganizationId</c> on new <see cref="Invoice"/> and
+        /// <see cref="OCRFile"/> records so no call site can forget to set the tenant.
+        /// </summary>
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            foreach (var entry in ChangeTracker.Entries())
+            {
+                if (entry.State != EntityState.Added) continue;
+
+                if (entry.Entity is Invoice invoice && invoice.OrganizationId is null)
+                    invoice.OrganizationId = _tenantContext.OrganizationId;
+
+                if (entry.Entity is OCRFile ocrFile && ocrFile.OrganizationId is null)
+                    ocrFile.OrganizationId = _tenantContext.OrganizationId;
+            }
+
+            return base.SaveChangesAsync(cancellationToken);
         }
     }
 }
