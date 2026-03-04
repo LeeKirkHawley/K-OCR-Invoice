@@ -5,7 +5,6 @@ public class AppSettings
     public string? AzureCognitiveServicesKey { get; set; }
     public string? AzureCognitiveServicesEndpoint { get; set; }
     public string? OCRProvider { get; set; }
-    public string? ProjectDirectory { get; set; }
     public string? ProjectArtifacts { get; set; }
     public string? DefaultStartFolder { get; set; }
     public int MaxConcurrentRequests { get; set; } = 3;
@@ -36,12 +35,17 @@ public class DatabaseSettings
 
 public class EmailSettings
 {
-    public bool BypassEmail { get; set; } = true;
     public string? SmtpHost { get; set; }
     public int Port { get; set; } = 587;
     public bool EnableSsl { get; set; } = true;
+    /// <summary>
+    /// Skip SSL/TLS certificate validation. Use when the SMTP host's certificate
+    /// does not match its hostname (e.g. shared hosting providers like Network Solutions/FatCow
+    /// whose mail routes through *.smtp.a.cloudfilter.net).
+    /// </summary>
+    public bool SkipCertificateValidation { get; set; } = false;
     public string? Username { get; set; }
     public string? Password { get; set; }
-    public string? FromAddress { get; set; } = "no-reply@kocr.local";
+    public string? FromAddress { get; set; }
     public string? FromName { get; set; } = "K-OCR";
 }

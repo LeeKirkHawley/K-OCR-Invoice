@@ -136,11 +136,6 @@ public partial class App : Application
         {
             var settings = await configurationService.LoadSettingsAsync();
             
-            if (!string.IsNullOrEmpty(settings.ProjectDirectory) && !Directory.Exists(settings.ProjectDirectory))
-            {
-                Directory.CreateDirectory(settings.ProjectDirectory);
-            }
-            
             if (!string.IsNullOrEmpty(settings.ProjectArtifacts) && !Directory.Exists(settings.ProjectArtifacts))
             {
                 Directory.CreateDirectory(settings.ProjectArtifacts);

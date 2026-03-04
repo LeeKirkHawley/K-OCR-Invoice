@@ -167,26 +167,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void LoadProjectDirectory()
+    private void LoadProjectDirectory()
     {
-        try
-        {
-            var settings = await _configurationService.LoadSettingsAsync();
-                if (!string.IsNullOrEmpty(settings.ProjectDirectory) && 
-                    System.IO.Directory.Exists(settings.ProjectDirectory) &&
-                    DataContext is MainWindowViewModel viewModel)
-                {
-                    // Set the current directory and load files automatically
-                    viewModel.CurrentDirectory = settings.ProjectDirectory;
-                    viewModel.LoadImageFilesFromFolder(settings.ProjectDirectory, _databaseService);
-                    // Validate any processed files after loading
-                    _ = ValidateProcessedFilesAsync(viewModel);
-                }
-        }
-        catch
-        {
-            // If loading fails, just skip the default directory
-        }
+        // Project Directory setting removed; user selects a folder manually.
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
@@ -1008,7 +991,7 @@ public partial class MainWindow : Window
 try
             {
                 var settings = await _configurationService.LoadSettingsAsync();
-                initialDirectory = settings.ProjectDirectory;
+                initialDirectory = settings.DefaultStartFolder;
             }
             catch
             {

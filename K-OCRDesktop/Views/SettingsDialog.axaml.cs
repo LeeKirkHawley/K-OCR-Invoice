@@ -14,7 +14,6 @@ public partial class SettingsDialog : Window
     private readonly IConfigurationService _configService;
     private AppSettings _currentSettings;
     
-    public string? ProjectDirectory { get; private set; }
     public string? ProjectArtifacts { get; private set; }
     public int MaxConcurrentRequests { get; private set; } = 3;
     public double MinConfidenceThreshold { get; private set; } = 0.8;
@@ -33,16 +32,9 @@ public partial class SettingsDialog : Window
         try
         {
             _currentSettings = await _configService.LoadSettingsAsync();
-            ProjectDirectory = _currentSettings.ProjectDirectory ?? string.Empty;
             ProjectArtifacts = _currentSettings.ProjectArtifacts ?? string.Empty;
             MaxConcurrentRequests = _currentSettings.MaxConcurrentRequests;
             MinConfidenceThreshold = _currentSettings.MinConfidenceThreshold;
-            
-            var projectDirectoryTextBox = this.FindControl<TextBox>("ProjectDirectoryTextBox");
-            if (projectDirectoryTextBox != null)
-            {
-                projectDirectoryTextBox.Text = ProjectDirectory;
-            }
             
             var projectArtifactsTextBox = this.FindControl<TextBox>("ProjectArtifactsTextBox");
             if (projectArtifactsTextBox != null)
@@ -68,22 +60,6 @@ public partial class SettingsDialog : Window
         }
     }
 
-    private async void OnBrowseProjectDirectory(object? sender, RoutedEventArgs e)
-    {
-        var folderPickerDialog = new FolderPickerDialog();
-        var result = await folderPickerDialog.ShowDialog<bool>(this);
-        
-        if (result)
-        {
-            var projectDirectoryTextBox = this.FindControl<TextBox>("ProjectDirectoryTextBox");
-            
-            if (projectDirectoryTextBox != null && !string.IsNullOrEmpty(folderPickerDialog.SelectedPath))
-            {
-                projectDirectoryTextBox.Text = folderPickerDialog.SelectedPath;
-            }
-        }
-    }
-
     private async void OnBrowseProjectArtifacts(object? sender, RoutedEventArgs e)
     {
         var folderPickerDialog = new FolderPickerDialog();
@@ -103,9 +79,6 @@ public partial class SettingsDialog : Window
     {
         try
         {
-            var projectDirectoryTextBox = this.FindControl<TextBox>("ProjectDirectoryTextBox");
-            var newProjectDirectory = projectDirectoryTextBox?.Text ?? string.Empty;
-            
             var projectArtifactsTextBox = this.FindControl<TextBox>("ProjectArtifactsTextBox");
             var newProjectArtifacts = projectArtifactsTextBox?.Text ?? string.Empty;
             
@@ -116,12 +89,6 @@ public partial class SettingsDialog : Window
             var minConfidence = (double)(minConfidenceBox?.Value ?? 0.8m);
 
             // Validate directories if not empty
-            if (!string.IsNullOrEmpty(newProjectDirectory) && !Directory.Exists(newProjectDirectory))
-            {
-                ShowError("Invalid Project Directory", "The specified project directory does not exist.");
-                return;
-            }
-            
             if (!string.IsNullOrEmpty(newProjectArtifacts) && !Directory.Exists(newProjectArtifacts))
             {
                 ShowError("Invalid Project Artifacts Directory", "The specified project artifacts directory does not exist.");
@@ -129,7 +96,6 @@ public partial class SettingsDialog : Window
             }
 
             // Update settings
-            _currentSettings.ProjectDirectory = newProjectDirectory;
             _currentSettings.ProjectArtifacts = newProjectArtifacts;
             _currentSettings.MaxConcurrentRequests = (int)maxConcurrent;
             _currentSettings.MinConfidenceThreshold = minConfidence;
@@ -137,7 +103,6 @@ public partial class SettingsDialog : Window
             // Save settings using service
             await _configService.SaveSettingsAsync(_currentSettings);
 
-            ProjectDirectory = newProjectDirectory;
             ProjectArtifacts = newProjectArtifacts;
             MaxConcurrentRequests = (int)maxConcurrent;
             MinConfidenceThreshold = minConfidence;

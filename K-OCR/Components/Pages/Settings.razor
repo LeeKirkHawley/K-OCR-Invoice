@@ -108,26 +108,13 @@
                     </div>
 
                     <div class="settings-field">
-                        <label class="settings-label">Project Directory</label>
-                        <div class="settings-browse-row">
-                            <input type="text" class="settings-input"
-                                   @bind="_settings.ProjectDirectory"
-                                   placeholder="/path/to/invoices" />
-                            <button class="btn fpicker-browse-btn"
-                                    @onclick="() => BrowseDirAsync(true)"
-                                    title="Browse for folder">Browse…</button>
-                        </div>
-                        <span class="settings-hint">The project folder K-OCR opens by default (must be inside Base Directory).</span>
-                    </div>
-
-                    <div class="settings-field">
                         <label class="settings-label">Artifacts Directory</label>
                         <div class="settings-browse-row">
                             <input type="text" class="settings-input"
                                    @bind="_settings.ProjectArtifacts"
                                    placeholder="Defaults to &lt;project&gt;/artifacts" />
                             <button class="btn fpicker-browse-btn"
-                                    @onclick="() => BrowseDirAsync(false)"
+                                    @onclick="() => BrowseDirAsync(true)"
                                     title="Browse for folder">Browse…</button>
                         </div>
                         <span class="settings-hint">Where processed JSON and export files are written.</span>
@@ -329,28 +316,17 @@
         }
     }
 
-    private async Task BrowseDirAsync(bool? isProjectDir)
+    private async Task BrowseDirAsync(bool? isArtifactsDir)
     {
         if (_folderPicker is null) return;
         // Base directory: unconstrained — user picks the root itself
-        // Project directory: constrained to base directory if set
         // Artifacts directory: always unconstrained
-        string? current  = isProjectDir switch
-        {
-            null  => _settings.DefaultStartFolder,
-            true  => _settings.ProjectDirectory,
-            false => _settings.ProjectArtifacts
-        };
-        string? rootPath = isProjectDir == true && !string.IsNullOrWhiteSpace(_settings.DefaultStartFolder)
-                         ? _settings.DefaultStartFolder
-                         : null;
-        var chosen = await _folderPicker.ShowAsync(current, rootPath);
+        string? current = isArtifactsDir == true ? _settings.ProjectArtifacts : _settings.DefaultStartFolder;
+        var chosen = await _folderPicker.ShowAsync(current, null);
         if (chosen is null) return;
-        switch (isProjectDir)
-        {
-            case null:  _settings.DefaultStartFolder = chosen; break;
-            case true:  _settings.ProjectDirectory   = chosen; break;
-            case false: _settings.ProjectArtifacts   = chosen; break;
-        }
+        if (isArtifactsDir == true)
+            _settings.ProjectArtifacts = chosen;
+        else
+            _settings.DefaultStartFolder = chosen;
     }
 }

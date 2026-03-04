@@ -2,8 +2,8 @@
     Usage:
       <FolderPickerDialog @ref="_folderPicker" />
       ...
-      var chosen = await _folderPicker!.ShowAsync(_settings.ProjectDirectory);
-      if (chosen is not null) _settings.ProjectDirectory = chosen;
+      var chosen = await _folderPicker!.ShowAsync(_settings.DefaultStartFolder);
+      if (chosen is not null) _settings.DefaultStartFolder = chosen;
 *@
 
 @if (_visible)
@@ -39,6 +39,18 @@
 
             <!-- ── Toolbar: Up + New Folder ───────────────── -->
             <div class="fpicker-toolbar">
+                @if (_rootPath is null && _drives.Count > 0)
+                {
+                    <select class="fpicker-input" style="width:auto; margin-right:8px; cursor:pointer;" 
+                            @onchange="OnDriveChanged">
+                        @foreach (var drive in _drives)
+                        {
+                            <option value="@drive.Name" selected="@IsDriveSelected(drive)">
+                                @drive.Name
+                            </option>
+                        }
+                    </select>
+                }
                 <button class="btn fpicker-btn fpicker-up-btn"
                         @onclick="GoUp"
                         disabled="@(!CanGoUp)"
@@ -165,6 +177,8 @@
         _error         = null;
         _visible       = true;
 
+        if (_rootPath is null) LoadDrives();
+        
         LoadEntries();
         InvokeAsync(StateHasChanged);
         return _tcs.Task;
@@ -213,6 +227,34 @@
             _loading = false;
         }
     }
+    
+    // ── Drives ────────────────────────────────────────────────────────────────
+    
+    private List<DriveInfo> _drives = new();
+    
+    private void LoadDrives()
+    {
+        try 
+        {
+            _drives = DriveInfo.GetDrives().Where(d => d.IsReady).ToList();
+        }
+        catch 
+        { 
+            _drives = new(); 
+        }
+    }
+
+    private void OnDriveChanged(ChangeEventArgs e)
+    {
+        var driveName = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(driveName))
+        {
+            NavigateTo(driveName);
+        }
+    }
+    
+    private bool IsDriveSelected(DriveInfo drive) =>
+        _currentPath.StartsWith(drive.Name, StringComparison.OrdinalIgnoreCase);
 
     // ── New Folder ────────────────────────────────────────────────────────────
 

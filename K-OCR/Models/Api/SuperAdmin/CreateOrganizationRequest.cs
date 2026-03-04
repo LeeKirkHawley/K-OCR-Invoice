@@ -12,4 +12,9 @@ public class CreateOrganizationRequest
     [Required]
     [EmailAddress]
     public string AdminEmail { get; set; } = string.Empty;
+
+    [Required]
+    public string AdminName { get; set; } = string.Empty;
+
+    public string? BaseDirectory { get; set; }
 }

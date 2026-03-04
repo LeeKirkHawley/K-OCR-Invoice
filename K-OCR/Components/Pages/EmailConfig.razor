@@ -1,0 +1,160 @@
+@using K_OCR.Configuration
+@inject IEmailService EmailSvc
+@inject IConfigurationService ConfigService
+@inject ToastService Toast
+@inject EmailConfigDialogService EmailConfigDialogSvc
+@implements IDisposable
+
+@if (_visible)
+{
+<div class="superadmin-overlay" @onclick="Close">
+    <div class="superadmin-dialog" @onclick:stopPropagation="true">
+        <div class="superadmin-header">
+            <h1 class="superadmin-title">Email Configuration</h1>
+            <button class="btn btn-cancel" @onclick="Close">✕</button>
+        </div>
+        <div class="superadmin-content">
+            <section class="admin-panel admin-email-panel">
+                <p class="small">SMTP settings used to send authentication emails to organization admins.</p>
+                <EditForm Model="_emailSettings" OnValidSubmit="SaveEmailSettingsAsync">
+                    <div class="mb-3">
+                        <label class="form-label">SMTP host</label>
+                        <InputText class="form-control" @bind-Value="_emailSettings.SmtpHost" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Port</label>
+                        <InputNumber class="form-control" @bind-Value="_emailSettings.Port" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <InputText class="form-control" @bind-Value="_emailSettings.Username" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <InputText class="form-control" type="password" @bind-Value="_emailSettings.Password" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">From address</label>
+                        <InputText class="form-control" @bind-Value="_emailSettings.FromAddress" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">From name</label>
+                        <InputText class="form-control" @bind-Value="_emailSettings.FromName" />
+                    </div>
+                    <div class="form-check mb-3">
+                        <InputCheckbox class="form-check-input" @bind-Value="_emailSettings.EnableSsl" id="emailEnableSsl" />
+                        <label class="form-check-label" for="emailEnableSsl">Use TLS/SSL</label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <InputCheckbox class="form-check-input" @bind-Value="_emailSettings.SkipCertificateValidation" id="emailSkipCert" />
+                        <label class="form-check-label" for="emailSkipCert">
+                            Skip certificate validation
+                            <span class="text-muted small">(use for hosts like Network Solutions/FatCow whose cert hostname doesn't match)</span>
+                        </label>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary" disabled="@_isSavingEmailSettings">
+                            @(_isSavingEmailSettings ? "Saving…" : "Save email settings")
+                        </button>
+                        <div class="input-group input-group-sm" style="width:auto">
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="_testEmailRecipient"
+                                       placeholder="recipient@example.com"
+                                       style="min-width:220px" />
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    @onclick="SendTestEmailAsync"
+                                    disabled="@(_isSendingTestEmail || string.IsNullOrWhiteSpace(_testEmailRecipient))">
+                                @(_isSendingTestEmail ? "Sending…" : "Send test email")
+                            </button>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_emailSettingsMessage))
+                        {
+                            <span class="text-muted small">@_emailSettingsMessage</span>
+                        }
+                    </div>
+                </EditForm>
+            </section>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    private bool _visible;
+    private EmailSettings _emailSettings = new();
+    private bool _isSavingEmailSettings;
+    private bool _isSendingTestEmail;
+    private string? _emailSettingsMessage;
+    private string _testEmailRecipient = "kirk@kirkhawley.com";
+
+    protected override void OnInitialized()
+    {
+        EmailConfigDialogSvc.OpenRequested += OnOpenRequested;
+    }
+
+    public void Dispose()
+    {
+        EmailConfigDialogSvc.OpenRequested -= OnOpenRequested;
+    }
+
+    private void OnOpenRequested()
+    {
+        _visible = true;
+        _ = LoadEmailSettingsAsync();
+        StateHasChanged();
+    }
+
+    private void Close()
+    {
+        _visible = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadEmailSettingsAsync()
+    {
+        var settings = await ConfigService.LoadSettingsAsync();
+        _emailSettings = settings.Email ?? new EmailSettings();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SendTestEmailAsync()
+    {
+        _isSendingTestEmail = true;
+        _emailSettingsMessage = null;
+        try
+        {
+            await EmailSvc.SendTestEmailAsync(_testEmailRecipient);
+            _emailSettingsMessage = $"✓ Test email sent to {_testEmailRecipient}. Check spam/junk if it doesn't arrive.";
+        }
+        catch (Exception ex)
+        {
+            _emailSettingsMessage = $"Test failed: {ex.Message}";
+        }
+        finally
+        {
+            _isSendingTestEmail = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SaveEmailSettingsAsync()
+    {
+        _isSavingEmailSettings = true;
+        _emailSettingsMessage = null;
+        try
+        {
+            var settings = await ConfigService.LoadSettingsAsync();
+            settings.Email = _emailSettings;
+            await ConfigService.SaveSettingsAsync(settings);
+            _emailSettingsMessage = "✓ Settings saved.";
+        }
+        catch (Exception ex)
+        {
+            _emailSettingsMessage = $"Save failed: {ex.Message}";
+        }
+        finally
+        {
+            _isSavingEmailSettings = false;
+        }
+    }
+}

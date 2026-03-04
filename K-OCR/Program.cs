@@ -78,6 +78,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
 builder.Services.AddScoped<IOrganizationAdminService, OrganizationAdminService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 // Services with no DB dependency — safe as Singleton
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
@@ -107,6 +108,7 @@ builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<SettingsDialogService>();
 builder.Services.AddScoped<AuthDialogService>();
 builder.Services.AddScoped<SuperAdminDialogService>();
+builder.Services.AddScoped<EmailConfigDialogService>();
 builder.Services.AddScoped<OrgUsersDialogService>();
 builder.Services.AddScoped<BatchProcessDialogService>();
 
@@ -132,8 +134,6 @@ var configService = app.Services.GetRequiredService<IConfigurationService>();
 try
 {
     var settings = await configService.LoadSettingsAsync();
-    if (!string.IsNullOrEmpty(settings.ProjectDirectory) && !Directory.Exists(settings.ProjectDirectory))
-        Directory.CreateDirectory(settings.ProjectDirectory);
     if (!string.IsNullOrEmpty(settings.ProjectArtifacts) && !Directory.Exists(settings.ProjectArtifacts))
         Directory.CreateDirectory(settings.ProjectArtifacts);
 }

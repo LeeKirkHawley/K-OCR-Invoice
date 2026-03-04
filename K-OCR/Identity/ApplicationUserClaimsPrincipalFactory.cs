@@ -16,12 +16,13 @@ namespace K_OCR.Identity;
 /// re-hydrate <c>WorkspaceState</c> after a page refresh.
 /// </summary>
 internal sealed class ApplicationUserClaimsPrincipalFactory
-    : UserClaimsPrincipalFactory<ApplicationUser>
+    : UserClaimsPrincipalFactory<ApplicationUser, IdentityRole>
 {
     public ApplicationUserClaimsPrincipalFactory(
         UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole> roleManager,
         IOptions<IdentityOptions> optionsAccessor)
-        : base(userManager, optionsAccessor)
+        : base(userManager, roleManager, optionsAccessor)
     {
     }
 

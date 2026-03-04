@@ -188,13 +188,10 @@
     {
         if (_folderPicker is null) return;
         var settings  = await ConfigService.LoadSettingsAsync();
-        // Root at the configured base directory; fall back to ProjectDirectory if base isn't set.
-        var rootPath  = !string.IsNullOrWhiteSpace(settings.DefaultStartFolder) ? settings.DefaultStartFolder
-                      : !string.IsNullOrWhiteSpace(settings.ProjectDirectory)   ? settings.ProjectDirectory
-                      : null;
-        var startPath = !string.IsNullOrWhiteSpace(_folderPath) ? _folderPath
-                      : rootPath;
-        var chosen = await _folderPicker.ShowAsync(startPath, rootPath);
+        // Root at the configured base directory; always start there.
+        var rootPath = !string.IsNullOrWhiteSpace(settings.DefaultStartFolder) ? settings.DefaultStartFolder
+                     : null;
+        var chosen = await _folderPicker.ShowAsync(rootPath, rootPath);
         if (chosen is not null)
         {
             _folderPath = chosen;
@@ -204,13 +201,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Auto-load the project directory from settings if set
-        var settings = await ConfigService.LoadSettingsAsync();
-        if (!string.IsNullOrEmpty(settings.ProjectDirectory))
-        {
-            _folderPath = settings.ProjectDirectory;
-            await LoadDirectoryAsync();
-        }
+        // No auto-load; user selects a folder within the base directory.
     }
 
     private async Task OnFolderKeyDown(KeyboardEventArgs e)

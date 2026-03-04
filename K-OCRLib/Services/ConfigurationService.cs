@@ -15,7 +15,6 @@ public class ConfigurationService : IConfigurationService
             AzureCognitiveServicesKey = null,
             AzureCognitiveServicesEndpoint = "https://parsedocimage.cognitiveservices.azure.com/",
             OCRProvider = "Azure",
-            ProjectDirectory = null,
             MaxConcurrentRequests = 3
         };
     }
@@ -45,12 +44,6 @@ public class ConfigurationService : IConfigurationService
             
             settings = settings ?? GetDefaultSettings();
             settings.Email ??= new EmailSettings();
-            
-            // Set default ProjectArtifacts if ProjectDirectory is set but ProjectArtifacts is not
-            if (!string.IsNullOrEmpty(settings.ProjectDirectory) && string.IsNullOrEmpty(settings.ProjectArtifacts))
-            {
-                settings.ProjectArtifacts = Path.Combine(settings.ProjectDirectory, "artifacts");
-            }
             
             return settings;
         }
