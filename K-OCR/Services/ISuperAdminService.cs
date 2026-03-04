@@ -7,4 +7,5 @@ public interface ISuperAdminService
     Task<OrganizationOverview[]> ListOrganizationsAsync();
     Task<CreateOrganizationResult> CreateOrganizationAsync(CreateOrganizationRequest request);
     Task RevokeOrganizationAsync(string organizationId);
+    Task ReEnableOrganizationAsync(string organizationId);
 }

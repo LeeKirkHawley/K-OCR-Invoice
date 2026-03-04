@@ -135,6 +135,26 @@ public class SuperAdminService : ISuperAdminService
         await _dbContext.SaveChangesAsync();
     }
 
+    public async Task ReEnableOrganizationAsync(string organizationId)
+    {
+        var organization = await _dbContext.Organizations
+            .Include(o => o.Users)
+            .FirstOrDefaultAsync(o => o.Id == organizationId);
+
+        if (organization is null)
+            throw new KeyNotFoundException("Organization not found.");
+
+        organization.IsActive = true;
+
+        foreach (var user in organization.Users)
+        {
+            await _userManager.SetLockoutEndDateAsync(user, null);
+            await _userManager.UpdateSecurityStampAsync(user);
+        }
+
+        await _dbContext.SaveChangesAsync();
+    }
+
     private string BuildBaseUrl()
     {
         var ctx = _httpContextAccessor.HttpContext;

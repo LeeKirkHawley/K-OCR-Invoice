@@ -122,11 +122,16 @@
                                                 @(org.IsActive ? "Active" : "Revoked")
                                             </span>
                                         </td>
-                                        <td>
+                                        <td class="d-flex gap-1">
                                             <button class="btn btn-sm btn-outline-danger"
                                                     disabled="@(!org.IsActive || _revokingOrgId == org.OrganizationId)"
                                                     @onclick="() => RevokeOrganizationAsync(org.OrganizationId)">
                                                 @( _revokingOrgId == org.OrganizationId ? "Revoking…" : "Revoke" )
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-success"
+                                                    disabled="@(org.IsActive || _reEnablingOrgId == org.OrganizationId)"
+                                                    @onclick="() => ReEnableOrganizationAsync(org.OrganizationId)">
+                                                @( _reEnablingOrgId == org.OrganizationId ? "Enabling…" : "Re-enable" )
                                             </button>
                                         </td>
                                     </tr>
@@ -155,6 +160,7 @@
     private bool _isLoading;
     private bool _isCreating;
     private string? _revokingOrgId;
+    private string? _reEnablingOrgId;
 
     protected override void OnInitialized()
     {
@@ -250,6 +256,25 @@
         finally
         {
             _revokingOrgId = null;
+        }
+    }
+
+    private async Task ReEnableOrganizationAsync(string organizationId)
+    {
+        _reEnablingOrgId = organizationId;
+        try
+        {
+            await SuperAdminSvc.ReEnableOrganizationAsync(organizationId);
+            Toast.ShowSuccess("Organization re-enabled.");
+            await LoadOrganizationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Re-enable failed: {ex.Message}");
+        }
+        finally
+        {
+            _reEnablingOrgId = null;
         }
     }
 }
