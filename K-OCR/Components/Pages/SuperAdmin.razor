@@ -133,6 +133,11 @@
                                                     @onclick="() => ReEnableOrganizationAsync(org.OrganizationId)">
                                                 @( _reEnablingOrgId == org.OrganizationId ? "Enabling…" : "Re-enable" )
                                             </button>
+                                            <button class="btn btn-sm btn-danger"
+                                                    disabled="@(org.IsActive || _deletingOrgId == org.OrganizationId)"
+                                                    @onclick="() => RequestDeleteOrganization(org.OrganizationId, org.Name)">
+                                                @( _deletingOrgId == org.OrganizationId ? "Deleting…" : "Delete" )
+                                            </button>
                                         </td>
                                     </tr>
                                 }
@@ -152,6 +157,31 @@
 </div>
 }
 
+@if (_confirmDeleteOrgId is not null)
+{
+    <div class="confirm-delete-overlay" @onclick="CancelDelete">
+        <div class="confirm-delete-dialog" @onclick:stopPropagation="true">
+            <div class="confirm-delete-icon">&#9888;</div>
+            <h2 class="confirm-delete-title">Delete organization?</h2>
+            <p class="confirm-delete-body">
+                You are about to permanently delete
+                <strong>@_confirmDeleteOrgName</strong>
+                and all of its users and data.
+            </p>
+            <p class="confirm-delete-body confirm-delete-warning">
+                This action cannot be undone.
+            </p>
+            <div class="confirm-delete-actions">
+                <button class="btn btn-outline-secondary" @onclick="CancelDelete">Cancel</button>
+                <button class="btn btn-danger" disabled="@(_deletingOrgId is not null)"
+                        @onclick="ConfirmDeleteAsync">
+                    @(_deletingOrgId is not null ? "Deleting…" : "Yes, permanently delete")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool _visible;
     private readonly CreateOrganizationRequest _createModel = new();
@@ -161,6 +191,9 @@
     private bool _isCreating;
     private string? _revokingOrgId;
     private string? _reEnablingOrgId;
+    private string? _deletingOrgId;
+    private string? _confirmDeleteOrgId;
+    private string? _confirmDeleteOrgName;
 
     protected override void OnInitialized()
     {
@@ -277,4 +310,39 @@
             _reEnablingOrgId = null;
         }
     }
+
+    private async Task DeleteOrganizationAsync(string organizationId)
+    {
+        _deletingOrgId = organizationId;
+        _confirmDeleteOrgId = null;
+        _confirmDeleteOrgName = null;
+        try
+        {
+            await SuperAdminSvc.DeleteOrganizationAsync(organizationId);
+            Toast.ShowSuccess("Organization deleted.");
+            await LoadOrganizationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError($"Delete failed: {ex.Message}");
+        }
+        finally
+        {
+            _deletingOrgId = null;
+        }
+    }
+
+    private void RequestDeleteOrganization(string organizationId, string orgName)
+    {
+        _confirmDeleteOrgId = organizationId;
+        _confirmDeleteOrgName = orgName;
+    }
+
+    private void CancelDelete()
+    {
+        _confirmDeleteOrgId = null;
+        _confirmDeleteOrgName = null;
+    }
+
+    private Task ConfirmDeleteAsync() => DeleteOrganizationAsync(_confirmDeleteOrgId!);
 }

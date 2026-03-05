@@ -5,8 +5,7 @@
             "label": "build",
             "dependsOn": [
                 "Build K-OCRLib Only",
-                "Build K-OCRIntegrationTests Only",
-                "Build K-OCRDesktop Only"
+                "Build K-OCRIntegrationTests Only"
             ],
             "dependsOrder": "sequence",
             "group": {
@@ -51,32 +50,7 @@
             ],
             "problemMatcher": "$msCompile"
         },
-        {
-            "label": "Build K-OCRDesktop Only",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "build",
-                "${workspaceFolder}/K-OCRDesktop/K-OCRDesktop.csproj",
-                "/property:GenerateFullPaths=true",
-                "/consoleloggerparameters:NoSummary"
-            ],
-            "problemMatcher": "$msCompile"
-        },
-        {
-            "label": "Build K-OCRDesktop",
-            "type": "shell",
-            "command": "dotnet",
-            "args": [
-                "build",
-                "${workspaceFolder}/K-OCRDesktop/K-OCRDesktop.csproj"
-            ],
-            "group": "build",
-            "presentation": {
-                "reveal": "always"
-            },
-            "problemMatcher": "$msCompile"
-        },
+
         {
             "label": "Build All C# Projects",
             "type": "shell",

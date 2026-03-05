@@ -21,7 +21,10 @@ public class ConfigurationService : IConfigurationService
     
     public string GetDefaultSettingsPath()
     {
-        return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DefaultSettingsFileName);
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var dir = Path.Combine(appData, "K-OCR");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, DefaultSettingsFileName);
     }
     
     public async Task<AppSettings> LoadSettingsAsync(string? path = null)

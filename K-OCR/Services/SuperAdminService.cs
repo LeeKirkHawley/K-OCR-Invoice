@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System.Text;
 using K_OCR.Data;
 using K_OCR.Identity;
@@ -16,19 +17,22 @@ public class SuperAdminService : ISuperAdminService
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly IEmailService _emailService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IConfiguration _configuration;
 
     public SuperAdminService(
         ApplicationDbContext dbContext,
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
         IEmailService emailService,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        IConfiguration configuration)
     {
         _dbContext = dbContext;
         _userManager = userManager;
         _roleManager = roleManager;
         _emailService = emailService;
         _httpContextAccessor = httpContextAccessor;
+        _configuration = configuration;
     }
 
     public async Task<OrganizationOverview[]> ListOrganizationsAsync()
@@ -61,44 +65,79 @@ public class SuperAdminService : ISuperAdminService
         await _dbContext.Organizations.AddAsync(organization);
         await _dbContext.SaveChangesAsync();
 
-        var tempPassword = GenerateTemporaryPassword();
-        var user = new ApplicationUser
-        {
-            UserName = request.AdminEmail,
-            Email = request.AdminEmail,
-            FullName = request.AdminName.Trim(),
-            EmailConfirmed = false,
-            OrganizationId = organization.Id,
-            IsOrganizationAdmin = true,
-            LockoutEnabled = true
-        };
+        bool allowDuplicateEmails = _configuration.GetValue<bool>("AllowDuplicateEmails", false);
+        var existingUser = await _userManager.FindByEmailAsync(request.AdminEmail);
 
-        var result = await _userManager.CreateAsync(user, tempPassword);
-        if (!result.Succeeded)
-        {
-            _dbContext.Organizations.Remove(organization);
-            await _dbContext.SaveChangesAsync();
+        ApplicationUser user;
+        string invitationToken;
+        string tempPassword;
+        if (allowDuplicateEmails && existingUser is { IsGlobalAdmin: true })
             throw new InvalidOperationException(
-                $"Unable to create admin user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+                "A global admin account cannot be reassigned to a new organization.");
+
+        bool reusingExistingUser = allowDuplicateEmails && existingUser is not null;
+
+        if (reusingExistingUser)
+        {
+            // Re-use the existing account — point it at the new organisation.
+            // Password is intentionally left unchanged; no reset token is generated.
+            user = existingUser!;
+            user.OrganizationId = organization.Id;
+            user.IsOrganizationAdmin = true;
+            user.FullName = request.AdminName.Trim();
+            await _userManager.UpdateAsync(user);
+            await _userManager.UpdateSecurityStampAsync(user);
+            if (!await _userManager.IsInRoleAsync(user, RoleNames.OrganizationAdmin))
+                await _userManager.AddToRoleAsync(user, RoleNames.OrganizationAdmin);
+            tempPassword = string.Empty;
+            invitationToken = string.Empty;
+        }
+        else
+        {
+            tempPassword = GenerateTemporaryPassword();
+            user = new ApplicationUser
+            {
+                UserName = request.AdminEmail,
+                Email = request.AdminEmail,
+                FullName = request.AdminName.Trim(),
+                EmailConfirmed = false,
+                OrganizationId = organization.Id,
+                IsOrganizationAdmin = true,
+                LockoutEnabled = true
+            };
+
+            var result = await _userManager.CreateAsync(user, tempPassword);
+            if (!result.Succeeded)
+            {
+                _dbContext.Organizations.Remove(organization);
+                await _dbContext.SaveChangesAsync();
+                throw new InvalidOperationException(
+                    $"Unable to create admin user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+            }
+
+            await _userManager.AddToRoleAsync(user, RoleNames.OrganizationAdmin);
+            invitationToken = await _userManager.GeneratePasswordResetTokenAsync(user);
         }
 
-        await _userManager.AddToRoleAsync(user, RoleNames.OrganizationAdmin);
-        var invitationToken = await _userManager.GeneratePasswordResetTokenAsync(user);
-        var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(invitationToken));
-
-        var baseUrl = BuildBaseUrl();
-        var setupLink = $"{baseUrl}/account/set-password?userId={Uri.EscapeDataString(user.Id)}&token={encodedToken}";
-
+        string setupLink = string.Empty;
         bool emailSent = false;
-        try
+
+        if (!reusingExistingUser)
         {
-            await _emailService.SendOrgAdminInviteAsync(
-                user.Email!, request.AdminName.Trim(), organization.Name, setupLink);
-            emailSent = true;
-        }
-        catch
-        {
-            // Email failure is non-fatal — caller can share the setup link manually.
+            var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(invitationToken));
+            var baseUrl = BuildBaseUrl();
+            setupLink = $"{baseUrl}/account/set-password?userId={Uri.EscapeDataString(user.Id)}&token={encodedToken}";
+
+            try
+            {
+                await _emailService.SendOrgAdminInviteAsync(
+                    user.Email!, request.AdminName.Trim(), organization.Name, setupLink);
+                emailSent = true;
+            }
+            catch
+            {
+                // Email failure is non-fatal — caller can share the setup link manually.
+            }
         }
 
         return new CreateOrganizationResult
@@ -152,6 +191,25 @@ public class SuperAdminService : ISuperAdminService
             await _userManager.UpdateSecurityStampAsync(user);
         }
 
+        await _dbContext.SaveChangesAsync();
+    }
+
+    public async Task DeleteOrganizationAsync(string organizationId)
+    {
+        var organization = await _dbContext.Organizations
+            .Include(o => o.Users)
+            .FirstOrDefaultAsync(o => o.Id == organizationId);
+
+        if (organization is null)
+            throw new KeyNotFoundException("Organization not found.");
+
+        if (organization.IsActive)
+            throw new InvalidOperationException("Organization must be revoked before it can be deleted.");
+
+        foreach (var user in organization.Users)
+            await _userManager.DeleteAsync(user);
+
+        _dbContext.Organizations.Remove(organization);
         await _dbContext.SaveChangesAsync();
     }
 

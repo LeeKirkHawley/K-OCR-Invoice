@@ -12,10 +12,6 @@ echo "Building K-OCRLib..."
 dotnet build K-OCRLib/K-OCRLib.csproj
 
 echo ""
-echo "Building K-OCRDesktop (Avalonia - cross-platform)..."
-dotnet build K-OCRDesktop/K-OCRDesktop.csproj
-
-echo ""
 echo "Building K-OCR (WPF - will compile but won't run on Linux)..."
 dotnet build K-OCR/K-OCR.csproj
 
@@ -28,4 +24,3 @@ echo "=============================================="
 echo "✓ All C# projects built successfully!"
 echo ""
 echo "Note: K-OCR WPF app compiled but requires Windows to run."
-echo "Note: Use K-OCRDesktop for Linux/cross-platform support."

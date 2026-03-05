@@ -5,6 +5,24 @@
 @inject EmailConfigDialogService EmailConfigDialogSvc
 @implements IDisposable
 
+@if (_testEmailSuccessVisible)
+{
+    <div class="confirm-overlay" @onclick="CloseTestEmailSuccess" role="dialog" aria-modal="true" aria-labelledby="test-email-title">
+        <div class="confirm-dialog" @onclick:stopPropagation="true">
+            <div class="confirm-header">
+                <span id="test-email-title" class="confirm-title">Test Email Sent</span>
+            </div>
+            <div class="confirm-body">
+                ✓ Test email successfully sent to <strong>@_testEmailRecipient</strong>.<br />
+                Check your spam or junk folder if it doesn't arrive shortly.
+            </div>
+            <div class="confirm-actions">
+                <button class="btn confirm-btn-confirm" @onclick="CloseTestEmailSuccess">OK</button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_visible)
 {
 <div class="superadmin-overlay" @onclick="Close">
@@ -67,10 +85,7 @@
                                 @(_isSendingTestEmail ? "Sending…" : "Send test email")
                             </button>
                         </div>
-                        @if (!string.IsNullOrEmpty(_emailSettingsMessage))
-                        {
-                            <span class="text-muted small">@_emailSettingsMessage</span>
-                        }
+
                     </div>
                 </EditForm>
             </section>
@@ -84,7 +99,7 @@
     private EmailSettings _emailSettings = new();
     private bool _isSavingEmailSettings;
     private bool _isSendingTestEmail;
-    private string? _emailSettingsMessage;
+    private bool _testEmailSuccessVisible;
     private string _testEmailRecipient = "kirk@kirkhawley.com";
 
     protected override void OnInitialized()
@@ -117,18 +132,23 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private void CloseTestEmailSuccess()
+    {
+        _testEmailSuccessVisible = false;
+        StateHasChanged();
+    }
+
     private async Task SendTestEmailAsync()
     {
         _isSendingTestEmail = true;
-        _emailSettingsMessage = null;
         try
         {
             await EmailSvc.SendTestEmailAsync(_testEmailRecipient);
-            _emailSettingsMessage = $"✓ Test email sent to {_testEmailRecipient}. Check spam/junk if it doesn't arrive.";
+            _testEmailSuccessVisible = true;
         }
         catch (Exception ex)
         {
-            _emailSettingsMessage = $"Test failed: {ex.Message}";
+            Toast.ShowError($"Test failed: {ex.Message}");
         }
         finally
         {
@@ -140,21 +160,21 @@
     private async Task SaveEmailSettingsAsync()
     {
         _isSavingEmailSettings = true;
-        _emailSettingsMessage = null;
         try
         {
             var settings = await ConfigService.LoadSettingsAsync();
             settings.Email = _emailSettings;
             await ConfigService.SaveSettingsAsync(settings);
-            _emailSettingsMessage = "✓ Settings saved.";
+            Toast.ShowSuccess("Email settings saved.");
         }
         catch (Exception ex)
         {
-            _emailSettingsMessage = $"Save failed: {ex.Message}";
+            Toast.ShowError($"Save failed: {ex.Message}");
         }
         finally
         {
             _isSavingEmailSettings = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 }

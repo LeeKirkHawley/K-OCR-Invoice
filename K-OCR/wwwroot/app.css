@@ -478,6 +478,67 @@ html, body {
     padding: 24px;
 }
 
+/* ─── Delete-confirm dialog ──────────────────────────────── */
+.confirm-delete-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 10000 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.confirm-delete-dialog {
+    background: #1e1e1e;
+    border: 2px solid #c0392b;
+    border-radius: 10px;
+    width: 440px;
+    max-width: 94vw;
+    padding: 32px 36px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
+    gap: 12px;
+}
+
+.confirm-delete-icon {
+    font-size: 52px;
+    line-height: 1;
+    color: #e74c3c;
+}
+
+.confirm-delete-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #f5f5f5;
+    margin: 0;
+}
+
+.confirm-delete-body {
+    color: #cccccc;
+    font-size: 15px;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.confirm-delete-warning {
+    color: #e74c3c;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.confirm-delete-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+    justify-content: center;
+}
+
 /* ─── Batch Process dialog ────────────────────────────────── */
 .batch-dialog {
     background: #1e1e1e;
