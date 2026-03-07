@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using K_OCR.Models;
 using K_OCR.PipelineService;
+using Microsoft.Extensions.Logging;
 
 
 namespace K_OCR.Services
@@ -8,10 +9,12 @@ namespace K_OCR.Services
     public class FileService : IFileService
     {
         private readonly DatabaseService _databaseService;
+        private readonly ILogger<FileService> _logger;
 
-        public FileService(DatabaseService databaseService)
+        public FileService(DatabaseService databaseService, ILogger<FileService> logger)
         {
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+            _logger = logger;
         }
         public async Task<PipelineContext?> LoadCachedContextAsync(string imagePath, string? artifactsDirectory = null)
         {
@@ -29,7 +32,7 @@ namespace K_OCR.Services
                     }
                     catch (Exception ex)
                     {
-                        System.Console.WriteLine($"[Database Cache] Failed to deserialize OcrText for {Path.GetFileName(imagePath)}: {ex.Message}");
+                        _logger.LogError(ex, "[Database Cache] Failed to deserialize OcrText for {FileName}.", Path.GetFileName(imagePath));
                     }
                 }
 
@@ -47,7 +50,7 @@ namespace K_OCR.Services
                     }
                     catch (Exception ex)
                     {
-                        System.Console.WriteLine($"[Database Cache] Failed to deserialize ValidatedOcrText for {Path.GetFileName(imagePath)}: {ex.Message}");
+                        _logger.LogError(ex, "[Database Cache] Failed to deserialize ValidatedOcrText for {FileName}.", Path.GetFileName(imagePath));
                     }
                 }
 
@@ -81,7 +84,7 @@ namespace K_OCR.Services
                 }
                 catch (Exception ex)
                 {
-                    System.Console.WriteLine($"[SaveContext] Error serializing validated invoice: {ex.Message}");
+                    _logger.LogError(ex, "[SaveContext] Error serializing validated invoice for {FileName}.", Path.GetFileName(imagePath));
                 }
             }
 
@@ -96,12 +99,12 @@ namespace K_OCR.Services
                 existing.IsFullyProcessed = isFullyProcessed;
                 existing.ProcessedAtUtc = isFullyProcessed ? DateTime.UtcNow : existing.ProcessedAtUtc;
                 await _databaseService.SaveInvoiceAsync(existing);
-                System.Console.WriteLine($"[Database Cache] Updated OCR data for: {Path.GetFileName(imagePath)}");
+                _logger.LogDebug("[Database Cache] Updated OCR data for: {FileName}.", Path.GetFileName(imagePath));
             }
             else
             {
                 // Cannot create invoice without BatchId; log and skip
-                System.Console.WriteLine($"[Database Cache] No invoice record found for: {Path.GetFileName(imagePath)} — skipping save");
+                _logger.LogWarning("[Database Cache] No invoice record found for {FileName} — skipping save.", Path.GetFileName(imagePath));
             }
         }
         
@@ -136,7 +139,7 @@ namespace K_OCR.Services
             }
             else
             {
-                System.Console.WriteLine($"[Database Cache] No invoice record found for: {Path.GetFileName(imagePath)} — skipping validated layout save");
+                _logger.LogWarning("[Database Cache] No invoice record found for {FileName} — skipping validated layout save.", Path.GetFileName(imagePath));
             }
         }
 

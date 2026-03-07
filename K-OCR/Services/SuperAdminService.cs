@@ -19,6 +19,7 @@ public class SuperAdminService : ISuperAdminService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
     private readonly IPathService _pathService;
+    private readonly ILogger<SuperAdminService> _logger;
 
     public SuperAdminService(
         ApplicationDbContext dbContext,
@@ -27,7 +28,8 @@ public class SuperAdminService : ISuperAdminService
         IEmailService emailService,
         IHttpContextAccessor httpContextAccessor,
         IConfiguration configuration,
-        IPathService pathService)
+        IPathService pathService,
+        ILogger<SuperAdminService> logger)
     {
         _dbContext = dbContext;
         _userManager = userManager;
@@ -36,6 +38,7 @@ public class SuperAdminService : ISuperAdminService
         _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
         _pathService = pathService;
+        _logger = logger;
     }
 
     public async Task<OrganizationOverview[]> ListOrganizationsAsync()
@@ -149,8 +152,9 @@ public class SuperAdminService : ISuperAdminService
                     user.Email!, request.AdminName.Trim(), organization.Name, setupLink);
                 emailSent = true;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Could not send invite email to {Email}; setup link will be provided manually.", user.Email);
                 // Email failure is non-fatal — caller can share the setup link manually.
             }
         }
@@ -163,6 +167,7 @@ public class SuperAdminService : ISuperAdminService
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to create org folder {OrgPath} for organization {OrgId}.", orgPath, organization.Id);
             // Roll back: delete user and org
             if (!reusingExistingUser)
                 await _userManager.DeleteAsync(user);

@@ -7,6 +7,7 @@ using K_OCR.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,12 +38,31 @@ var configuration = builder.Configuration;
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Logging
-builder.Services.AddLogging(logging =>
-{
-    logging.AddConfiguration(configuration.GetSection("Logging"));
-    logging.AddConsole();
-});
+// Logging — Serilog writes to console and a rolling log file alongside the app.
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(configuration)
+    .MinimumLevel.Override("Microsoft.Hosting.Lifetime", Serilog.Events.LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "kocr-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14)
+    .CreateLogger();
+
+// Log.Logger = new LoggerConfiguration()
+//     .ReadFrom.Configuration(configuration)
+//     .Enrich.FromLogContext()
+//     .WriteTo.Console()
+//     .WriteTo.File(
+//         path: Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "kocr-.log"),
+//         rollingInterval: RollingInterval.Day,
+//         retainedFileCountLimit: 14)
+//     .CreateLogger();
+
+builder.Host.UseSerilog();
+
+Log.Logger.Information("Starting K-OCR");
 
 // Database — DbContext and DatabaseService both Scoped for Blazor Server thread safety
 // (Singleton DatabaseService would conflict with Scoped KOCRDbContext)
@@ -162,9 +182,17 @@ using (var scope = app.Services.CreateScope())
 // Initialize Identity database and seed super-admin
 using (var scope = app.Services.CreateScope())
 {
-    var identityDb = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    identityDb.Database.Migrate();
-    await EnsureSuperAdminAsync(scope.ServiceProvider);
+    try
+    {
+        var identityDb = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        identityDb.Database.Migrate();
+        await EnsureSuperAdminAsync(scope.ServiceProvider);
+    }
+    catch (Exception ex)
+    {
+        Log.Logger.Fatal(ex, "Fatal error during Identity initialization");
+        throw;
+    }
 }
 
 // Ensure configured project directories exist

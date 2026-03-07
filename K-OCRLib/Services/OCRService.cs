@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Tesseract;
 
 namespace K_OCR.Services
@@ -6,10 +7,12 @@ namespace K_OCR.Services
     public class OCRService : IOCRService
     {
         IAnalysisService _analysisService;
+        private readonly ILogger<OCRService> _logger;
 
-        public OCRService(IAnalysisService analysisService)
+        public OCRService(IAnalysisService analysisService, ILogger<OCRService> logger)
         {
             _analysisService = analysisService;
+            _logger = logger;
         }
 
         public async Task RunOcrAsync(IEnumerable<string> filePaths)
@@ -30,7 +33,7 @@ namespace K_OCR.Services
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"OCR failed for {Path.GetFileName(filePath)}: {ex.Message}");
+                    _logger.LogError(ex, "OCR failed for {FileName}.", Path.GetFileName(filePath));
                 }
             });
         }

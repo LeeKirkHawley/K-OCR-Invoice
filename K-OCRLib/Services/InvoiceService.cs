@@ -1,6 +1,9 @@
 ﻿using Azure;
 using Azure.AI.DocumentIntelligence;
 using K_OCR.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Serilog;
 using System.IO;
 using System.Text.Json;
 
@@ -9,6 +12,7 @@ namespace K_OCR.Services
     public class InvoiceService : IInvoiceService
     {
         private readonly SemaphoreSlim _semaphore;
+        private readonly ILogger<InvoiceService> _logger;
 
         // Both document-level and item-level field synonym mappings are loaded once from
         // PipelineService/FieldMappings.json (keys: "DocumentFields" and "ItemFields").
@@ -70,6 +74,7 @@ namespace K_OCR.Services
                 catch
                 {
                     // JSON load failed — built-in defaults remain intact
+                    Log.Warning("Failed to load FieldMappings.json; built-in synonym defaults will be used.");
                 }
 
                 _mappingsLoaded = true;
@@ -122,9 +127,10 @@ namespace K_OCR.Services
             return null;
         }
 
-        public InvoiceService(int maxConcurrentRequests = 3)
+        public InvoiceService(int maxConcurrentRequests = 3, ILogger<InvoiceService>? logger = null)
         {
             _semaphore = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
+            _logger = logger ?? NullLogger<InvoiceService>.Instance;
         }
 
         // Helper method to find Total value in raw OCR when Azure doesn't extract it
@@ -243,12 +249,12 @@ namespace K_OCR.Services
             Azure.Operation<AnalyzeResult>? operation = null;
             try
             {
-                System.Console.WriteLine($"[Azure OCR] Sending file: {Path.GetFileName(imagePath)}");
+                _logger.LogInformation("[Azure OCR] Sending file: {FileName}.", Path.GetFileName(imagePath));
                 operation = await client.AnalyzeDocumentAsync(WaitUntil.Completed, options);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error occurred while analyzing document: {ex.Message}");
+                _logger.LogError(ex, "[Azure OCR] Error analysing document {FileName}.", Path.GetFileName(imagePath));
                 return new List<InvoiceDto>();
             }
 
@@ -256,7 +262,8 @@ namespace K_OCR.Services
 
             // Debug: Log page count from Azure
             int pageCount = result.Pages?.Count ?? 0;
-            System.Console.WriteLine($"[Azure OCR] Received result: {Path.GetFileName(imagePath)} - Pages: {pageCount}, Documents: {result.Documents?.Count ?? 0}");
+            _logger.LogDebug("[Azure OCR] Received result: {FileName} - Pages: {PageCount}, Documents: {DocCount}.",
+                Path.GetFileName(imagePath), pageCount, result.Documents?.Count ?? 0);
 
             List<InvoiceDto> invoices = AnalyzeOCR(result);
 

@@ -62,10 +62,21 @@ namespace K_OCR.Data
                 .HasForeignKey(s => s.BatchId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            // Global query filter: super-admins see all; org users see only their org.
+            // Global query filters: super-admins see all; org users see only their org.
+            // DocumentField and InvoiceItem carry matching filters so that querying them
+            // directly also respects tenant isolation and EF Core does not warn about
+            // a required navigation being silently filtered out.
             modelBuilder.Entity<Invoice>()
                 .HasQueryFilter(i => _tenantContext.IsSuperAdmin
                                   || i.OrganizationId == _tenantContext.OrganizationId);
+
+            modelBuilder.Entity<DocumentField>()
+                .HasQueryFilter(df => _tenantContext.IsSuperAdmin
+                                   || df.Invoice.OrganizationId == _tenantContext.OrganizationId);
+
+            modelBuilder.Entity<InvoiceItem>()
+                .HasQueryFilter(ii => _tenantContext.IsSuperAdmin
+                                   || ii.Invoice.OrganizationId == _tenantContext.OrganizationId);
 
             modelBuilder.Entity<Batch>()
                 .HasQueryFilter(b => _tenantContext.IsSuperAdmin

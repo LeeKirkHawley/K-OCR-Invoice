@@ -10,10 +10,12 @@ namespace K_OCR.Services;
 public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ILogger<AuthService> _logger;
 
-    public AuthService(UserManager<ApplicationUser> userManager)
+    public AuthService(UserManager<ApplicationUser> userManager, ILogger<AuthService> logger)
     {
         _userManager = userManager;
+        _logger = logger;
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
@@ -23,10 +25,16 @@ public class AuthService : IAuthService
             .FirstOrDefaultAsync(u => u.Email == request.Email);
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, request.Password))
+        {
+            _logger.LogWarning("Failed login attempt for email {Email}.", request.Email);
             throw new InvalidOperationException("Email or password is invalid.");
+        }
 
         if (user.LockoutEnabled && user.LockoutEnd > DateTimeOffset.UtcNow)
+        {
+            _logger.LogWarning("Locked account login attempt for {Email}.", request.Email);
             throw new InvalidOperationException("Account is locked. Contact your administrator.");
+        }
 
         var roles = await _userManager.GetRolesAsync(user);
 

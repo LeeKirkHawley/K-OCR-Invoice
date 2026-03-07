@@ -1,6 +1,7 @@
 using K_OCR.Models;
 using K_OCR.PipelineService;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 
 namespace K_OCR.Services;
@@ -14,6 +15,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     private readonly ILineItemValidationService _lineItemValidation;
     private readonly IConfidenceValidationService _confidenceValidation;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<InvoiceProcessingService> _logger;
     private readonly string _defaultPipelineConfigPath;
     
     public InvoiceProcessingService(
@@ -23,7 +25,8 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         IInvoiceValidationService invoiceValidation,
         ILineItemValidationService lineItemValidation,
         IConfidenceValidationService confidenceValidation,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<InvoiceProcessingService> logger)
     {
         _fileService = fileService;
         _invoiceService = invoiceService;
@@ -32,6 +35,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         _lineItemValidation = lineItemValidation;
         _confidenceValidation = confidenceValidation;
         _configuration = configuration;
+        _logger = logger;
         _defaultPipelineConfigPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, 
             "PipelineService", 
@@ -99,7 +103,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
                 // Leave TesseractOcrText = null so RunValidation can distinguish
                 // "task threw an exception" (infrastructure failure — skip validation)
                 // from "ran successfully but produced no text" (empty string — flag fields).
-                Console.WriteLine($"[TesseractValidation] Failed for {Path.GetFileName(filePath)}: {tesseractTask.Exception?.GetBaseException().Message}");
+                _logger.LogError(tesseractTask.Exception?.GetBaseException(), "[TesseractValidation] Failed for {FileName}.", Path.GetFileName(filePath));
             }
 
             // Cross-validate every Azure-extracted field against the Tesseract text.
@@ -116,6 +120,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error processing file {FilePath}.", filePath);
             result.Error = ex;
             return result;
         }
@@ -151,6 +156,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error processing file {FileName} in batch.", Path.GetFileName(filePath));
                 lock (results)
                 {
                     results[filePath] = new ProcessingResult { Error = ex };
@@ -221,7 +227,8 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         }
         else if (context.Layout is JArray jArray)
         {
-            try { invoices = jArray.ToObject<List<InvoiceDto>>(); } catch { }
+            try { invoices = jArray.ToObject<List<InvoiceDto>>(); }
+            catch (Exception ex) { _logger.LogWarning(ex, "[RunValidation] Failed to deserialize layout JArray; skipping validation."); }
         }
 
         if (invoices == null) return;

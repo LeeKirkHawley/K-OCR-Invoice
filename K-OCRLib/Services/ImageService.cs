@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Docnet.Core;
 using Docnet.Core.Models;
+using Microsoft.Extensions.Logging;
 using SkiaSharp;
 
 namespace K_OCR.Services;
@@ -13,6 +14,12 @@ namespace K_OCR.Services;
 [SupportedOSPlatform("linux")]
 public class ImageService : IImageService
 {
+    private readonly ILogger<ImageService> _logger;
+
+    public ImageService(ILogger<ImageService> logger)
+    {
+        _logger = logger;
+    }
     /// <inheritdoc />
     public async Task<string?> ConvertPdfToPngAsync(string pdfPath, string? artifactsDirectory = null, int maxDimension = 1920)
     {
@@ -40,6 +47,7 @@ public class ImageService : IImageService
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ImageService] Unable to open PDF for conversion: {PdfPath}.", Path.GetFileName(pdfPath));
             throw new InvalidOperationException($"Unable to read PDF: {ex.Message}", ex);
         }
 
@@ -76,8 +84,7 @@ public class ImageService : IImageService
                     }
                     catch (Exception ex)
                     {
-                        // Log but continue with other pages
-                        Console.WriteLine($"[ImageService] Failed to convert page {page + 1}: {ex.Message}");
+                        _logger.LogError(ex, "[ImageService] Failed to convert page {Page} of {PdfPath}.", page + 1, Path.GetFileName(pdfPath));
                         continue;
                     }
                 }
@@ -119,6 +126,7 @@ public class ImageService : IImageService
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[ImageService] Unable to open PDF for conversion: {PdfPath}.", Path.GetFileName(pdfPath));
             throw new InvalidOperationException($"Unable to read PDF: {ex.Message}", ex);
         }
 
@@ -153,7 +161,7 @@ public class ImageService : IImageService
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[ImageService] Failed to convert page {page + 1}: {ex.Message}");
+                        _logger.LogError(ex, "[ImageService] Failed to convert page {Page} of {PdfPath}.", page + 1, Path.GetFileName(pdfPath));
                         continue;
                     }
                 }

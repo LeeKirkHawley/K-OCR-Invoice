@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using K_OCR.Configuration;
+using Serilog;
 
 // The configuration service works with a roaming JSON file by default but
 // provides a development override to avoid touching the real file during
@@ -72,8 +73,9 @@ public class ConfigurationService : IConfigurationService
             settings.Email ??= new EmailSettings();
             return settings;
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Warning(ex, "Failed to load settings from {Path}; using defaults.", path);
             return GetDefaultSettings();
         }
     }
