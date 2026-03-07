@@ -1,4 +1,6 @@
+using System.Text;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using K_OCR.Identity;
 using K_OCR.Models.Api.Auth;
@@ -46,6 +48,22 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("User not found.");
 
         var result = await _userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => e.Description)));
+
+        user.EmailConfirmed = true;
+        await _userManager.UpdateAsync(user);
+        await _userManager.UpdateSecurityStampAsync(user);
+    }
+
+    public async Task SetPasswordAsync(string userId, string encodedToken, string newPassword)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            throw new InvalidOperationException("Invitation link is invalid or has expired.");
+
+        var token = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(encodedToken));
+        var result = await _userManager.ResetPasswordAsync(user, token, newPassword);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => e.Description)));
 

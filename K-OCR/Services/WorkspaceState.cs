@@ -48,6 +48,8 @@ public class WorkspaceState
 
     public string? CurrentUserEmail { get; private set; }
 
+    public string? CurrentUserId { get; private set; }
+
     private IReadOnlyList<string> _roles = Array.Empty<string>();
     public IReadOnlyList<string> Roles => _roles;
 
@@ -56,6 +58,16 @@ public class WorkspaceState
     public bool IsSuperAdmin => Roles.Contains(RoleNames.SuperAdmin);
 
     public bool IsOrganizationAdmin => IsSuperAdmin || Roles.Contains(RoleNames.OrganizationAdmin);
+
+    public bool IsOrganizationValidator => Roles.Contains(RoleNames.OrganizationValidator);
+
+    public bool IsOrganizationUser => Roles.Contains(RoleNames.OrganizationUser);
+
+    /// <summary>The batch currently open in this session.</summary>
+    public BatchSummary? CurrentBatch { get; private set; }
+
+    /// <summary>True when the invoice panel has edits that have not been saved yet.</summary>
+    public bool HasUnsavedEdits { get; private set; }
 
     // ── Event ─────────────────────────────────────────────────────────────────
 
@@ -173,11 +185,13 @@ public class WorkspaceState
 
     /// <summary>Capture tenant context and roles for the signed-in user.</summary>
     public void SetAuthentication(
+        string? userId,
         string? tenantId,
         string? tenantName,
         string? userEmail,
         IEnumerable<string>? roles)
     {
+        CurrentUserId    = string.IsNullOrWhiteSpace(userId)     ? null : userId.Trim();
         TenantId         = string.IsNullOrWhiteSpace(tenantId)   ? null : tenantId.Trim();
         TenantName       = string.IsNullOrWhiteSpace(tenantName) ? null : tenantName.Trim();
         CurrentUserEmail = string.IsNullOrWhiteSpace(userEmail)  ? null : userEmail.Trim();
@@ -191,6 +205,7 @@ public class WorkspaceState
 
     public void ClearAuthentication()
     {
+        CurrentUserId    = null;
         TenantId         = null;
         TenantName       = null;
         CurrentUserEmail = null;
@@ -208,6 +223,18 @@ public class WorkspaceState
         if (processed > 0) parts.Add($"{processed} processed");
         if (suspect   > 0) parts.Add($"{suspect} suspect");
         return string.Join(" · ", parts);
+    }
+
+    public void SetCurrentBatch(BatchSummary? batch)
+    {
+        CurrentBatch = batch;
+        NotifyChange();
+    }
+
+    public void SetHasUnsavedEdits(bool value)
+    {
+        HasUnsavedEdits = value;
+        NotifyChange();
     }
 
     private void NotifyChange() => OnChange?.Invoke();

@@ -1,6 +1,6 @@
 @inject WorkspaceState State
 @inject IInvoiceProcessingService ProcessingService
-@inject IConfigurationService ConfigService
+
 @inject IDocumentExportService ExportService
 @inject IJSRuntime JS
 @inject DatabaseService DatabaseSvc
@@ -114,7 +114,7 @@
                                tabindex="-1"
                                data-edit-field="@k"
                                value="@_editValues.GetValueOrDefault(k, string.Empty)"
-                               @oninput="@(e => _editValues[k] = e.Value?.ToString() ?? string.Empty)"
+                               @oninput="@(e => { _editValues[k] = e.Value?.ToString() ?? string.Empty; State.SetHasUnsavedEdits(true); })"
                                @onclick:stopPropagation="true" />
                     }
                     else
@@ -160,7 +160,7 @@
                                        tabindex="-1"
                                        data-edit-field="@descKey"
                                        value="@item.Description"
-                                       @oninput="@(e => inv.Items[idx].Description = e.Value?.ToString() ?? string.Empty)"
+                                       @oninput="@(e => { inv.Items[idx].Description = e.Value?.ToString() ?? string.Empty; State.SetHasUnsavedEdits(true); })"
                                        @onclick:stopPropagation="true" />
                             }
                             else
@@ -184,7 +184,7 @@
                                            tabindex="-1"
                                            data-edit-field="@qtyKey"
                                            value="@(inv.Items[idx].Quantity?.ToString("G"))"
-                                           @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].Quantity = v; })"
+                                           @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].Quantity = v; State.SetHasUnsavedEdits(true); })"
                                            @onclick:stopPropagation="true" />
                                 }
                                 else
@@ -204,7 +204,7 @@
                                            tabindex="-1"
                                            data-edit-field="@upKey"
                                            value="@(inv.Items[idx].UnitPrice?.ToString("F2"))"
-                                           @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].UnitPrice = v; })"
+                                           @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].UnitPrice = v; State.SetHasUnsavedEdits(true); })"
                                            @onclick:stopPropagation="true" />
                                 }
                                 else
@@ -224,7 +224,7 @@
                                            tabindex="-1"
                                            data-edit-field="@amtKey"
                                            value="@(inv.Items[idx].Amount?.ToString("F2"))"
-                                           @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].Amount = v; })"
+                                           @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) inv.Items[idx].Amount = v; State.SetHasUnsavedEdits(true); })"
                                            @onclick:stopPropagation="true" />
                                 }
                                 else
@@ -321,6 +321,7 @@
             _shouldFocusFirstField = _invoice is not null;
             // clear any previously selected field so inputs don't appear
             State.SetSelectedField(null);
+            State.SetHasUnsavedEdits(false);
             PopulateEditValues();
             ComputeSuspectCount();
         }
@@ -461,12 +462,12 @@ if (_invoice?.IsValidationAccepted == true) return null;
             var updated = BuildUpdatedInvoice();
             // Saving via Save Changes should mark the invoice as validated/accepted
             updated.IsValidationAccepted = true;
-            var settings = await ConfigService.LoadSettingsAsync();
-            await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, updated, settings.ProjectArtifacts);
+            await ProcessingService.SaveInvoiceAsync(State.SelectedFilePath, updated);
 
             // Update reference without resetting _editValues (user may still be editing)
             _invoice = updated;
             State.SetSelectedInvoice(updated);
+            State.SetHasUnsavedEdits(false);
 
             // Update the file list dot immediately
             var current = State.SelectedFile;
@@ -530,6 +531,7 @@ if (_invoice?.IsValidationAccepted == true) return null;
         // Mark the invoice dirty so further changes can be made
         _invoice.IsValidationAccepted = false;
         State.SetSelectedInvoice(_invoice);
+        State.SetHasUnsavedEdits(true);
         _shouldFocusFirstField = true;
         ComputeSuspectCount();
         _validatedJson = null;
@@ -545,20 +547,14 @@ if (_invoice?.IsValidationAccepted == true) return null;
         StateHasChanged();
         try
         {
-            // Build a minimal OCRFile so DocumentExportService can write the DOCX.
-            var ocrFile = new K_OCR.Models.OCRFile
-            {
-                FilePath         = State.SelectedFilePath,
-                OcrText          = string.Empty,
-                ValidatedOcrText = Newtonsoft.Json.JsonConvert.SerializeObject(_invoice),
-            };
+            var validatedOcrText = Newtonsoft.Json.JsonConvert.SerializeObject(_invoice);
 
             // ExportToDocxAsync writes to a file path; use a temp file then read it back.
             var tmp = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
                 System.IO.Path.GetFileNameWithoutExtension(State.SelectedFilePath) + ".docx");
 
-            await ExportService.ExportToDocxAsync(ocrFile, tmp);
+            await ExportService.ExportToDocxAsync(validatedOcrText, tmp);
 
             var bytes    = await System.IO.File.ReadAllBytesAsync(tmp);
             var base64   = Convert.ToBase64String(bytes);
@@ -650,7 +646,7 @@ if (_invoice?.IsValidationAccepted == true) return null;
         StateHasChanged();
         try
         {
-            var ocrFile = await DatabaseSvc.GetOCRFileByPathAsync(State.SelectedFilePath);
+            var ocrFile = await DatabaseSvc.GetInvoiceByFilePathAsync(State.SelectedFilePath);
             if (ocrFile is not null)
             {
                 var raw = ocrFile.OcrText; // always the original OCR output
@@ -686,7 +682,7 @@ if (_invoice?.IsValidationAccepted == true) return null;
         StateHasChanged();
         try
         {
-            var ocrFile = await DatabaseSvc.GetOCRFileByPathAsync(State.SelectedFilePath);
+            var ocrFile = await DatabaseSvc.GetInvoiceByFilePathAsync(State.SelectedFilePath);
             if (ocrFile is null)
             {
                 _validatedJson = "(file not found in database)";

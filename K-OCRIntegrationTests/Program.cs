@@ -8,18 +8,18 @@ using K_OCR.Data;
 // Mock database service for testing
 public class MockDatabaseService
 {
-    private readonly Dictionary<string, OCRFile> _mockData = new();
+    private readonly Dictionary<string, Invoice> _mockData = new();
 
-    public async Task<OCRFile?> GetOCRFileByPathAsync(string filePath)
+    public async Task<Invoice?> GetInvoiceByFilePathAsync(string filePath)
     {
-        _mockData.TryGetValue(filePath, out var file);
-        return await Task.FromResult(file);
+        _mockData.TryGetValue(filePath, out var invoice);
+        return await Task.FromResult(invoice);
     }
 
-    public async Task<OCRFile> SaveOCRFileAsync(OCRFile ocrFile)
+    public async Task<Invoice> SaveInvoiceAsync(Invoice invoice)
     {
-        _mockData[ocrFile.FilePath] = ocrFile;
-        return await Task.FromResult(ocrFile);
+        _mockData[invoice.FilePath ?? string.Empty] = invoice;
+        return await Task.FromResult(invoice);
     }
 
     public async Task<bool> IsDatabaseAvailableAsync()

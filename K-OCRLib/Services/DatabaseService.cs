@@ -59,7 +59,7 @@ namespace K_OCR.Services
             try
             {
                 // Simple query to test database connectivity
-                await _context.OCRFiles.FirstOrDefaultAsync(f => false);
+                await _context.Invoices.FirstOrDefaultAsync(f => false);
                 return true;
             }
             catch (Exception ex)
@@ -91,7 +91,7 @@ namespace K_OCR.Services
             return await _context.Invoices
                 .Include(i => i.Items)
                 .Include(i => i.DocumentFields)
-                .OrderByDescending(i => i.ProcessedDate)
+                .OrderByDescending(i => i.UploadedAtUtc)
                 .ToListAsync();
         }
 
@@ -140,87 +140,17 @@ namespace K_OCR.Services
             }
         }
 
-        // OCR File operations
-        public async Task<OCRFile?> GetOCRFileByIdAsync(int id)
-        {
-            return await _context.OCRFiles.FindAsync(id);
-        }
-
-        public async Task<OCRFile?> GetOCRFileByPathAsync(string filePath)
-        {
-            return await _context.OCRFiles.FirstOrDefaultAsync(f => f.FilePath == filePath);
-        }
-
-        public async Task<List<OCRFile>> GetAllOCRFilesAsync()
-        {
-            return await _context.OCRFiles
-                .OrderByDescending(f => f.Id)
-                .ToListAsync();
-        }
-
-        public async Task<OCRFile> SaveOCRFileAsync(OCRFile ocrFile)
-        {
-            if (ocrFile == null)
-                throw new ArgumentNullException(nameof(ocrFile));
-            
-            if (string.IsNullOrEmpty(ocrFile.FilePath))
-                throw new ArgumentException("FilePath cannot be null or empty", nameof(ocrFile.FilePath));
-
-            try
-            {
-                if (ocrFile.Id == 0)
-                {
-                    _context.OCRFiles.Add(ocrFile);
-                }
-                else
-                {
-                    _context.OCRFiles.Update(ocrFile);
-                }
-
-                await _context.SaveChangesAsync();
-                _logger.LogInformation($"OCR file saved with ID: {ocrFile.Id}, Path: {ocrFile.FilePath}");
-                return ocrFile;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error saving OCR file: {ocrFile.FilePath}");
-                throw;
-            }
-        }
-
-        public async Task<bool> DeleteOCRFileAsync(int id)
-        {
-            try
-            {
-                var ocrFile = await _context.OCRFiles.FindAsync(id);
-                if (ocrFile != null)
-                {
-                    _context.OCRFiles.Remove(ocrFile);
-                    await _context.SaveChangesAsync();
-                    _logger.LogInformation($"OCR file deleted with ID: {id}");
-                    return true;
-                }
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error deleting OCR file with ID: {id}");
-                throw;
-            }
-        }
-
         /// <summary>
-        /// Deletes all invoices, OCR files, and every related record (items, fields,
-        /// pages) from the database. Cascade-delete handles child records automatically.
+        /// Deletes all invoices and every related record (items, fields) from the database.
+        /// Cascade-delete handles child records automatically.
         /// </summary>
         public async Task ClearAllDataAsync()
         {
             try
             {
-                _context.OCRFiles.RemoveRange(_context.OCRFiles);
                 _context.Invoices.RemoveRange(_context.Invoices);
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("All invoice and OCR data cleared from database.");
+                _logger.LogInformation("All invoice data cleared from database.");
             }
             catch (Exception ex)
             {
@@ -229,90 +159,37 @@ namespace K_OCR.Services
             }
         }
 
-        // Multi-page document operations
-        public async Task<OCRFile> SaveMultiPageDocumentAsync(
-            string filePath,
-            List<string> pageJsonData,
-            string mergedJsonData)
+        /// <summary>
+        /// Returns all invoices for a given batch, projecting only non-blob columns
+        /// so large OCR text fields are not fetched for list views.
+        /// </summary>
+        public async Task<List<Invoice>> GetInvoicesByBatchAsync(int batchId)
         {
-            if (string.IsNullOrEmpty(filePath))
-                throw new ArgumentException("FilePath cannot be null or empty", nameof(filePath));
-
-            if (pageJsonData == null || pageJsonData.Count == 0)
-                throw new ArgumentException("Page data cannot be null or empty", nameof(pageJsonData));
-
-            try
-            {
-                // Check if document already exists
-                var existingOcrFile = await _context.OCRFiles
-                    .Include(o => o.Pages)
-                    .FirstOrDefaultAsync(o => o.FilePath == filePath);
-
-                if (existingOcrFile != null)
+            return await _context.Invoices
+                .Where(i => i.BatchId == batchId)
+                .Select(i => new Invoice
                 {
-                    // Update existing document
-                    existingOcrFile.TotalPages = pageJsonData.Count;
-                    existingOcrFile.MergedJsonData = mergedJsonData;
-                    existingOcrFile.OcrText = mergedJsonData; // Also store in OcrText for compatibility
-                    existingOcrFile.IsFullyProcessed = true;
-
-                    // Remove old pages
-                    _context.DocumentPages.RemoveRange(existingOcrFile.Pages);
-                }
-                else
-                {
-                    // Create new document
-                    existingOcrFile = new OCRFile
-                    {
-                        FilePath = filePath,
-                        TotalPages = pageJsonData.Count,
-                        MergedJsonData = mergedJsonData,
-                        OcrText = mergedJsonData, // Also store in OcrText for compatibility
-                        IsFullyProcessed = true
-                    };
-
-                    _context.OCRFiles.Add(existingOcrFile);
-                }
-
-                // Save to get the ID
-                await _context.SaveChangesAsync();
-
-                // Add page records
-                for (int i = 0; i < pageJsonData.Count; i++)
-                {
-                    var page = new DocumentPage
-                    {
-                        OCRFileId = existingOcrFile.Id,
-                        PageNumber = i + 1, // 1-based page numbering
-                        PageFilePath = $"{filePath}#page{i + 1}",
-                        JsonData = pageJsonData[i],
-                        OcrText = pageJsonData[i],
-                        IsProcessed = true,
-                        ProcessedDate = DateTime.UtcNow
-                    };
-
-                    _context.DocumentPages.Add(page);
-                }
-
-                await _context.SaveChangesAsync();
-
-                _logger.LogInformation(
-                    $"Saved multi-page document: {filePath} ({pageJsonData.Count} pages)");
-
-                return existingOcrFile;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error saving multi-page document: {filePath}");
-                throw;
-            }
-        }
-
-        public async Task<List<DocumentPage>> GetDocumentPagesAsync(int ocrFileId)
-        {
-            return await _context.DocumentPages
-                .Where(p => p.OCRFileId == ocrFileId)
-                .OrderBy(p => p.PageNumber)
+                    Id                   = i.Id,
+                    BatchId              = i.BatchId,
+                    VendorName           = i.VendorName,
+                    CustomerName         = i.CustomerName,
+                    InvoiceId            = i.InvoiceId,
+                    InvoiceDate          = i.InvoiceDate,
+                    DueDate              = i.DueDate,
+                    PurchaseOrder        = i.PurchaseOrder,
+                    Subtotal             = i.Subtotal,
+                    TotalTax             = i.TotalTax,
+                    Shipping             = i.Shipping,
+                    Total                = i.Total,
+                    FilePath             = i.FilePath,
+                    UploadedAtUtc        = i.UploadedAtUtc,
+                    ProcessedAtUtc       = i.ProcessedAtUtc,
+                    TotalPages           = i.TotalPages,
+                    IsFullyProcessed     = i.IsFullyProcessed,
+                    IsValidationAccepted = i.IsValidationAccepted,
+                    OrganizationId       = i.OrganizationId,
+                })
+                .OrderBy(i => i.FilePath)
                 .ToListAsync();
         }
     }

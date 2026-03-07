@@ -17,6 +17,56 @@ namespace K_OCRLib.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
 
+            modelBuilder.Entity("K_OCR.Models.Batch", b =>
+                {
+                    b.Property<int>("BatchId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BatchNumber")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FolderPath")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LockAcquiredAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LockedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("BatchId");
+
+                    b.HasIndex("OrganizationId", "BatchNumber")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Batches");
+                });
+
             modelBuilder.Entity("K_OCR.Models.DocumentField", b =>
                 {
                     b.Property<int>("Id")
@@ -53,51 +103,16 @@ namespace K_OCRLib.Migrations
                     b.ToTable("DocumentFields");
                 });
 
-            modelBuilder.Entity("K_OCR.Models.DocumentPage", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsProcessed")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("JsonData")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("OCRFileId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("OcrText")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PageFilePath")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("PageNumber")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("ProcessedDate")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OCRFileId", "PageNumber")
-                        .IsUnique();
-
-                    b.ToTable("DocumentPages");
-                });
-
             modelBuilder.Entity("K_OCR.Models.Invoice", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("BatchId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("CustomerName")
-                        .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
@@ -105,7 +120,6 @@ namespace K_OCRLib.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("FilePath")
-                        .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("TEXT");
 
@@ -113,19 +127,29 @@ namespace K_OCRLib.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("InvoiceId")
-                        .IsRequired()
                         .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsFullyProcessed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsValidationAccepted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("MergedJsonData")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OcrText")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("OrganizationId")
                         .HasMaxLength(450)
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime>("ProcessedDate")
+                    b.Property<DateTime?>("ProcessedAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PurchaseOrder")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
@@ -135,18 +159,31 @@ namespace K_OCRLib.Migrations
                     b.Property<decimal?>("Subtotal")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("TesseractOcrText")
+                        .HasColumnType("TEXT");
+
                     b.Property<decimal?>("Total")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("TotalPages")
+                        .HasColumnType("INTEGER");
 
                     b.Property<decimal?>("TotalTax")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<DateTime>("UploadedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ValidatedOcrText")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("VendorName")
-                        .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
 
                     b.ToTable("Invoices");
                 });
@@ -181,42 +218,27 @@ namespace K_OCRLib.Migrations
                     b.ToTable("InvoiceItems");
                 });
 
-            modelBuilder.Entity("K_OCR.Models.OCRFile", b =>
+            modelBuilder.Entity("K_OCR.Models.UserBatchSession", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("FilePath")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsFullyProcessed")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("MergedJsonData")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("OcrText")
-                        .IsRequired()
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("OrganizationId")
                         .HasMaxLength(450)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TesseractOcrText")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("TotalPages")
+                    b.Property<int?>("BatchId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("ValidatedOcrText")
+                    b.Property<DateTime>("LastAccessedAtUtc")
                         .HasColumnType("TEXT");
 
-                    b.HasKey("Id");
+                    b.HasKey("UserId", "OrganizationId");
 
-                    b.ToTable("OcrFiles");
+                    b.HasIndex("BatchId");
+
+                    b.ToTable("UserBatchSessions");
                 });
 
             modelBuilder.Entity("K_OCR.Models.DocumentField", b =>
@@ -230,15 +252,15 @@ namespace K_OCRLib.Migrations
                     b.Navigation("Invoice");
                 });
 
-            modelBuilder.Entity("K_OCR.Models.DocumentPage", b =>
+            modelBuilder.Entity("K_OCR.Models.Invoice", b =>
                 {
-                    b.HasOne("K_OCR.Models.OCRFile", "OCRFile")
-                        .WithMany("Pages")
-                        .HasForeignKey("OCRFileId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                    b.HasOne("K_OCR.Models.Batch", "Batch")
+                        .WithMany()
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("OCRFile");
+                    b.Navigation("Batch");
                 });
 
             modelBuilder.Entity("K_OCR.Models.InvoiceItem", b =>
@@ -252,16 +274,19 @@ namespace K_OCRLib.Migrations
                     b.Navigation("Invoice");
                 });
 
+            modelBuilder.Entity("K_OCR.Models.UserBatchSession", b =>
+                {
+                    b.HasOne("K_OCR.Models.Batch", null)
+                        .WithMany()
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("K_OCR.Models.Invoice", b =>
                 {
                     b.Navigation("DocumentFields");
 
                     b.Navigation("Items");
-                });
-
-            modelBuilder.Entity("K_OCR.Models.OCRFile", b =>
-                {
-                    b.Navigation("Pages");
                 });
 #pragma warning restore 612, 618
         }

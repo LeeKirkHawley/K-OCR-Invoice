@@ -51,10 +51,6 @@
                         <InputText class="form-control" @bind-Value="_createModel.AdminEmail" />
                         <ValidationMessage For="() => _createModel.AdminEmail" />
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Base directory <span class="text-muted small">(optional)</span></label>
-                        <InputText class="form-control" @bind-Value="_createModel.BaseDirectory" placeholder="/path/to/tenant-root" />
-                    </div>
                     <button type="submit" class="btn btn-primary" disabled="@_isCreating">
                         @(_isCreating ? "Creating…" : "Create organization")
                     </button>
@@ -182,6 +178,20 @@
     </div>
 }
 
+@if (_errorDialogMessage is not null)
+{
+    <div class="confirm-delete-overlay" @onclick="CloseErrorDialog">
+        <div class="confirm-delete-dialog" @onclick:stopPropagation="true">
+            <div class="confirm-delete-icon">&#9888;</div>
+            <h2 class="confirm-delete-title">Cannot create organization</h2>
+            <p class="confirm-delete-body">@_errorDialogMessage</p>
+            <div class="confirm-delete-actions">
+                <button class="btn btn-outline-secondary" @onclick="CloseErrorDialog">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool _visible;
     private readonly CreateOrganizationRequest _createModel = new();
@@ -194,6 +204,7 @@
     private string? _deletingOrgId;
     private string? _confirmDeleteOrgId;
     private string? _confirmDeleteOrgName;
+    private string? _errorDialogMessage;
 
     protected override void OnInitialized()
     {
@@ -246,6 +257,7 @@
 
     private void OpenEmailConfig()
     {
+        _visible = false;
         EmailConfigDialogSvc.RequestOpen();
     }
 
@@ -260,8 +272,11 @@
             _createModel.Description = string.Empty;
             _createModel.AdminName = string.Empty;
             _createModel.AdminEmail = string.Empty;
-            _createModel.BaseDirectory = null;
             await LoadOrganizationsAsync();
+        }
+        catch (DuplicateOrganizationNameException ex)
+        {
+            _errorDialogMessage = ex.Message;
         }
         catch (Exception ex)
         {
@@ -342,6 +357,11 @@
     {
         _confirmDeleteOrgId = null;
         _confirmDeleteOrgName = null;
+    }
+
+    private void CloseErrorDialog()
+    {
+        _errorDialogMessage = null;
     }
 
     private Task ConfirmDeleteAsync() => DeleteOrganizationAsync(_confirmDeleteOrgId!);

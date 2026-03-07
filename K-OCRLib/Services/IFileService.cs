@@ -15,10 +15,11 @@ namespace K_OCR.Services
         Task SaveContextAsync(string imagePath, PipelineContext context, string? artifactsDirectory = null);
 
         /// <summary>
-        /// Save only the validated Layout (user edits) to ValidatedOcrText without
-        /// touching OcrText, which always remains the original OCR output.
+        /// Save the validated Invoice DTO back to the Invoice row: updates all scalar
+        /// field values, sets IsValidationAccepted = true, ProcessedAtUtc, and ValidatedOcrText.
+        /// OcrText (original OCR output) is never changed by this method.
         /// </summary>
-        Task SaveValidatedLayoutAsync(string imagePath, List<K_OCR.Models.InvoiceDto> invoices);
+        Task SaveValidatedLayoutAsync(string imagePath, K_OCR.Models.InvoiceDto invoice);
         
         /// <summary>
         /// Check if cached JSON exists for an image

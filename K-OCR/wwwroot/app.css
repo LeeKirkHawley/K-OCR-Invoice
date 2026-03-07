@@ -153,6 +153,98 @@ html, body {
     color: #999;
 }
 
+/* ── Batch selector ──────────────────────────────────────────────────────── */
+.batch-selector {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.batch-selector-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px;
+    color: #d4d4d4;
+    padding: 3px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 220px;
+}
+
+.batch-selector-btn:hover {
+    background: rgba(255,255,255,0.18);
+}
+
+.batch-selector-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 180px;
+}
+
+.batch-selector-caret {
+    font-size: 0.65rem;
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.batch-selector-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+}
+
+.batch-selector-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 200px;
+    max-width: 300px;
+    background: #2d2d2d;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 1000;
+    padding: 4px 0;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.batch-selector-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    color: #d4d4d4;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.batch-selector-item:hover {
+    background: #3a3a3a;
+}
+
+.batch-selector-item.active {
+    color: #4ec9b0;
+    font-weight: 600;
+}
+
+.batch-selector-empty {
+    color: #888;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
 .kocr-menu-bar {
     flex: 1;
     background: #252526;

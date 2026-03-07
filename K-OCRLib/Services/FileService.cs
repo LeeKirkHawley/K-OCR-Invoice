@@ -1,8 +1,6 @@
 ﻿using System.IO;
 using K_OCR.Models;
 using K_OCR.PipelineService;
-using System.IO;
-using K_OCR.PipelineService;
 
 
 namespace K_OCR.Services
@@ -17,17 +15,17 @@ namespace K_OCR.Services
         }
         public async Task<PipelineContext?> LoadCachedContextAsync(string imagePath, string? artifactsDirectory = null)
         {
-            var ocrFile = await _databaseService.GetOCRFileByPathAsync(imagePath);
-            if (ocrFile != null)
+            var invoice = await _databaseService.GetInvoiceByFilePathAsync(imagePath);
+            if (invoice != null)
             {
                 PipelineContext? context = null;
 
                 // Load the main context from OcrText
-                if (!string.IsNullOrEmpty(ocrFile.OcrText))
+                if (!string.IsNullOrEmpty(invoice.OcrText))
                 {
                     try
                     {
-                        context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(ocrFile.OcrText);
+                        context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(invoice.OcrText);
                     }
                     catch (Exception ex)
                     {
@@ -36,12 +34,12 @@ namespace K_OCR.Services
                 }
 
                 // If we have a context and ValidatedOcrText exists, replace the Layout with validated data
-                if (context != null && !string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+                if (context != null && !string.IsNullOrEmpty(invoice.ValidatedOcrText))
                 {
                     try
                     {
                         // ValidatedOcrText contains the validated invoice array
-                        var validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(ocrFile.ValidatedOcrText);
+                        var validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(invoice.ValidatedOcrText);
                         if (validatedInvoices != null)
                         {
                             context.Layout = validatedInvoices;
@@ -57,9 +55,9 @@ namespace K_OCR.Services
                 // written before the column existed (backward compatibility).
                 if (context != null
                     && string.IsNullOrWhiteSpace(context.TesseractOcrText)
-                    && !string.IsNullOrWhiteSpace(ocrFile.TesseractOcrText))
+                    && !string.IsNullOrWhiteSpace(invoice.TesseractOcrText))
                 {
-                    context.TesseractOcrText = ocrFile.TesseractOcrText;
+                    context.TesseractOcrText = invoice.TesseractOcrText;
                 }
 
                 return context;
@@ -87,8 +85,8 @@ namespace K_OCR.Services
                 }
             }
 
-            // Upsert: load existing row so we never create duplicate entries for the same file.
-            var existing = await _databaseService.GetOCRFileByPathAsync(imagePath);
+            // Upsert: load existing invoice row and update OCR fields
+            var existing = await _databaseService.GetInvoiceByFilePathAsync(imagePath);
 
             if (existing != null)
             {
@@ -96,52 +94,56 @@ namespace K_OCR.Services
                 existing.TesseractOcrText = context.TesseractOcrText;
                 existing.ValidatedOcrText = validatedJson;
                 existing.IsFullyProcessed = isFullyProcessed;
-                await _databaseService.SaveOCRFileAsync(existing);
+                existing.ProcessedAtUtc = isFullyProcessed ? DateTime.UtcNow : existing.ProcessedAtUtc;
+                await _databaseService.SaveInvoiceAsync(existing);
                 System.Console.WriteLine($"[Database Cache] Updated OCR data for: {Path.GetFileName(imagePath)}");
             }
             else
             {
-                var ocrFile = new OCRFile
-                {
-                    FilePath = imagePath,
-                    OcrText = json,
-                    TesseractOcrText = context.TesseractOcrText,
-                    ValidatedOcrText = validatedJson,
-                    IsFullyProcessed = isFullyProcessed
-                };
-                await _databaseService.SaveOCRFileAsync(ocrFile);
-                System.Console.WriteLine($"[Database Cache] Saved OCR data for: {Path.GetFileName(imagePath)}");
+                // Cannot create invoice without BatchId; log and skip
+                System.Console.WriteLine($"[Database Cache] No invoice record found for: {Path.GetFileName(imagePath)} — skipping save");
             }
         }
         
-        public async Task SaveValidatedLayoutAsync(string imagePath, List<K_OCR.Models.InvoiceDto> invoices)
+        public async Task SaveValidatedLayoutAsync(string imagePath, K_OCR.Models.InvoiceDto invoice)
         {
-            var validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(invoices, Newtonsoft.Json.Formatting.Indented);
+            // Serialize as a single-element list to remain consistent with LoadCachedContextAsync
+            // which deserialises ValidatedOcrText as List<InvoiceDto>.
+            var validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+                new List<K_OCR.Models.InvoiceDto> { invoice }, Newtonsoft.Json.Formatting.Indented);
 
-            var existing = await _databaseService.GetOCRFileByPathAsync(imagePath);
+            var existing = await _databaseService.GetInvoiceByFilePathAsync(imagePath);
             if (existing != null)
             {
-                existing.ValidatedOcrText = validatedJson;
-                await _databaseService.SaveOCRFileAsync(existing);
+                // Update all scalar invoice fields from the DTO
+                existing.VendorName           = invoice.VendorName;
+                existing.CustomerName         = invoice.CustomerName;
+                existing.InvoiceId            = invoice.InvoiceId;
+                existing.PurchaseOrder        = invoice.PurchaseOrder;
+                existing.Subtotal             = invoice.Subtotal;
+                existing.TotalTax             = invoice.TotalTax;
+                existing.Shipping             = invoice.Shipping;
+                existing.Total                = invoice.Total;
+                existing.InvoiceDate          = DateTime.TryParse(invoice.InvoiceDate, out var invDate) ? invDate : null;
+                existing.DueDate              = DateTime.TryParse(invoice.DueDate,     out var dueDate) ? dueDate : null;
+
+                // Mark the invoice as human-validated and record when
+                existing.ValidatedOcrText     = validatedJson;
+                existing.IsValidationAccepted = true;
+                existing.ProcessedAtUtc       = DateTime.UtcNow;
+
+                await _databaseService.SaveInvoiceAsync(existing);
             }
             else
             {
-                // No OCR row yet — create a minimal one (edge case: validate before OCR)
-                var ocrFile = new OCRFile
-                {
-                    FilePath         = imagePath,
-                    OcrText          = string.Empty,
-                    ValidatedOcrText = validatedJson,
-                    IsFullyProcessed = false
-                };
-                await _databaseService.SaveOCRFileAsync(ocrFile);
+                System.Console.WriteLine($"[Database Cache] No invoice record found for: {Path.GetFileName(imagePath)} — skipping validated layout save");
             }
         }
 
         public bool HasCachedJson(string imagePath)
         {
-            var ocrFile = _databaseService.GetOCRFileByPathAsync(imagePath).GetAwaiter().GetResult();
-            return ocrFile != null && (!string.IsNullOrEmpty(ocrFile.OcrText) || !string.IsNullOrEmpty(ocrFile.ValidatedOcrText));
+            var invoice = _databaseService.GetInvoiceByFilePathAsync(imagePath).GetAwaiter().GetResult();
+            return invoice != null && (!string.IsNullOrEmpty(invoice.OcrText) || !string.IsNullOrEmpty(invoice.ValidatedOcrText));
         }
         
         public IEnumerable<string> LoadFiles(string directory, string[]? extensions = null)

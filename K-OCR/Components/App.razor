@@ -1,4 +1,6 @@
-﻿<!DOCTYPE html>
+﻿@inject StartupErrorState StartupErr
+
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -15,7 +17,20 @@
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    @if (StartupErr.HasError)
+    {
+        <div class="d-flex align-items-center justify-content-center vh-100">
+            <div class="text-center p-4 border rounded bg-danger-subtle">
+                <h1 class="text-danger">Configuration Error</h1>
+                <p class="mt-3">@StartupErr.ErrorMessage</p>
+                <p class="text-muted">Edit appsettings.json and restart the application.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <Routes @rendermode="InteractiveServer" />
+    }
     <ReconnectModal />
     <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>

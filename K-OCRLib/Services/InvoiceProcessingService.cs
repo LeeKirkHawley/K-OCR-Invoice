@@ -162,16 +162,16 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         return results;
     }
     
-    public async Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice, string? artifactsDirectory = null)
+    public async Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice)
     {
-        // Only update ValidatedOcrText — OcrText always stays as the original OCR output.
-        var invoices = new List<InvoiceDto> { invoice };
-        await _fileService.SaveValidatedLayoutAsync(originalFilePath, invoices);
+        // Updates all scalar fields, IsValidationAccepted, ProcessedAtUtc, and ValidatedOcrText
+        // on the Invoice row. OcrText (original OCR output) is never overwritten here.
+        await _fileService.SaveValidatedLayoutAsync(originalFilePath, invoice);
     }
     
-    public async Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath, string? artifactsDirectory = null)
+    public async Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath)
     {
-        var context = await _fileService.LoadCachedContextAsync(filePath, artifactsDirectory);
+        var context = await _fileService.LoadCachedContextAsync(filePath);
         
         if (context?.Layout == null)
             return null;

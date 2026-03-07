@@ -4,14 +4,17 @@
 @inject IJSRuntime JS
 @inject WorkspaceState State
 @inject IInvoiceProcessingService ProcessingService
-@inject IConfigurationService ConfigService
+
 @inject ToastService Toast
 @inject SettingsDialogService SettingsSvc
 @inject AuthDialogService AuthSvc
 @inject SuperAdminDialogService SuperAdminDialogSvc
-@inject OrgUsersDialogService OrgUsersDialogSvc
-@inject BatchProcessDialogService BatchSvc
+@inject OrgUserManagementDialogService OrgUserMgmtDialogSvc
+@inject BatchDialogService BatchDialogSvc
 @inject NavigationManager Navigation
+@inject IBatchService BatchSvc
+@inject DatabaseService DatabaseSvc
+@inject IFileService FileService
 @implements IAsyncDisposable
 
 <PageTitle>@(State.SelectedFile?.FileName is { } fn ? $"{fn} — K-OCR" : "K-OCR")</PageTitle>
@@ -20,6 +23,36 @@
     <div class="kocr-top-left">
         <span class="kocr-title">K-OCR</span>
         <span class="kocr-status">@State.StatusMessage</span>
+        @if (State.IsAuthenticated && State.TenantId is not null)
+        {
+            <div class="batch-selector @(_batchDropdownOpen ? "open" : "")">
+                <button class="batch-selector-btn" @onclick="ToggleBatchDropdownAsync">
+                    <span class="batch-selector-label">@(State.CurrentBatch?.Name ?? "Select a batch…")</span>
+                    <span class="batch-selector-caret">▾</span>
+                </button>
+                @if (_batchDropdownOpen)
+                {
+                    <div class="batch-selector-backdrop" @onclick="CloseBatchDropdown"></div>
+                    <div class="batch-selector-dropdown">
+                        @if (_orgBatches.Length == 0)
+                        {
+                            <div class="batch-selector-empty">No batches found.</div>
+                        }
+                        else
+                        {
+                            @foreach (var b in _orgBatches)
+                            {
+                                var batchItem = b;
+                                <button class="batch-selector-item @(State.CurrentBatch?.BatchId == batchItem.BatchId ? "active" : "")"
+                                        @onclick="() => SelectBatchAsync(batchItem)">
+                                    @batchItem.Name
+                                </button>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        }
     </div>
     <div class="kocr-top-right">
         @if (State.IsAuthenticated)
@@ -50,12 +83,6 @@
                             File
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="fileMenu">
-                            <li>
-                                <button class="dropdown-item" @onclick="() => BatchSvc.RequestOpen()">
-                                    Batch Process…
-                                </button>
-                            </li>
-                            <li><hr class="dropdown-divider" /></li>
                             <li>
                                 <a class="dropdown-item" href="#" @onclick="Exit">
                                     Exit
@@ -98,8 +125,13 @@
                             @if (State.IsOrganizationAdmin)
                             {
                                 <li>
-                                    <button class="dropdown-item" @onclick="() => OrgUsersDialogSvc.RequestOpen()">
-                                        Organization Users
+                                    <button class="dropdown-item" @onclick="() => BatchDialogSvc.RequestOpen()">
+                                        Manage Batches
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="dropdown-item" @onclick="() => OrgUserMgmtDialogSvc.RequestOpen()">
+                                        Manage Users
                                     </button>
                                 </li>
                             }
@@ -200,9 +232,27 @@
 <Auth />
 <SuperAdmin />
 <EmailConfig />
-<OrganizationUsers />
-<BatchProcess />
+<OrgUserManagement />
+<ManageBatches />
 <ToastContainer />
+
+@if (_showUnsavedConfirm)
+{
+    <div class="superadmin-overlay" @onclick="CancelBatchSwitch">
+        <div class="superadmin-dialog" style="max-width:420px" @onclick:stopPropagation="true">
+            <div class="superadmin-header">
+                <h1 class="superadmin-title">Unsaved Changes</h1>
+            </div>
+            <div class="superadmin-content">
+                <p>You have unsaved changes in the current invoice. Save before switching batches?</p>
+                <div class="d-flex gap-2 justify-content-end mt-3">
+                    <button class="btn btn-secondary" @onclick="CancelBatchSwitch">Cancel</button>
+                    <button class="btn btn-primary" @onclick="ConfirmBatchSwitchAsync">Save &amp; Switch</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     [CascadingParameter]
@@ -212,7 +262,156 @@
     private DotNetObjectReference<MainLayout>? _selfRef;
     private InvoicePanel? _invoicePanel;
 
+    // Batch selector state
+    private BatchSummary[] _orgBatches = [];
+    private bool _batchDropdownOpen;
+    private BatchSummary? _pendingBatch;
+    private bool _showUnsavedConfirm;
+    private bool _shouldOpenBatchDialog;
+
     private void OpenSettingsAsync() => SettingsSvc.RequestOpen();
+
+    // ── Batch initialisation (5a) ─────────────────────────────────────────
+
+    private async Task InitializeBatchAsync()
+    {
+        if (State.TenantId is null || State.CurrentUserId is null) return;
+
+        _orgBatches = await BatchSvc.GetBatchesForOrgAsync(State.TenantId);
+
+        var lastBatchId = await BatchSvc.GetUserLastBatchIdAsync(State.CurrentUserId, State.TenantId);
+        if (lastBatchId is not null)
+        {
+            var summary = _orgBatches.FirstOrDefault(b => b.BatchId == lastBatchId);
+            if (summary is not null)
+            {
+                await LoadBatchFilesAsync(summary, persistSession: false);
+                return;
+            }
+        }
+
+        if (State.IsOrganizationAdmin)
+            _shouldOpenBatchDialog = true;
+        else
+            State.SetStatus("No batch selected. Contact your organization administrator.");
+    }
+
+    private async Task LoadBatchFilesAsync(BatchSummary batch, bool persistSession = true)
+    {
+        var invoicesPath = Path.Combine(batch.FolderPath, "Invoices");
+
+        var entries = new List<FileListEntry>();
+        if (Directory.Exists(invoicesPath))
+        {
+            var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
+            var allFiles   = FileService.LoadFiles(invoicesPath, extensions).ToList();
+
+            var pdfBaseNames = new HashSet<string>(
+                allFiles.Where(f => Path.GetExtension(f).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+                        .Select(Path.GetFileNameWithoutExtension)
+                        .Where(n => n is not null)
+                        .Select(n => n!),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var filePath in allFiles)
+            {
+                var ext      = Path.GetExtension(filePath);
+                var baseName = Path.GetFileNameWithoutExtension(filePath);
+                if (ext.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                    && baseName is not null && pdfBaseNames.Contains(baseName))
+                    continue;
+
+                var entry = new FileListEntry { FilePath = filePath, FileName = Path.GetFileName(filePath) };
+                var ocrFile = await DatabaseSvc.GetInvoiceByFilePathAsync(filePath);
+                if (ocrFile is not null)
+                {
+                    entry.IsProcessed = true;
+                    if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
+                    {
+                        try
+                        {
+                            K_OCR.Models.InvoiceDto? invoice = null;
+                            try
+                            {
+                                invoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(ocrFile.ValidatedOcrText);
+                            }
+                            catch
+                            {
+                                var list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(ocrFile.ValidatedOcrText);
+                                invoice = list?.FirstOrDefault();
+                            }
+                            if (invoice is not null)
+                            {
+                                entry.IsSavedOrAccepted = invoice.IsValidationAccepted;
+                                if (!entry.IsSavedOrAccepted && invoice.TesseractConfirmed?.Count > 0)
+                                {
+                                    entry.HasSuspectFields =
+                                        invoice.TesseractConfirmed.Values.Any(v => !v)
+                                        || (invoice.MathConfirmed?.Values.Any(v => !v) ?? false)
+                                        || (invoice.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
+                                    entry.IsValidated = !entry.HasSuspectFields;
+                                }
+                            }
+                        }
+                        catch { /* non-fatal */ }
+                    }
+                }
+                entries.Add(entry);
+            }
+        }
+
+        State.SetCurrentBatch(batch);
+        State.SetDirectory(invoicesPath, entries);
+        if (persistSession && State.CurrentUserId is not null && State.TenantId is not null)
+            await BatchSvc.SetUserLastBatchAsync(State.CurrentUserId, State.TenantId, batch.BatchId);
+    }
+
+    // ── Batch selector (5b) ───────────────────────────────────────────────
+
+    private async Task ToggleBatchDropdownAsync()
+    {
+        if (!_batchDropdownOpen && State.TenantId is not null)
+            _orgBatches = await BatchSvc.GetBatchesForOrgAsync(State.TenantId);
+        _batchDropdownOpen = !_batchDropdownOpen;
+    }
+
+    private void CloseBatchDropdown() => _batchDropdownOpen = false;
+
+    private async Task SelectBatchAsync(BatchSummary batch)
+    {
+        CloseBatchDropdown();
+        if (State.CurrentBatch?.BatchId == batch.BatchId) return;
+
+        if (State.HasUnsavedEdits)
+        {
+            _pendingBatch = batch;
+            _showUnsavedConfirm = true;
+            return;
+        }
+
+        await LoadBatchFilesAsync(batch);
+        State.SelectFile(null);
+    }
+
+    private async Task ConfirmBatchSwitchAsync()
+    {
+        _showUnsavedConfirm = false;
+        var batch = _pendingBatch;
+        _pendingBatch = null;
+        if (batch is null) return;
+
+        if (_invoicePanel is not null)
+            await _invoicePanel.TriggerSaveAsync();
+
+        await LoadBatchFilesAsync(batch);
+        State.SelectFile(null);
+    }
+
+    private void CancelBatchSwitch()
+    {
+        _showUnsavedConfirm = false;
+        _pendingBatch = null;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -227,11 +426,13 @@
         if (authState.User.Identity?.IsAuthenticated == true)
         {
             var principal  = authState.User;
+            var userId     = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             var email      = principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
             var tenantId   = principal.FindFirstValue(AppClaimTypes.OrganizationId);
             var tenantName = principal.FindFirstValue(AppClaimTypes.TenantName);
             var roles      = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
-            State.SetAuthentication(tenantId, tenantName, email, roles);
+            State.SetAuthentication(userId, tenantId, tenantName, email, roles);
+            await InitializeBatchAsync();
         }
     }
 
@@ -244,6 +445,11 @@
             await JS.InvokeVoidAsync("kocrKeyboard.init", _selfRef);
             if (!State.IsAuthenticated)
                 AuthSvc.RequestOpen();
+            else if (_shouldOpenBatchDialog)
+            {
+                _shouldOpenBatchDialog = false;
+                BatchDialogSvc.RequestOpen();
+            }
         }
     }
 
@@ -285,8 +491,7 @@
         if (file is null) return;
         try
         {
-            var settings = await ConfigService.LoadSettingsAsync();
-            var invoice  = await ProcessingService.LoadCachedInvoiceAsync(file.FilePath, settings.ProjectArtifacts);
+            var invoice  = await ProcessingService.LoadCachedInvoiceAsync(file.FilePath);
             State.SetSelectedInvoice(invoice);
         }
         catch (Exception ex) { Toast.ShowError($"Could not load file data: {ex.Message}"); }

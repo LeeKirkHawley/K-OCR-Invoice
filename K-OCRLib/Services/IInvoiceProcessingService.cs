@@ -28,20 +28,19 @@ public interface IInvoiceProcessingService
         string? artifactsDirectory = null);
     
     /// <summary>
-    /// Save a validated invoice back to its JSON file
+    /// Save a validated invoice to the database Invoice row.
+    /// Updates all scalar field values, sets IsValidationAccepted = true, ProcessedAtUtc, and ValidatedOcrText.
     /// </summary>
-    /// <param name="originalFilePath">Original image/PDF file path</param>
+    /// <param name="originalFilePath">Original image/PDF file path (used to look up the Invoice row)</param>
     /// <param name="invoice">Validated invoice data</param>
-    /// <param name="artifactsDirectory">Directory to save artifacts (optional)</param>
-    Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice, string? artifactsDirectory = null);
+    Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice);
     
     /// <summary>
-    /// Load cached invoice from JSON file
+    /// Load cached invoice from the database Invoice row (reads ValidatedOcrText).
     /// </summary>
-    /// <param name="filePath">Path to the image/PDF file (not the JSON)</param>
-    /// <param name="artifactsDirectory">Directory where artifacts are stored (optional)</param>
+    /// <param name="filePath">Path to the image/PDF file (used to look up the Invoice row)</param>
     /// <returns>Cached invoice or null if not found</returns>
-    Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath, string? artifactsDirectory = null);
+    Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath);
     
     /// <summary>
     /// Check if a file has cached processing results

@@ -16,5 +16,4 @@ public class CreateOrganizationRequest
     [Required]
     public string AdminName { get; set; } = string.Empty;
 
-    public string? BaseDirectory { get; set; }
 }

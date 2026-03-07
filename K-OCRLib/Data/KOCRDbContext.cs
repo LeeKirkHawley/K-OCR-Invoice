@@ -13,57 +13,68 @@ namespace K_OCR.Data
             _tenantContext = tenantContext;
         }
 
-        // DbSets for your entities
         public DbSet<Invoice> Invoices { get; set; }
         public DbSet<InvoiceItem> InvoiceItems { get; set; }
         public DbSet<DocumentField> DocumentFields { get; set; }
-        public DbSet<OCRFile> OCRFiles { get; set; }
-        public DbSet<DocumentPage> DocumentPages { get; set; }
+        public DbSet<Batch> Batches { get; set; }
+        public DbSet<UserBatchSession> UserBatchSessions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            // Configure relationships and constraints here
+            // Invoice → Items
             modelBuilder.Entity<Invoice>()
                 .HasMany(i => i.Items)
                 .WithOne(ii => ii.Invoice)
                 .HasForeignKey(ii => ii.InvoiceId);
 
+            // Invoice → DocumentFields
             modelBuilder.Entity<Invoice>()
                 .HasMany(i => i.DocumentFields)
                 .WithOne(df => df.Invoice)
                 .HasForeignKey(df => df.InvoiceId);
 
-            modelBuilder.Entity<OCRFile>()
-                .HasMany(o => o.Pages)
-                .WithOne(p => p.OCRFile)
-                .HasForeignKey(p => p.OCRFileId)
-                .OnDelete(DeleteBehavior.Cascade);
+            // Invoice → Batch FK
+            modelBuilder.Entity<Invoice>()
+                .HasOne(i => i.Batch)
+                .WithMany()
+                .HasForeignKey(i => i.BatchId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<DocumentPage>()
-                .HasIndex(p => new { p.OCRFileId, p.PageNumber })
+            // Batch unique indexes
+            modelBuilder.Entity<Batch>()
+                .HasIndex(b => new { b.OrganizationId, b.Name })
                 .IsUnique();
 
-            // ── Global query filters ──────────────────────────────────────────
-            // Evaluated per-query using the scoped ITenantContext instance.
-            // Super-admins bypass the filter and see every tenant's data.
-            // Org users see only their own organisation's records.
-            // Unauthenticated contexts (OrganizationId = null, IsSuperAdmin = false)
-            // see only pre-tenancy rows (OrganizationId IS NULL) — the UI blocks
-            // data access before authentication anyway (Step 8).
+            modelBuilder.Entity<Batch>()
+                .HasIndex(b => new { b.OrganizationId, b.BatchNumber })
+                .IsUnique();
+
+            // UserBatchSession composite PK
+            modelBuilder.Entity<UserBatchSession>()
+                .HasKey(s => new { s.UserId, s.OrganizationId });
+
+            // UserBatchSession.BatchId SET NULL on batch delete
+            modelBuilder.Entity<UserBatchSession>()
+                .HasOne<Batch>()
+                .WithMany()
+                .HasForeignKey(s => s.BatchId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Global query filter: super-admins see all; org users see only their org.
             modelBuilder.Entity<Invoice>()
                 .HasQueryFilter(i => _tenantContext.IsSuperAdmin
                                   || i.OrganizationId == _tenantContext.OrganizationId);
 
-            modelBuilder.Entity<OCRFile>()
-                .HasQueryFilter(f => _tenantContext.IsSuperAdmin
-                                  || f.OrganizationId == _tenantContext.OrganizationId);
+            modelBuilder.Entity<Batch>()
+                .HasQueryFilter(b => _tenantContext.IsSuperAdmin
+                                  || b.OrganizationId == _tenantContext.OrganizationId);
         }
 
         /// <summary>
-        /// Automatically stamps <c>OrganizationId</c> on new <see cref="Invoice"/> and
-        /// <see cref="OCRFile"/> records so no call site can forget to set the tenant.
+        /// Stamps <c>OrganizationId</c> on new <see cref="Invoice"/> and <see cref="Batch"/>
+        /// records so no call site can forget to set the tenant.
         /// </summary>
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
@@ -74,8 +85,8 @@ namespace K_OCR.Data
                 if (entry.Entity is Invoice invoice && invoice.OrganizationId is null)
                     invoice.OrganizationId = _tenantContext.OrganizationId;
 
-                if (entry.Entity is OCRFile ocrFile && ocrFile.OrganizationId is null)
-                    ocrFile.OrganizationId = _tenantContext.OrganizationId;
+                if (entry.Entity is Batch batch && batch.OrganizationId is null)
+                    batch.OrganizationId = _tenantContext.OrganizationId;
             }
 
             return base.SaveChangesAsync(cancellationToken);

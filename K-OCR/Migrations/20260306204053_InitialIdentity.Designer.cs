@@ -8,11 +8,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace K_OCR.Migrations.Identity
+namespace K_OCR.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260303232842_AddOrgBaseDirectoryAndUserFullName")]
-    partial class AddOrgBaseDirectoryAndUserFullName
+    [Migration("20260306204053_InitialIdentity")]
+    partial class InitialIdentity
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -101,9 +101,6 @@ namespace K_OCR.Migrations.Identity
             modelBuilder.Entity("K_OCR.Identity.Organization", b =>
                 {
                     b.Property<string>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("BaseDirectory")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")

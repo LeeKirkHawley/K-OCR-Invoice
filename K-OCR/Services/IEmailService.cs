@@ -12,6 +12,16 @@ public interface IEmailService
         string setupLink);
 
     /// <summary>
+    /// Sends an org-user invitation email for Validator / User / Admin roles.
+    /// </summary>
+    Task SendOrgUserInviteAsync(
+        string toEmail,
+        string toName,
+        string organizationName,
+        string role,
+        string setupLink);
+
+    /// <summary>
     /// Sends a plain test email to verify SMTP configuration.
     /// </summary>
     Task SendTestEmailAsync(string toEmail);

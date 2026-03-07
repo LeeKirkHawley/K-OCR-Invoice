@@ -9,6 +9,28 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Include the per‑user settings file (under %AppData%\K-OCR) in the
+// IConfiguration pipeline.  Previously the app read Kocr:BaseDirectory
+// directly from the content‑root appsettings.json while the UI and
+// ConfigurationService were operating against the roaming file; that
+// mismatch caused startup errors to appear even though the user had
+// configured the value in their own settings.  Loading the JSON here
+// guarantees that every read of IConfiguration sees the same values.
+var configService = new ConfigurationService();
+var userSettingsPath = configService.GetDefaultSettingsPath();
+builder.Configuration.AddJsonFile(userSettingsPath, optional: true, reloadOnChange: true);
+
+// In development we also load a local override file.  Saves go to the
+// override file instead of the roaming store so the latter remains
+// untouched; reading the override ensures the UI reflects whatever was
+// last written during the current debug session.
+if (builder.Environment.IsDevelopment())
+{
+    var devFile = Path.Combine(builder.Environment.ContentRootPath, "appsettings.development.user.json");
+    builder.Configuration.AddJsonFile(devFile, optional: true, reloadOnChange: true);
+}
+
 var configuration = builder.Configuration;
 
 // Add Blazor Server components
@@ -109,10 +131,26 @@ builder.Services.AddScoped<SettingsDialogService>();
 builder.Services.AddScoped<AuthDialogService>();
 builder.Services.AddScoped<SuperAdminDialogService>();
 builder.Services.AddScoped<EmailConfigDialogService>();
-builder.Services.AddScoped<OrgUsersDialogService>();
-builder.Services.AddScoped<BatchProcessDialogService>();
+builder.Services.AddScoped<OrgUserManagementDialogService>();
+builder.Services.AddScoped<BatchDialogService>();
+
+// Batch feature
+builder.Services.AddSingleton<StartupErrorState>();
+builder.Services.AddSingleton<IPathService, PathService>();
+builder.Services.AddScoped<IBatchService, BatchService>();
 
 var app = builder.Build();
+
+// Validate the base directory.  The value is now pulled from
+// whatever IConfiguration knows about (which includes the roaming
+// settings file we just added), so the user’s personal settings path
+// is authoritative.
+var startupError = app.Services.GetRequiredService<StartupErrorState>();
+var baseDir = configuration["Kocr:BaseDirectory"];
+if (string.IsNullOrWhiteSpace(baseDir))
+    startupError.SetError("Base directory is not configured in settings.");
+else if (!Directory.Exists(baseDir))
+    startupError.SetError($"Base directory is configured but the path does not exist: {baseDir}");
 
 // Initialize OCR database
 using (var scope = app.Services.CreateScope())
@@ -130,10 +168,10 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Ensure configured project directories exist
-var configService = app.Services.GetRequiredService<IConfigurationService>();
+var appConfigService = app.Services.GetRequiredService<IConfigurationService>();
 try
 {
-    var settings = await configService.LoadSettingsAsync();
+    var settings = await appConfigService.LoadSettingsAsync();
     if (!string.IsNullOrEmpty(settings.ProjectArtifacts) && !Directory.Exists(settings.ProjectArtifacts))
         Directory.CreateDirectory(settings.ProjectArtifacts);
 }
@@ -204,7 +242,7 @@ static async Task EnsureSuperAdminAsync(IServiceProvider services)
     var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
 
-    foreach (var role in new[] { RoleNames.SuperAdmin, RoleNames.OrganizationAdmin, RoleNames.OrganizationUser })
+    foreach (var role in new[] { RoleNames.SuperAdmin, RoleNames.OrganizationAdmin, RoleNames.OrganizationValidator, RoleNames.OrganizationUser })
         if (!await roleManager.RoleExistsAsync(role))
             await roleManager.CreateAsync(new IdentityRole(role));
 

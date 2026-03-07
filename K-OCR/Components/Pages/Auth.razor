@@ -161,7 +161,7 @@
                                        .Select(r => r.GetString() ?? string.Empty)
                                        .ToArray();
 
-                State.SetAuthentication(tenantId, tenantName, email, roles);
+                State.SetAuthentication(null, tenantId, tenantName, email, roles);
                 // Reload the page so the browser sends the auth cookie on the new
                 // HTTP request. The new circuit starts with an authenticated
                 // AuthenticationState, and AuthorizeRouteView renders Home.razor.

@@ -3,19 +3,16 @@ using System;
 using K_OCR.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace K_OCR.Migrations.Identity
+namespace K_OCR.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260221153040_InitialIdentity")]
-    partial class InitialIdentity
+    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
@@ -38,6 +35,9 @@ namespace K_OCR.Migrations.Identity
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("FullName")
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("IsGlobalAdmin")
                         .HasColumnType("INTEGER");

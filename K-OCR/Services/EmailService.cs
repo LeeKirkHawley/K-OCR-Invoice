@@ -97,6 +97,49 @@ public class EmailService : IEmailService
         return message;
     }
 
+    public async Task SendOrgUserInviteAsync(
+        string toEmail,
+        string toName,
+        string organizationName,
+        string role,
+        string setupLink)
+    {
+        var settings = await _configService.LoadSettingsAsync();
+        var email = settings.Email ?? new EmailSettings();
+
+        if (string.IsNullOrWhiteSpace(email.SmtpHost))
+            throw new InvalidOperationException("SMTP host is not configured.");
+
+        var friendlyRole = role switch
+        {
+            "OrganizationAdmin"     => "Administrator",
+            "OrganizationValidator" => "Validator",
+            _                       => "User"
+        };
+
+        var subject = $"You've been invited to {organizationName} on K-OCR";
+        var body = $"""
+            <html><body style="font-family:sans-serif;color:#222">
+              <h2>Welcome to K-OCR, {WebUtility.HtmlEncode(toName)}!</h2>
+              <p>You have been invited to <strong>{WebUtility.HtmlEncode(organizationName)}</strong> as a <strong>{WebUtility.HtmlEncode(friendlyRole)}</strong>.</p>
+              <p>Click the button below to set your password and get started:</p>
+              <p style="margin:24px 0">
+                <a href="{setupLink}"
+                   style="background:#1a6fc4;color:#fff;padding:12px 24px;border-radius:4px;text-decoration:none;font-weight:600">
+                  Set My Password
+                </a>
+              </p>
+              <p style="color:#666;font-size:0.9em">
+                This link expires in 24 hours. If you did not expect this email, you can ignore it.
+              </p>
+            </body></html>
+            """;
+
+        var message = BuildMessage(email, toEmail, toName, subject, body);
+        await SendAsync(email, message);
+        _logger.LogInformation("Invite email sent to {Email} for org '{Org}' with role '{Role}'.", toEmail, organizationName, role);
+    }
+
     private async Task SendAsync(EmailSettings email, MimeMessage message)
     {
         // SecureSocketOptions.Auto: port 465 → SslOnConnect, port 587/25 → StartTls

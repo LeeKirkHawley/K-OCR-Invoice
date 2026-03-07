@@ -5,34 +5,34 @@
 @inject WorkspaceState State
 @inject IConfigurationService ConfigService
 @inject IInvoiceProcessingService ProcessingService
+@inject IBatchService BatchSvc
+@inject ToastService Toast
+@implements IDisposable
 
 <PageTitle>K-OCR</PageTitle>
-
-<FolderPickerDialog @ref="_folderPicker" />
 
 <div class="file-list-panel">
 
     <!-- ── Toolbar ──────────────────────────────────────────── -->
     <div class="file-list-toolbar">
-        <input type="text"
-               class="folder-input"
-               placeholder="/path/to/invoices"
-               @bind="_folderPath"
-               @bind:event="oninput"
-               @onkeydown="OnFolderKeyDown"
-               disabled="@_loading"
-               title="Folder path" />
-        <button class="btn btn-open"
-                @onclick="OpenFolderPickerAsync"
-                disabled="@_loading"
-                title="Open folder">
-            📂
-        </button>
+        @if (State.IsAuthenticated && State.CurrentBatch is not null)
+        {
+            <label class="btn btn-open @(_uploading ? "disabled" : "")"
+                   title="Upload files to current batch"
+                   style="cursor:@(_uploading ? "not-allowed" : "pointer")">
+                @(_uploading ? "Uploading…" : "⬆ Upload")
+                <InputFile OnChange="OnFilesSelectedAsync"
+                           multiple
+                           accept=".pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff"
+                           disabled="@_uploading"
+                           style="display:none" />
+            </label>
+        }
         @if (State.Files.Count > 0)
         {
             <button class="btn btn-refresh"
-                    @onclick="LoadDirectoryAsync"
-                    disabled="@(_loading || State.IsOcrRunning)"
+                    @onclick="RefreshBatchFilesAsync"
+                    disabled="@(_loading || State.IsOcrRunning || _uploading)"
                     title="Refresh">
                 🔄
             </button>
@@ -41,14 +41,14 @@
             {
                 <button class="btn btn-ocr-now"
                         @onclick="OcrNowAsync"
-                        disabled="@State.IsOcrRunning"
+                        disabled="@(State.IsOcrRunning || _uploading)"
                         title="Run OCR on the selected file (ignores cache)">
                     ⚡ OCR Now
                 </button>
             }
             <button class="btn btn-batch-ocr"
                     @onclick="BatchOcrAsync"
-                    disabled="@State.IsOcrRunning"
+                    disabled="@(State.IsOcrRunning || _uploading)"
                     title="Run OCR on all unprocessed files">
                 @(State.IsOcrRunning ? "Running…" : "⚡ Batch OCR")
             </button>
@@ -61,11 +61,15 @@
         <div class="file-list-error">⚠ @_errorMessage</div>
     }
 
-    @if (State.CurrentDirectory is not null)
+    @if (State.CurrentBatch is not null)
     {
-        <div class="file-list-directory" title="@State.CurrentDirectory">
-            @TruncatePath(State.CurrentDirectory)
+        <div class="file-list-directory" title="@State.CurrentBatch.FolderPath">
+            Batch: @State.CurrentBatch.Name
         </div>
+    }
+    else if (State.IsAuthenticated)
+    {
+        <div class="file-list-directory">No batch selected.</div>
     }
 
     @if (State.IsOcrRunning && State.OcrProgress.Count > 0)
@@ -73,6 +77,13 @@
         var lastMsg = State.OcrProgress.Values.Last();
         <div class="file-list-ocr-progress">
             <span class="loading-spinner"></span> @lastMsg
+        </div>
+    }
+
+    @if (_uploading)
+    {
+        <div class="file-list-ocr-progress">
+            <span class="loading-spinner"></span> Uploading files…
         </div>
     }
 
@@ -86,13 +97,13 @@
     <!-- ── File list ─────────────────────────────────────────── -->
     @if (!_loading)
     {
-        @if (State.Files.Count == 0 && State.CurrentDirectory is null)
+        @if (State.Files.Count == 0 && State.CurrentBatch is null)
         {
-            <div class="file-list-empty">Open a folder to see files</div>
+            <div class="file-list-empty">Select a batch to see files</div>
         }
         else if (State.Files.Count == 0)
         {
-            <div class="file-list-empty">No supported files in this folder</div>
+            <div class="file-list-empty">No files in this batch — upload some files</div>
         }
         else
         {
@@ -142,11 +153,41 @@
     </div>
 }
 
+@if (_uploadErrorVisible && _uploadErrorMessage is not null)
+{
+    <div class="superadmin-overlay" @onclick="CloseUploadError">
+        <div class="superadmin-dialog" style="max-width:480px" @onclick:stopPropagation="true">
+            <div class="superadmin-header">
+                <h1 class="superadmin-title">Upload Error</h1>
+            </div>
+            <div class="superadmin-content">
+                <p>@_uploadErrorMessage</p>
+                @if (_uploadConflicts.Count > 0)
+                {
+                    <ul style="max-height:200px;overflow-y:auto;padding-left:1.5rem;">
+                        @foreach (var name in _uploadConflicts)
+                        {
+                            <li>@name</li>
+                        }
+                    </ul>
+                }
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-primary" @onclick="CloseUploadError">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
-    private string  _folderPath   = string.Empty;
     private bool    _loading;
+    private bool    _uploading;
     private string? _errorMessage;
-    private FolderPickerDialog? _folderPicker;
+
+    // Upload error dialog
+    private bool               _uploadErrorVisible;
+    private string?            _uploadErrorMessage;
+    private IReadOnlyList<string> _uploadConflicts = [];
 
     // ── Context menu ──────────────────────────────────────────────────────
     private bool           _ctxMenuVisible;
@@ -184,29 +225,143 @@
         CloseContextMenu();
     }
 
-    private async Task OpenFolderPickerAsync()
+    protected override void OnInitialized()
     {
-        if (_folderPicker is null) return;
-        var settings  = await ConfigService.LoadSettingsAsync();
-        // Root at the configured base directory; always start there.
-        var rootPath = !string.IsNullOrWhiteSpace(settings.DefaultStartFolder) ? settings.DefaultStartFolder
-                     : null;
-        var chosen = await _folderPicker.ShowAsync(rootPath, rootPath);
-        if (chosen is not null)
+        State.OnChange += OnStateChanged;
+    }
+
+    public void Dispose() => State.OnChange -= OnStateChanged;
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    // ── Upload ────────────────────────────────────────────────────────────
+
+    private async Task OnFilesSelectedAsync(InputFileChangeEventArgs e)
+    {
+        if (State.CurrentBatch is null || State.CurrentUserId is null) return;
+        _errorMessage = null;
+        _uploading    = true;
+        StateHasChanged();
+        try
         {
-            _folderPath = chosen;
-            await LoadDirectoryAsync();
+            var files  = e.GetMultipleFiles(maximumFileCount: 500).ToList();
+            var result = await BatchSvc.UploadFilesToBatchAsync(
+                State.CurrentBatch.BatchId, files, State.CurrentUserId);
+
+            if (result.Success)
+            {
+                Toast.ShowSuccess($"{result.FilesUploaded} file{(result.FilesUploaded == 1 ? "" : "s")} uploaded.");
+                await RefreshBatchFilesAsync();
+            }
+            else if (result.ConflictingFileNames.Count > 0)
+            {
+                _uploadErrorMessage = result.ErrorMessage ?? "One or more files already exist in this batch.";
+                _uploadConflicts    = result.ConflictingFileNames;
+                _uploadErrorVisible = true;
+            }
+            else
+            {
+                _uploadErrorMessage = result.ErrorMessage ?? "Upload failed.";
+                _uploadConflicts    = [];
+                _uploadErrorVisible = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _uploadErrorMessage = $"Upload failed: {ex.Message}";
+            _uploadConflicts    = [];
+            _uploadErrorVisible = true;
+        }
+        finally
+        {
+            _uploading = false;
+            StateHasChanged();
         }
     }
 
-    protected override async Task OnInitializedAsync()
+    private void CloseUploadError()
     {
-        // No auto-load; user selects a folder within the base directory.
+        _uploadErrorVisible = false;
+        _uploadErrorMessage = null;
+        _uploadConflicts    = [];
     }
 
-    private async Task OnFolderKeyDown(KeyboardEventArgs e)
+    // ── Refresh current batch file list ───────────────────────────────────
+
+    private async Task RefreshBatchFilesAsync()
     {
-        if (e.Key == "Enter") await LoadDirectoryAsync();
+        if (State.CurrentBatch is null) return;
+        _loading = true;
+        _errorMessage = null;
+        StateHasChanged();
+        try
+        {
+            var batch      = State.CurrentBatch;
+            var invoicesPath = Path.Combine(batch.FolderPath, "Invoices");
+            var entries    = new List<FileListEntry>();
+
+            if (Directory.Exists(invoicesPath))
+            {
+                var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
+                var allFiles   = FileService.LoadFiles(invoicesPath, extensions).ToList();
+
+                var pdfBaseNames = new HashSet<string>(
+                    allFiles.Where(f => Path.GetExtension(f).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+                            .Select(Path.GetFileNameWithoutExtension)
+                            .Where(n => n is not null)
+                            .Select(n => n!),
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (var filePath in allFiles)
+                {
+                    var ext      = Path.GetExtension(filePath);
+                    var baseName = Path.GetFileNameWithoutExtension(filePath);
+                    if (ext.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                        && baseName is not null && pdfBaseNames.Contains(baseName))
+                        continue;
+
+                    var entry   = new FileListEntry { FilePath = filePath, FileName = Path.GetFileName(filePath) };
+                    var invoice = await DatabaseSvc.GetInvoiceByFilePathAsync(filePath);
+                    if (invoice is not null)
+                    {
+                        entry.IsProcessed = true;
+                        if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
+                        {
+                            try
+                            {
+                                K_OCR.Models.InvoiceDto? dto = null;
+                                try   { dto = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(invoice.ValidatedOcrText); }
+                                catch { var list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(invoice.ValidatedOcrText); dto = list?.FirstOrDefault(); }
+                                if (dto is not null)
+                                {
+                                    entry.IsSavedOrAccepted = dto.IsValidationAccepted;
+                                    if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
+                                    {
+                                        entry.HasSuspectFields =
+                                            dto.TesseractConfirmed.Values.Any(v => !v)
+                                            || (dto.MathConfirmed?.Values.Any(v => !v) ?? false)
+                                            || (dto.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
+                                        entry.IsValidated = !entry.HasSuspectFields;
+                                    }
+                                }
+                            }
+                            catch { /* non-fatal */ }
+                        }
+                    }
+                    entries.Add(entry);
+                }
+            }
+
+            State.SetDirectory(invoicesPath, entries);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to refresh: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     // ── File selection — loads cached invoice from DB ──────────────────────
@@ -217,8 +372,7 @@
         // Load cached invoice in background so the viewer can show it immediately
         try
         {
-            var settings = await ConfigService.LoadSettingsAsync();
-            var invoice  = await ProcessingService.LoadCachedInvoiceAsync(file.FilePath, settings.ProjectArtifacts);
+            var invoice  = await ProcessingService.LoadCachedInvoiceAsync(file.FilePath);
             State.SetSelectedInvoice(invoice);
         }
         catch { /* non-fatal — invoice panel will show empty */ }
@@ -241,7 +395,7 @@
             {
                 var updated = BuildEntry(filePath, result.Context?.Layout);
                 State.UpdateFileEntry(updated);
-                var invoice = await ProcessingService.LoadCachedInvoiceAsync(filePath, settings.ProjectArtifacts);
+                var invoice = await ProcessingService.LoadCachedInvoiceAsync(filePath);
                 State.SetSelectedInvoice(invoice);
                 State.SetOcrProgress(filePath, "Done");
             }
@@ -339,116 +493,5 @@
         if (invoice != null)
             entry.IsSavedOrAccepted = invoice.IsValidationAccepted;
         return entry;
-    }
-
-    private async Task LoadDirectoryAsync()
-    {
-        _errorMessage = null;
-
-        if (string.IsNullOrWhiteSpace(_folderPath))
-        {
-            _errorMessage = "Enter a folder path.";
-            return;
-        }
-
-        if (!Directory.Exists(_folderPath))
-        {
-            _errorMessage = $"Directory not found: {_folderPath}";
-            return;
-        }
-
-        _loading = true;
-        StateHasChanged();
-
-        try
-        {
-            var extensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".pdf" };
-            var allFiles   = FileService.LoadFiles(_folderPath, extensions).ToList();
-
-            // Suppress PDF-derived PNG files (e.g. invoice.pdf → invoice.png)
-            var pdfBaseNames = new HashSet<string>(
-                allFiles.Where(f => Path.GetExtension(f).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
-                        .Select(Path.GetFileNameWithoutExtension)
-                        .Where(n => n is not null)
-                        .Select(n => n!),
-                StringComparer.OrdinalIgnoreCase);
-
-            var entries = new List<FileListEntry>();
-
-            foreach (var filePath in allFiles)
-            {
-                var ext      = Path.GetExtension(filePath);
-                var baseName = Path.GetFileNameWithoutExtension(filePath);
-
-                if (ext.Equals(".png", StringComparison.OrdinalIgnoreCase)
-                    && baseName is not null && pdfBaseNames.Contains(baseName))
-                    continue;
-
-                var entry = new FileListEntry
-                {
-                    FilePath = filePath,
-                    FileName = Path.GetFileName(filePath)
-                };
-
-                // Check DB for OCR / validation status
-                var ocrFile = await DatabaseSvc.GetOCRFileByPathAsync(filePath);
-                if (ocrFile is not null)
-                {
-                    entry.IsProcessed = true;
-
-                    if (!string.IsNullOrEmpty(ocrFile.ValidatedOcrText))
-                    {
-                        try
-                        {
-                            K_OCR.Models.InvoiceDto? invoice = null;
-                            try
-                            {
-                                invoice = Newtonsoft.Json.JsonConvert.DeserializeObject<K_OCR.Models.InvoiceDto>(
-                                    ocrFile.ValidatedOcrText);
-                            }
-                            catch
-                            {
-                                var list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(
-                                    ocrFile.ValidatedOcrText);
-                                invoice = list?.FirstOrDefault();
-                            }
-
-                            if (invoice != null)
-                                entry.IsSavedOrAccepted = invoice.IsValidationAccepted;
-
-                            if (!entry.IsSavedOrAccepted && invoice?.TesseractConfirmed?.Count > 0)
-                            {
-                                entry.HasSuspectFields =
-                                    invoice.TesseractConfirmed.Values.Any(v => !v)
-                                    || (invoice.MathConfirmed?.Values.Any(v => !v) ?? false)
-                                    || (invoice.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
-                                entry.IsValidated = !entry.HasSuspectFields;
-                            }
-                        }
-                        catch { /* ignore parse errors */ }
-                    }
-                }
-
-                entries.Add(entry);
-            }
-
-            State.SetDirectory(_folderPath, entries);
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = $"Failed to load folder: {ex.Message}";
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
-
-    private static string TruncatePath(string path, int maxLen = 36)
-    {
-        if (path.Length <= maxLen) return path;
-        var parts = path.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length <= 2) return "…" + path[^maxLen..];
-        return $"…{Path.DirectorySeparatorChar}{parts[^2]}{Path.DirectorySeparatorChar}{parts[^1]}";
     }
 }

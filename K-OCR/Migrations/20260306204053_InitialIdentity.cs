@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace K_OCR.Migrations.Identity
+namespace K_OCR.Migrations
 {
     /// <inheritdoc />
     public partial class InitialIdentity : Migration
@@ -66,6 +66,7 @@ namespace K_OCR.Migrations.Identity
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "TEXT", nullable: false),
+                    FullName = table.Column<string>(type: "TEXT", nullable: true),
                     OrganizationId = table.Column<string>(type: "TEXT", nullable: true),
                     IsOrganizationAdmin = table.Column<bool>(type: "INTEGER", nullable: false),
                     IsGlobalAdmin = table.Column<bool>(type: "INTEGER", nullable: false),

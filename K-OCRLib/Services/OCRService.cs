@@ -1,4 +1,3 @@
-﻿using K_OCR.Models;
 using System.Diagnostics;
 using Tesseract;
 
@@ -13,54 +12,27 @@ namespace K_OCR.Services
             _analysisService = analysisService;
         }
 
-        public async Task RunOcrAsync(IEnumerable<OCRFile> items)
+        public async Task RunOcrAsync(IEnumerable<string> filePaths)
         {
             var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1) };
 
-            await Parallel.ForEachAsync(items, options, async (ocrFile, ct) =>
+            await Parallel.ForEachAsync(filePaths, options, async (filePath, ct) =>
             {
                 try
                 {
                     var engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default);
-
-                    var img = Pix.LoadFromFile(ocrFile.FilePath);
+                    var img = Pix.LoadFromFile(filePath);
                     using (var page = engine.Process(img))
                     {
-                        var text = page.GetText();
-                        Debug.WriteLine("Mean confidence: {0}", page.GetMeanConfidence());
-                        ocrFile.OcrText = text;
-
-                        List<OcrBlock> lineBlocks, tableBlocks;
-                        _analysisService.AnalyzePage(ocrFile, page, out lineBlocks, out tableBlocks);
-
-                        //await Dispatcher.InvokeAsync(() =>
-                        //{
-                        //    // Build FlowDocument for export only
-                        //    var flowDocument = BuildFlowDocument(lineBlocks, tableBlocks);
-                        //    ocrFile.Document = flowDocument;
-
-                        //    if (currentIndex >= 0 && currentIndex < filesToProcess.Count)
-                        //    {
-                        //        var current = filesToProcess[currentIndex];
-                        //        if (ReferenceEquals(current, ocrFile))
-                        //        {
-                        //            DrawOCROverlay(ocrFile);
-                        //        }
-                        //    }
-                        //});
-
-                        Debug.WriteLine($"OCR'd {System.IO.Path.GetFileName(ocrFile.FilePath)}");
+                        _analysisService.AnalyzePage(page, out var lineBlocks, out var tableBlocks);
+                        Debug.WriteLine($"OCR'd {Path.GetFileName(filePath)}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    //await Dispatcher.BeginInvoke(() =>
-                    //    MessageBox.Show(this, $"OCR failed for {System.IO.Path.GetFileName(ocrFile.filePath)}: {ex.Message}",
-                    //        "Error", MessageBoxButton.OK, MessageBoxImage.Error));
+                    Debug.WriteLine($"OCR failed for {Path.GetFileName(filePath)}: {ex.Message}");
                 }
             });
         }
-
-
     }
 }

@@ -11,22 +11,24 @@ namespace K_OCR.Models
         [Key]
         public int Id { get; set; }
 
-        [Required]
-        [MaxLength(500)]
-        public string VendorName { get; set; } = string.Empty;
+        // FK to Batch (required for all new records)
+        public int BatchId { get; set; }
 
         [MaxLength(500)]
-        public string CustomerName { get; set; } = string.Empty;
+        public string? VendorName { get; set; }
+
+        [MaxLength(500)]
+        public string? CustomerName { get; set; }
 
         [MaxLength(100)]
-        public string InvoiceId { get; set; } = string.Empty;
+        public string? InvoiceId { get; set; }
 
         public DateTime? InvoiceDate { get; set; }
 
         public DateTime? DueDate { get; set; }
 
         [MaxLength(100)]
-        public string PurchaseOrder { get; set; } = string.Empty;
+        public string? PurchaseOrder { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal? Subtotal { get; set; }
@@ -41,22 +43,33 @@ namespace K_OCR.Models
         public decimal? Total { get; set; }
 
         // File information
-        [Required]
         [MaxLength(1000)]
-        public string FilePath { get; set; } = string.Empty;
+        public string? FilePath { get; set; }
 
-        public DateTime ProcessedDate { get; set; } = DateTime.UtcNow;
+        /// <summary>Timestamp when the file was uploaded to the batch.</summary>
+        public DateTime UploadedAtUtc { get; set; } = DateTime.UtcNow;
+
+        /// <summary>Timestamp when OCR processing completed. Null until processed.</summary>
+        public DateTime? ProcessedAtUtc { get; set; }
+
+        // OCR data (formerly in OCRFile)
+        public string? OcrText { get; set; }
+        public string? ValidatedOcrText { get; set; }
+        public string? TesseractOcrText { get; set; }
+        public int TotalPages { get; set; } = 1;
+        public string? MergedJsonData { get; set; }
+        public bool IsFullyProcessed { get; set; } = false;
+        public bool IsValidationAccepted { get; set; } = false;
 
         /// <summary>
-        /// Tenant that owns this record. Null only for records created before multi-tenancy
-        /// was introduced. Populated by <c>DatabaseService</c> from the current
-        /// <c>ITenantContext</c> on every insert; filtered by <c>KOCRDbContext</c>
-        /// global query filter in Step 7.
+        /// Tenant that owns this record. Populated by KOCRDbContext.SaveChangesAsync
+        /// from the current ITenantContext on every insert.
         /// </summary>
         [MaxLength(450)]
         public string? OrganizationId { get; set; }
 
         // Navigation properties
+        public virtual Batch? Batch { get; set; }
         public virtual ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();
         public virtual ICollection<DocumentField> DocumentFields { get; set; } = new List<DocumentField>();
     }

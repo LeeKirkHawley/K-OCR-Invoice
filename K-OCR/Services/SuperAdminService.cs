@@ -18,6 +18,7 @@ public class SuperAdminService : ISuperAdminService
     private readonly IEmailService _emailService;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
+    private readonly IPathService _pathService;
 
     public SuperAdminService(
         ApplicationDbContext dbContext,
@@ -25,7 +26,8 @@ public class SuperAdminService : ISuperAdminService
         RoleManager<IdentityRole> roleManager,
         IEmailService emailService,
         IHttpContextAccessor httpContextAccessor,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IPathService pathService)
     {
         _dbContext = dbContext;
         _userManager = userManager;
@@ -33,6 +35,7 @@ public class SuperAdminService : ISuperAdminService
         _emailService = emailService;
         _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
+        _pathService = pathService;
     }
 
     public async Task<OrganizationOverview[]> ListOrganizationsAsync()
@@ -54,11 +57,23 @@ public class SuperAdminService : ISuperAdminService
     {
         await EnsureRolesAsync();
 
+        var trimmedName = request.Name.Trim();
+
+        // Check for duplicate display name or conflicting sanitized folder name
+        var existingNames = await _dbContext.Organizations.Select(o => o.Name).ToArrayAsync();
+        if (existingNames.Any(n => string.Equals(n, trimmedName, StringComparison.OrdinalIgnoreCase)))
+            throw new DuplicateOrganizationNameException(
+                $"An organization named \"{trimmedName}\" already exists.");
+
+        var sanitizedNew = _pathService.SanitizeName(trimmedName);
+        if (existingNames.Any(n => _pathService.SanitizeName(n) == sanitizedNew))
+            throw new DuplicateOrganizationNameException(
+                $"The organization name \"{trimmedName}\" would produce a folder name that conflicts with an existing organization. Choose a different name.");
+
         var organization = new Organization
         {
-            Name = request.Name.Trim(),
+            Name = trimmedName,
             Description = request.Description?.Trim(),
-            BaseDirectory = string.IsNullOrWhiteSpace(request.BaseDirectory) ? null : request.BaseDirectory.Trim(),
             IsActive = true
         };
 
@@ -140,6 +155,23 @@ public class SuperAdminService : ISuperAdminService
             }
         }
 
+        // Create org folder on disk
+        var orgPath = _pathService.GetOrgFolderPath(organization.Name);
+        try
+        {
+            Directory.CreateDirectory(orgPath);
+        }
+        catch (Exception ex)
+        {
+            // Roll back: delete user and org
+            if (!reusingExistingUser)
+                await _userManager.DeleteAsync(user);
+            _dbContext.Organizations.Remove(organization);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException(
+                $"Organization was created but the folder could not be created at \"{orgPath}\": {ex.Message}");
+        }
+
         return new CreateOrganizationResult
         {
             OrganizationId = organization.Id,
@@ -211,6 +243,11 @@ public class SuperAdminService : ISuperAdminService
 
         _dbContext.Organizations.Remove(organization);
         await _dbContext.SaveChangesAsync();
+
+        // Delete org folder from disk
+        var orgPath = _pathService.GetOrgFolderPath(organization.Name);
+        if (Directory.Exists(orgPath))
+            Directory.Delete(orgPath, recursive: true);
     }
 
     private string BuildBaseUrl()

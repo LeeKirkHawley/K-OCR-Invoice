@@ -6,15 +6,10 @@ namespace K_OCR.Services
 {
     public class AnalysisService : IAnalysisService
     {
-        public void AnalyzePage(OCRFile ocrFile, Tesseract.Page page, out List<OcrBlock> lineBlocks, out List<OcrBlock> tableBlocks)
+        public void AnalyzePage(Tesseract.Page page, out List<OcrBlock> lineBlocks, out List<OcrBlock> tableBlocks)
         {
-            // Compute layout artifacts
             lineBlocks = GetLineBlocks(page);
             tableBlocks = DetectTables(lineBlocks, page);
-
-            // Store blocks for rendering
-            ocrFile.LineBlocks = lineBlocks;
-            ocrFile.TableBlocks = tableBlocks;
         }
 
         private static List<OcrBlock> GetLineBlocks(Tesseract.Page page)

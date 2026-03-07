@@ -1,5 +1,4 @@
-﻿using K_OCR.Models;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -18,16 +17,12 @@ namespace K_OCR.Services
             _fileService = fileService;
         }
 
-        public async Task RunAzureOcrAsync(IEnumerable<OCRFile> items, string? artifactsDirectory = null)
+        public async Task RunAzureOcrAsync(IEnumerable<string> filePaths, string? artifactsDirectory = null)
         {
-            foreach (OCRFile ocrFile in items)
+            foreach (var filePath in filePaths)
             {
-
                 string endpoint = _config["AzureCognitiveServicesEndpoint"];
                 string apiKey = _config["AzureCognitiveServicesKey"];
-
-                string filePath = ocrFile.FilePath;
-
 
                 var client = new HttpClient();
                 client.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
@@ -36,42 +31,27 @@ namespace K_OCR.Services
 
                 byte[] fileBytes = File.ReadAllBytes(filePath);
                 using var content = new ByteArrayContent(fileBytes);
-                content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");  // WILL CHANGE PER IMAGE TYPE
+                content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
 
-                // 1. Submit OCR job
                 var response = await client.PostAsync(url, content);
                 response.EnsureSuccessStatusCode();
 
-                // 2. Get operation URL
                 string operationUrl = response.Headers.GetValues("Operation-Location").First();
 
-                // 3. Poll until OCR completes
                 string resultJson = "";
                 while (true)
                 {
                     await Task.Delay(1000);
-
                     var resultResponse = await client.GetAsync(operationUrl);
                     resultJson = await resultResponse.Content.ReadAsStringAsync();
-
                     using var doc = JsonDocument.Parse(resultJson);
                     string status = doc.RootElement.GetProperty("status").GetString();
-
                     if (status == "succeeded" || status == "failed")
                         break;
-                }
-
-                if (resultJson.Length > 0)
-                {
-                    // Store OCR results in the database instead of writing to JSON files
-                    ocrFile.OcrText = resultJson;
-                    // Note: The caller is responsible for saving the OCRFile to the database
                 }
 
                 Console.WriteLine(resultJson);
             }
         }
-
-
     }
 }
