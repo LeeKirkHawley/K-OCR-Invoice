@@ -187,7 +187,6 @@ namespace K_OCR.Services
                     TotalPages           = i.TotalPages,
                     IsFullyProcessed     = i.IsFullyProcessed,
                     IsValidationAccepted = i.IsValidationAccepted,
-                    OrganizationId       = i.OrganizationId,
                 })
                 .OrderBy(i => i.FilePath)
                 .ToListAsync();

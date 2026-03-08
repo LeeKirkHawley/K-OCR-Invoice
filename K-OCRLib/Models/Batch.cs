@@ -10,9 +10,6 @@ namespace K_OCR.Models
         [Key]
         public int BatchId { get; set; }
 
-        [Required, MaxLength(450)]
-        public string OrganizationId { get; set; } = string.Empty;
-
         [Required, MaxLength(200)]
         public string Name { get; set; } = string.Empty;
 

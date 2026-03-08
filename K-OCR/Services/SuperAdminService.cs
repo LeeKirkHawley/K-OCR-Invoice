@@ -177,6 +177,31 @@ public class SuperAdminService : ISuperAdminService
                 $"Organization was created but the folder could not be created at \"{orgPath}\": {ex.Message}");
         }
 
+        // Create and migrate the per-org SQLite database
+        var orgDbPath = _pathService.GetOrgDbPath(organization.Name);
+        try
+        {
+            var dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
+                .UseSqlite($"Data Source={orgDbPath}")
+                .Options;
+            await using var orgDb = new KOCRDbContext(dbOptions);
+            await orgDb.Database.MigrateAsync();
+            _logger.LogInformation("Per-org database created at {DbPath} for organization {OrgId}.", orgDbPath, organization.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to migrate per-org database at {DbPath} for organization {OrgId}.", orgDbPath, organization.Id);
+            // Roll back: remove folder, user, and org record
+            if (Directory.Exists(orgPath))
+                Directory.Delete(orgPath, recursive: true);
+            if (!reusingExistingUser)
+                await _userManager.DeleteAsync(user);
+            _dbContext.Organizations.Remove(organization);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException(
+                $"Organization folder was created but the database could not be migrated at \"{orgDbPath}\": {ex.Message}");
+        }
+
         return new CreateOrganizationResult
         {
             OrganizationId = organization.Id,

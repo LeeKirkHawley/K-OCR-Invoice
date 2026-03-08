@@ -1,8 +1,8 @@
 namespace K_OCR.Data;
 
 /// <summary>
-/// Provides tenant identity to <c>KOCRDbContext</c> for global query filtering
-/// and automatic <c>OrganizationId</c> stamping on new records.
+/// Provides tenant identity so <c>KOCRDbContext</c> can be routed to the
+/// correct per-organisation SQLite file.
 ///
 /// Lives in <c>K-OCRLib</c> so the context can depend on it without a circular
 /// reference.  The concrete implementation (<c>TenantContext</c>) lives in the
@@ -17,8 +17,14 @@ public interface ITenantContext
     string? OrganizationId { get; }
 
     /// <summary>
-    /// When <c>true</c> the global query filter is bypassed so the user sees
-    /// every tenant's data.
+    /// The organisation name used to derive the per-org database file path via
+    /// <c>IPathService.GetOrgDbPath</c>.  <c>null</c> for super-admins and
+    /// unauthenticated contexts.
+    /// </summary>
+    string? OrganizationName { get; }
+
+    /// <summary>
+    /// When <c>true</c> the user is a super-admin with no org scope.
     /// </summary>
     bool IsSuperAdmin { get; }
 }

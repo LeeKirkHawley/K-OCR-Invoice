@@ -68,9 +68,21 @@ Log.Logger.Information("Starting K-OCR");
 // (Singleton DatabaseService would conflict with Scoped KOCRDbContext)
 var databaseSettings = configuration.GetSection("Database").Get<DatabaseSettings>()
     ?? new DatabaseSettings();
-builder.Services.AddDbContext<KOCRDbContext>(options =>
+builder.Services.AddDbContext<KOCRDbContext>((sp, options) =>
 {
-    options.UseSqlite(databaseSettings.ConnectionString ?? "Data Source=kocr.db");
+    var tenant = sp.GetRequiredService<ITenantContext>();
+    var paths  = sp.GetRequiredService<IPathService>();
+
+    // Route to the per-org SQLite file; super-admin or unauthenticated callers must
+    // use SuperAdminDataService (enumerate-folders) instead of this scoped context.
+    var dbPath = tenant.OrganizationName is not null
+        ? paths.GetOrgDbPath(tenant.OrganizationName)
+        : throw new InvalidOperationException(
+            "KOCRDbContext requires an authenticated org user. " +
+            "Super-admin cross-org operations must use SuperAdminDataService.");
+
+    options.UseSqlite($"Data Source={dbPath}");
+
     if (databaseSettings.EnableSensitiveDataLogging)
         options.EnableSensitiveDataLogging();
     if (databaseSettings.EnableDetailedErrors)
@@ -78,9 +90,9 @@ builder.Services.AddDbContext<KOCRDbContext>(options =>
 });
 builder.Services.AddScoped<DatabaseService>();
 
-// Identity — ApplicationDbContext uses the same database as the OCR data
+// Identity — ApplicationDbContext uses the central identity database
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(databaseSettings.ConnectionString ?? "Data Source=kocr.db"));
+    options.UseSqlite(databaseSettings.IdentityConnectionString ?? "Data Source=kocr.db"));
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
@@ -119,6 +131,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
+builder.Services.AddScoped<ISuperAdminDataService, SuperAdminDataService>();
 builder.Services.AddScoped<IOrganizationAdminService, OrganizationAdminService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
@@ -171,13 +184,6 @@ if (string.IsNullOrWhiteSpace(baseDir))
     startupError.SetError("Base directory is not configured in settings.");
 else if (!Directory.Exists(baseDir))
     startupError.SetError($"Base directory is configured but the path does not exist: {baseDir}");
-
-// Initialize OCR database
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<DatabaseService>();
-    db.Initialize();
-}
 
 // Initialize Identity database and seed super-admin
 using (var scope = app.Services.CreateScope())

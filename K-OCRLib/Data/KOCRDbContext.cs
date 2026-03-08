@@ -5,12 +5,9 @@ namespace K_OCR.Data
 {
     public class KOCRDbContext : DbContext
     {
-        private readonly ITenantContext _tenantContext;
-
-        public KOCRDbContext(DbContextOptions<KOCRDbContext> options, ITenantContext tenantContext)
+        public KOCRDbContext(DbContextOptions<KOCRDbContext> options)
             : base(options)
         {
-            _tenantContext = tenantContext;
         }
 
         public DbSet<Invoice> Invoices { get; set; }
@@ -42,18 +39,18 @@ namespace K_OCR.Data
                 .HasForeignKey(i => i.BatchId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Batch unique indexes
+            // Batch unique indexes — org identity is implicit from the database file
             modelBuilder.Entity<Batch>()
-                .HasIndex(b => new { b.OrganizationId, b.Name })
+                .HasIndex(b => b.Name)
                 .IsUnique();
 
             modelBuilder.Entity<Batch>()
-                .HasIndex(b => new { b.OrganizationId, b.BatchNumber })
+                .HasIndex(b => b.BatchNumber)
                 .IsUnique();
 
-            // UserBatchSession composite PK
+            // UserBatchSession PK — one session per user (org scope comes from the DB file)
             modelBuilder.Entity<UserBatchSession>()
-                .HasKey(s => new { s.UserId, s.OrganizationId });
+                .HasKey(s => s.UserId);
 
             // UserBatchSession.BatchId SET NULL on batch delete
             modelBuilder.Entity<UserBatchSession>()
@@ -61,46 +58,6 @@ namespace K_OCR.Data
                 .WithMany()
                 .HasForeignKey(s => s.BatchId)
                 .OnDelete(DeleteBehavior.SetNull);
-
-            // Global query filters: super-admins see all; org users see only their org.
-            // DocumentField and InvoiceItem carry matching filters so that querying them
-            // directly also respects tenant isolation and EF Core does not warn about
-            // a required navigation being silently filtered out.
-            modelBuilder.Entity<Invoice>()
-                .HasQueryFilter(i => _tenantContext.IsSuperAdmin
-                                  || i.OrganizationId == _tenantContext.OrganizationId);
-
-            modelBuilder.Entity<DocumentField>()
-                .HasQueryFilter(df => _tenantContext.IsSuperAdmin
-                                   || df.Invoice.OrganizationId == _tenantContext.OrganizationId);
-
-            modelBuilder.Entity<InvoiceItem>()
-                .HasQueryFilter(ii => _tenantContext.IsSuperAdmin
-                                   || ii.Invoice.OrganizationId == _tenantContext.OrganizationId);
-
-            modelBuilder.Entity<Batch>()
-                .HasQueryFilter(b => _tenantContext.IsSuperAdmin
-                                  || b.OrganizationId == _tenantContext.OrganizationId);
-        }
-
-        /// <summary>
-        /// Stamps <c>OrganizationId</c> on new <see cref="Invoice"/> and <see cref="Batch"/>
-        /// records so no call site can forget to set the tenant.
-        /// </summary>
-        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-        {
-            foreach (var entry in ChangeTracker.Entries())
-            {
-                if (entry.State != EntityState.Added) continue;
-
-                if (entry.Entity is Invoice invoice && invoice.OrganizationId is null)
-                    invoice.OrganizationId = _tenantContext.OrganizationId;
-
-                if (entry.Entity is Batch batch && batch.OrganizationId is null)
-                    batch.OrganizationId = _tenantContext.OrganizationId;
-            }
-
-            return base.SaveChangesAsync(cancellationToken);
         }
     }
 }

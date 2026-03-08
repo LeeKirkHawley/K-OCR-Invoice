@@ -126,10 +126,11 @@
                     <h3 class="settings-section-title">Database</h3>
 
                     <div class="settings-field">
-                        <label class="settings-label">Connection String</label>
+                        <label class="settings-label">Identity Connection String</label>
                         <input type="text" class="settings-input"
-                               @bind="_settings.Database!.ConnectionString"
+                               @bind="_settings.Database!.IdentityConnectionString"
                                placeholder="Data Source=kocr.db" />
+                        <span class="settings-hint">Central identity database (users, roles, organisations). Per-org OCR databases are managed automatically.</span>
                     </div>
 
                     <div class="settings-field">

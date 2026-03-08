@@ -10,9 +10,6 @@ namespace K_OCR.Models
         [Required, MaxLength(450)]
         public string UserId { get; set; } = string.Empty;
 
-        [Required, MaxLength(450)]
-        public string OrganizationId { get; set; } = string.Empty;
-
         // SET NULL when the referenced batch is deleted (configured in OnModelCreating)
         public int? BatchId { get; set; }
 

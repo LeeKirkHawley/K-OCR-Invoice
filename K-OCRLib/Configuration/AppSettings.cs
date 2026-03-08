@@ -26,7 +26,11 @@ public class AppSettings
 
 public class DatabaseSettings
 {
-    public string? ConnectionString { get; set; } = "Data Source=kocr.db";
+    /// <summary>
+    /// Connection string for the central identity database (ApplicationDbContext).
+    /// Per-organisation OCR databases are routed automatically from the org folder path.
+    /// </summary>
+    public string? IdentityConnectionString { get; set; } = "Data Source=kocr.db";
     public string? Provider { get; set; } = "SQLite"; // SQLite, SQLServer, PostgreSQL, etc.
     public bool EnableSensitiveDataLogging { get; set; } = false;
     public bool EnableDetailedErrors { get; set; } = false;

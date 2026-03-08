@@ -51,17 +51,12 @@ namespace K_OCRLib.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("OrganizationId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("TEXT");
-
                     b.HasKey("BatchId");
 
-                    b.HasIndex("OrganizationId", "BatchNumber")
+                    b.HasIndex("BatchNumber")
                         .IsUnique();
 
-                    b.HasIndex("OrganizationId", "Name")
+                    b.HasIndex("Name")
                         .IsUnique();
 
                     b.ToTable("Batches");
@@ -142,10 +137,6 @@ namespace K_OCRLib.Migrations
                     b.Property<string>("OcrText")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("OrganizationId")
-                        .HasMaxLength(450)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime?>("ProcessedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -224,17 +215,13 @@ namespace K_OCRLib.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("OrganizationId")
-                        .HasMaxLength(450)
-                        .HasColumnType("TEXT");
-
                     b.Property<int?>("BatchId")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("LastAccessedAtUtc")
                         .HasColumnType("TEXT");
 
-                    b.HasKey("UserId", "OrganizationId");
+                    b.HasKey("UserId");
 
                     b.HasIndex("BatchId");
 

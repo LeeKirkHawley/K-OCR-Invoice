@@ -25,7 +25,6 @@ public class BatchService : IBatchService
     public async Task<int> GetNextBatchNumberAsync(string organizationId)
     {
         var max = await _db.Batches
-            .Where(b => b.OrganizationId == organizationId)
             .MaxAsync(b => (int?)b.BatchNumber) ?? 0;
         return max + 1;
     }
@@ -33,32 +32,10 @@ public class BatchService : IBatchService
     public async Task<BatchSummary[]> GetBatchesForOrgAsync(string organizationId)
     {
         return await _db.Batches
-            .Where(b => b.OrganizationId == organizationId)
             .OrderBy(b => b.BatchNumber)
             .Select(b => new BatchSummary
             {
                 BatchId           = b.BatchId,
-                OrganizationId    = b.OrganizationId,
-                Name              = b.Name,
-                BatchNumber       = b.BatchNumber,
-                FolderPath        = b.FolderPath,
-                LockedByUserId    = b.LockedByUserId,
-                LockAcquiredAtUtc = b.LockAcquiredAtUtc,
-                CreatedAtUtc      = b.CreatedAtUtc,
-                CreatedByUserId   = b.CreatedByUserId,
-            })
-            .ToArrayAsync();
-    }
-
-    public async Task<BatchSummary[]> GetAllBatchesAsync()
-    {
-        return await _db.Batches
-            .OrderBy(b => b.OrganizationId)
-            .ThenBy(b => b.BatchNumber)
-            .Select(b => new BatchSummary
-            {
-                BatchId           = b.BatchId,
-                OrganizationId    = b.OrganizationId,
                 Name              = b.Name,
                 BatchNumber       = b.BatchNumber,
                 FolderPath        = b.FolderPath,
@@ -81,7 +58,6 @@ public class BatchService : IBatchService
         return new BatchDetail
         {
             BatchId           = batch.BatchId,
-            OrganizationId    = batch.OrganizationId,
             Name              = batch.Name,
             BatchNumber       = batch.BatchNumber,
             FolderPath        = batch.FolderPath,
@@ -98,14 +74,12 @@ public class BatchService : IBatchService
     {
         // Uniqueness checks before opening a transaction
         var dupName = await _db.Batches
-            .AnyAsync(b => b.OrganizationId == request.OrganizationId
-                        && b.Name == request.Name);
+            .AnyAsync(b => b.Name == request.Name);
         if (dupName)
             return CreateBatchResult.Error($"A batch named '{request.Name}' already exists in this organization.");
 
         var sanitizedNewName = _pathService.SanitizeName(request.Name);
         var existingFolders = await _db.Batches
-            .Where(b => b.OrganizationId == request.OrganizationId)
             .Select(b => b.FolderPath)
             .ToListAsync();
         var sanitizedNewPath = _pathService.GetBatchFolderPath(request.OrgName, request.Name);
@@ -119,12 +93,11 @@ public class BatchService : IBatchService
                 System.Data.IsolationLevel.Serializable);
             try
             {
-                var batchNumber = await GetNextBatchNumberAsync(request.OrganizationId);
+                var batchNumber = await GetNextBatchNumberAsync(string.Empty);
                 var folderPath  = sanitizedNewPath;
 
                 var batch = new Batch
                 {
-                    OrganizationId  = request.OrganizationId,
                     Name            = request.Name,
                     BatchNumber     = batchNumber,
                     FolderPath      = folderPath,
@@ -238,15 +211,14 @@ public class BatchService : IBatchService
     public async Task SetUserLastBatchAsync(string userId, string organizationId, int? batchId)
     {
         var session = await _db.UserBatchSessions
-            .FirstOrDefaultAsync(s => s.UserId == userId && s.OrganizationId == organizationId);
+            .FirstOrDefaultAsync(s => s.UserId == userId);
 
         if (session is null)
         {
             session = new UserBatchSession
             {
-                UserId           = userId,
-                OrganizationId   = organizationId,
-                BatchId          = batchId,
+                UserId            = userId,
+                BatchId           = batchId,
                 LastAccessedAtUtc = DateTime.UtcNow,
             };
             _db.UserBatchSessions.Add(session);
@@ -264,7 +236,7 @@ public class BatchService : IBatchService
     {
         var session = await _db.UserBatchSessions
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId && s.OrganizationId == organizationId);
+            .FirstOrDefaultAsync(s => s.UserId == userId);
         return session?.BatchId;
     }
 

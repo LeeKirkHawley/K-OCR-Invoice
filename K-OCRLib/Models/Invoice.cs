@@ -61,13 +61,6 @@ namespace K_OCR.Models
         public bool IsFullyProcessed { get; set; } = false;
         public bool IsValidationAccepted { get; set; } = false;
 
-        /// <summary>
-        /// Tenant that owns this record. Populated by KOCRDbContext.SaveChangesAsync
-        /// from the current ITenantContext on every insert.
-        /// </summary>
-        [MaxLength(450)]
-        public string? OrganizationId { get; set; }
-
         // Navigation properties
         public virtual Batch? Batch { get; set; }
         public virtual ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();

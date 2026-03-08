@@ -16,6 +16,7 @@ internal sealed class TenantContext : ITenantContext
         _state = state;
     }
 
-    public string? OrganizationId => _state.TenantId;
-    public bool IsSuperAdmin     => _state.IsSuperAdmin;
+    public string? OrganizationId   => _state.TenantId;
+    public string? OrganizationName => _state.TenantName;
+    public bool IsSuperAdmin        => _state.IsSuperAdmin;
 }

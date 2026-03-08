@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace K_OCRLib.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class InitialPerOrgSchema : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -17,7 +17,6 @@ namespace K_OCRLib.Migrations
                 {
                     BatchId = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
-                    OrganizationId = table.Column<string>(type: "TEXT", maxLength: 450, nullable: false),
                     Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
                     BatchNumber = table.Column<int>(type: "INTEGER", nullable: false),
                     FolderPath = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: false),
@@ -57,8 +56,7 @@ namespace K_OCRLib.Migrations
                     TotalPages = table.Column<int>(type: "INTEGER", nullable: false),
                     MergedJsonData = table.Column<string>(type: "TEXT", nullable: true),
                     IsFullyProcessed = table.Column<bool>(type: "INTEGER", nullable: false),
-                    IsValidationAccepted = table.Column<bool>(type: "INTEGER", nullable: false),
-                    OrganizationId = table.Column<string>(type: "TEXT", maxLength: 450, nullable: true)
+                    IsValidationAccepted = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -76,13 +74,12 @@ namespace K_OCRLib.Migrations
                 columns: table => new
                 {
                     UserId = table.Column<string>(type: "TEXT", maxLength: 450, nullable: false),
-                    OrganizationId = table.Column<string>(type: "TEXT", maxLength: 450, nullable: false),
                     BatchId = table.Column<int>(type: "INTEGER", nullable: true),
                     LastAccessedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_UserBatchSessions", x => new { x.UserId, x.OrganizationId });
+                    table.PrimaryKey("PK_UserBatchSessions", x => x.UserId);
                     table.ForeignKey(
                         name: "FK_UserBatchSessions_Batches_BatchId",
                         column: x => x.BatchId,
@@ -138,15 +135,15 @@ namespace K_OCRLib.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Batches_OrganizationId_BatchNumber",
+                name: "IX_Batches_BatchNumber",
                 table: "Batches",
-                columns: new[] { "OrganizationId", "BatchNumber" },
+                column: "BatchNumber",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Batches_OrganizationId_Name",
+                name: "IX_Batches_Name",
                 table: "Batches",
-                columns: new[] { "OrganizationId", "Name" },
+                column: "Name",
                 unique: true);
 
             migrationBuilder.CreateIndex(

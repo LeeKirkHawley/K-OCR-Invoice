@@ -8,6 +8,8 @@ public interface IPathService
     string SanitizeName(string name);
 
     string GetOrgFolderPath(string orgName);
+    /// <summary>Returns the full path to the per-org SQLite database file.</summary>
+    string GetOrgDbPath(string orgName);
     string GetBatchFolderPath(string orgName, string batchName);
     string GetInvoicesFolderPath(string orgName, string batchName);
     string GetArtifactsFolderPath(string orgName, string batchName);

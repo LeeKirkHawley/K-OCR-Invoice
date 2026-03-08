@@ -4,6 +4,7 @@
 @inject WorkspaceState State
 @inject IBatchService BatchSvc
 @inject ISuperAdminService SuperAdminSvc
+@inject ISuperAdminDataService SuperAdminDataSvc
 @inject ToastService Toast
 @inject BatchDialogService BatchDialogSvc
 @implements IDisposable
@@ -238,9 +239,12 @@
             BatchSummary[] summaries;
             if (State.IsSuperAdmin)
             {
-                summaries = await BatchSvc.GetAllBatchesAsync();
+                // Super-admin: fan out across all org databases
+                var allBatches = await SuperAdminDataSvc.GetAllBatchesAcrossOrgsAsync();
                 var orgs = await SuperAdminSvc.ListOrganizationsAsync();
                 _orgNameMap = orgs.ToDictionary(o => o.OrganizationId, o => o.Name);
+                _batches = [.. allBatches.OrderBy(b => b.OrganizationId).ThenBy(b => b.BatchNumber)];
+                return;
             }
             else
             {
@@ -265,7 +269,7 @@
                     };
                 }));
 
-            _batches = [.. details.OrderBy(b => b.OrganizationId).ThenBy(b => b.BatchNumber)];
+            _batches = [.. details.OrderBy(b => b.BatchNumber)];
         }
         finally
         {
@@ -288,12 +292,9 @@
         _nameIsError    = false;
         _nameValidationMessage = null;
 
-        // Pre-fill as "Batch N"
+        // Pre-fill as "Batch N" — all batches in _batches belong to this org's scoped DB
         var nextNumber = _batches.Count > 0
-            ? _batches.Where(b => b.OrganizationId == State.TenantId)
-                      .Select(b => b.BatchNumber)
-                      .DefaultIfEmpty(0)
-                      .Max() + 1
+            ? _batches.Select(b => b.BatchNumber).DefaultIfEmpty(0).Max() + 1
             : await BatchSvc.GetNextBatchNumberAsync(State.TenantId ?? string.Empty);
 
         _newBatchName    = $"Batch {nextNumber}";
@@ -349,7 +350,6 @@
             var userId = await GetUserIdAsync();
             var request = new CreateBatchRequest
             {
-                OrganizationId  = State.TenantId ?? string.Empty,
                 Name            = _newBatchName.Trim(),
                 CreatedByUserId = userId,
                 OrgName         = State.TenantName ?? string.Empty,

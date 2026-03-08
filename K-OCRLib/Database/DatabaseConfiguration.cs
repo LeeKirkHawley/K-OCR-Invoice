@@ -8,59 +8,42 @@ using Microsoft.Data.Sqlite;
 
 namespace K_OCR.Database
 {
+    /// <summary>
+    /// Legacy helper — superseded by the per-org DB factory registered in Program.cs.
+    /// Retained for reference only; do not call from application code.
+    /// </summary>
+    [Obsolete("Use the KOCRDbContext factory in Program.cs (per-org routing). " +
+              "ApplicationDbContext is configured directly in Program.cs using IdentityConnectionString.")]
     public static class DatabaseConfiguration
     {
-        /// <summary>
-        /// Adds K-OCR database services to the dependency injection container
-        /// </summary>
-        /// <param name="services">The service collection</param>
-        /// <param name="configuration">The application configuration</param>
-        /// <returns>The service collection for chaining</returns>
         public static IServiceCollection AddKOCRDatabase(
             this IServiceCollection services,
             IConfiguration configuration)
         {
-            // Bind database settings from configuration
             var databaseSettings = configuration.GetSection("Database").Get<DatabaseSettings>()
                 ?? new DatabaseSettings();
 
-            // Configure DbContext with SQLite
             services.AddDbContext<KOCRDbContext>(options =>
             {
-                var sqliteOptions = new SqliteConnectionStringBuilder(databaseSettings.ConnectionString ?? "Data Source=kocr.db");
-                
-                // Disable WAL mode if specified (helps with external drives)
+                var sqliteOptions = new SqliteConnectionStringBuilder(databaseSettings.IdentityConnectionString ?? "Data Source=kocr.db");
+
                 if (!databaseSettings.UseWalMode)
-                {
                     sqliteOptions.Cache = SqliteCacheMode.Shared;
-                }
-                
+
                 options.UseSqlite(sqliteOptions.ToString());
 
-                // Configure logging based on settings
                 if (databaseSettings.EnableSensitiveDataLogging)
-                {
                     options.EnableSensitiveDataLogging();
-                }
 
                 if (databaseSettings.EnableDetailedErrors)
-                {
                     options.EnableDetailedErrors();
-                }
             });
 
-            // Add database service
             services.AddSingleton<DatabaseService>();
 
             return services;
         }
 
-        /// <summary>
-        /// Adds K-OCR database services with a custom connection string
-        /// </summary>
-        /// <param name="services">The service collection</param>
-        /// <param name="connectionString">The database connection string</param>
-        /// <returns>The service collection for chaining</returns>
         public static IServiceCollection AddKOCRDatabase(
             this IServiceCollection services,
             string connectionString = "Data Source=kocr.db")

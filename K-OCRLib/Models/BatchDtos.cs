@@ -23,7 +23,6 @@ public class BatchDetail : BatchSummary
 
 public class CreateBatchRequest
 {
-    public string OrganizationId { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string CreatedByUserId { get; set; } = string.Empty;
     /// <summary>Display name of the owning org (for folder path construction).</summary>
