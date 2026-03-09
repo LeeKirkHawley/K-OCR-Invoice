@@ -6,32 +6,41 @@ using Microsoft.Extensions.Logging;
 
 namespace K_OCR.Services;
 
-public class BatchService : IBatchService
+public class BatchService : IBatchService, IAsyncDisposable
 {
-    private readonly KOCRDbContext _db;
+    private readonly IDbContextFactory<KOCRDbContext> _dbFactory;
     private readonly IPathService _pathService;
     private readonly ILogger<BatchService> _logger;
 
+    private KOCRDbContext? _db;
+    private KOCRDbContext Db => _db ??= _dbFactory.CreateDbContext();
+
     public BatchService(
-        KOCRDbContext db,
+        IDbContextFactory<KOCRDbContext> dbFactory,
         IPathService pathService,
         ILogger<BatchService> logger)
     {
-        _db = db;
+        _dbFactory   = dbFactory;
         _pathService = pathService;
-        _logger = logger;
+        _logger      = logger;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_db is not null)
+            await _db.DisposeAsync();
     }
 
     public async Task<int> GetNextBatchNumberAsync(string organizationId)
     {
-        var max = await _db.Batches
+        var max = await Db.Batches
             .MaxAsync(b => (int?)b.BatchNumber) ?? 0;
         return max + 1;
     }
 
     public async Task<BatchSummary[]> GetBatchesForOrgAsync(string organizationId)
     {
-        return await _db.Batches
+        return await Db.Batches
             .OrderBy(b => b.BatchNumber)
             .Select(b => new BatchSummary
             {
@@ -49,11 +58,11 @@ public class BatchService : IBatchService
 
     public async Task<BatchDetail?> GetBatchDetailAsync(int batchId)
     {
-        var batch = await _db.Batches.FindAsync(batchId);
+        var batch = await Db.Batches.FindAsync(batchId);
         if (batch is null) return null;
 
-        var fileCount      = await _db.Invoices.CountAsync(i => i.BatchId == batchId);
-        var validatedCount = await _db.Invoices.CountAsync(i => i.BatchId == batchId && i.IsValidationAccepted);
+        var fileCount      = await Db.Invoices.CountAsync(i => i.BatchId == batchId);
+        var validatedCount = await Db.Invoices.CountAsync(i => i.BatchId == batchId && i.IsValidationAccepted);
 
         return new BatchDetail
         {
@@ -73,23 +82,23 @@ public class BatchService : IBatchService
     public async Task<CreateBatchResult> CreateBatchAsync(CreateBatchRequest request)
     {
         // Uniqueness checks before opening a transaction
-        var dupName = await _db.Batches
+        var dupName = await Db.Batches
             .AnyAsync(b => b.Name == request.Name);
         if (dupName)
             return CreateBatchResult.Error($"A batch named '{request.Name}' already exists in this organization.");
 
         var sanitizedNewName = _pathService.SanitizeName(request.Name);
-        var existingFolders = await _db.Batches
+        var existingFolders = await Db.Batches
             .Select(b => b.FolderPath)
             .ToListAsync();
         var sanitizedNewPath = _pathService.GetBatchFolderPath(request.OrgName, request.Name);
         if (existingFolders.Any(f => string.Equals(f, sanitizedNewPath, StringComparison.OrdinalIgnoreCase)))
             return CreateBatchResult.Error("A batch with the same sanitized folder name already exists.");
 
-        var strategy = _db.Database.CreateExecutionStrategy();
+        var strategy = Db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
-            await using var tx = await _db.Database.BeginTransactionAsync(
+            await using var tx = await Db.Database.BeginTransactionAsync(
                 System.Data.IsolationLevel.Serializable);
             try
             {
@@ -105,8 +114,8 @@ public class BatchService : IBatchService
                     CreatedAtUtc    = DateTime.UtcNow,
                 };
 
-                _db.Batches.Add(batch);
-                await _db.SaveChangesAsync();
+                Db.Batches.Add(batch);
+                await Db.SaveChangesAsync();
 
                 // Create folders on disk
                 try
@@ -116,8 +125,8 @@ public class BatchService : IBatchService
                 }
                 catch (Exception ex)
                 {
-                    _db.Batches.Remove(batch);
-                    await _db.SaveChangesAsync();
+                    Db.Batches.Remove(batch);
+                    await Db.SaveChangesAsync();
                     await tx.RollbackAsync();
                     _logger.LogError(ex, "Failed to create batch folders for {FolderPath}", folderPath);
                     return CreateBatchResult.Error($"Could not create batch folders: {ex.Message}");
@@ -137,7 +146,7 @@ public class BatchService : IBatchService
 
     public async Task DeleteBatchAsync(int batchId, string requestingUserId)
     {
-        var batch = await _db.Batches.FindAsync(batchId)
+        var batch = await Db.Batches.FindAsync(batchId)
                     ?? throw new InvalidOperationException($"Batch {batchId} not found.");
 
         if (batch.LockedByUserId is not null && batch.LockedByUserId != requestingUserId)
@@ -155,24 +164,24 @@ public class BatchService : IBatchService
             Directory.Delete(batch.FolderPath, recursive: false);
 
         // Delete invoice rows (cascade will handle items/fields)
-        var invoiceRows = await _db.Invoices.Where(i => i.BatchId == batchId).ToListAsync();
-        _db.Invoices.RemoveRange(invoiceRows);
+        var invoiceRows = await Db.Invoices.Where(i => i.BatchId == batchId).ToListAsync();
+        Db.Invoices.RemoveRange(invoiceRows);
 
         // Remove the batch row (UserBatchSession.BatchId SET NULL by FK)
-        _db.Batches.Remove(batch);
+        Db.Batches.Remove(batch);
 
-        await _db.SaveChangesAsync();
+        await Db.SaveChangesAsync();
     }
 
     public async Task<AcquireLockResult> TryAcquireBatchLockAsync(int batchId, string userId)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
+        var strategy = Db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
-            await using var tx = await _db.Database.BeginTransactionAsync(
+            await using var tx = await Db.Database.BeginTransactionAsync(
                 System.Data.IsolationLevel.Serializable);
 
-            var batch = await _db.Batches.FindAsync(batchId);
+            var batch = await Db.Batches.FindAsync(batchId);
             if (batch is null)
             {
                 await tx.RollbackAsync();
@@ -190,7 +199,7 @@ public class BatchService : IBatchService
 
             batch.LockedByUserId    = userId;
             batch.LockAcquiredAtUtc = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+            await Db.SaveChangesAsync();
             await tx.CommitAsync();
             return AcquireLockResult.Ok();
         });
@@ -198,19 +207,19 @@ public class BatchService : IBatchService
 
     public async Task ReleaseBatchLockAsync(int batchId, string userId)
     {
-        var batch = await _db.Batches.FindAsync(batchId);
+        var batch = await Db.Batches.FindAsync(batchId);
         if (batch is null) return;
         if (batch.LockedByUserId == userId)
         {
             batch.LockedByUserId    = null;
             batch.LockAcquiredAtUtc = null;
-            await _db.SaveChangesAsync();
+            await Db.SaveChangesAsync();
         }
     }
 
     public async Task SetUserLastBatchAsync(string userId, string organizationId, int? batchId)
     {
-        var session = await _db.UserBatchSessions
+        var session = await Db.UserBatchSessions
             .FirstOrDefaultAsync(s => s.UserId == userId);
 
         if (session is null)
@@ -221,7 +230,7 @@ public class BatchService : IBatchService
                 BatchId           = batchId,
                 LastAccessedAtUtc = DateTime.UtcNow,
             };
-            _db.UserBatchSessions.Add(session);
+            Db.UserBatchSessions.Add(session);
         }
         else
         {
@@ -229,12 +238,12 @@ public class BatchService : IBatchService
             session.LastAccessedAtUtc = DateTime.UtcNow;
         }
 
-        await _db.SaveChangesAsync();
+        await Db.SaveChangesAsync();
     }
 
     public async Task<int?> GetUserLastBatchIdAsync(string userId, string organizationId)
     {
-        var session = await _db.UserBatchSessions
+        var session = await Db.UserBatchSessions
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.UserId == userId);
         return session?.BatchId;
@@ -253,7 +262,7 @@ public class BatchService : IBatchService
         IReadOnlyList<IBrowserFile> files,
         string userId)
     {
-        var batch = await _db.Batches.FindAsync(batchId);
+        var batch = await Db.Batches.FindAsync(batchId);
         if (batch is null)
             return UploadResult.Error($"Batch {batchId} not found.");
 
@@ -263,17 +272,17 @@ public class BatchService : IBatchService
 
         try
         {
-            var strategy = _db.Database.CreateExecutionStrategy();
+            var strategy = Db.Database.CreateExecutionStrategy();
             return await strategy.ExecuteAsync(async () =>
             {
-                await using var tx = await _db.Database.BeginTransactionAsync(
+                await using var tx = await Db.Database.BeginTransactionAsync(
                     System.Data.IsolationLevel.Serializable);
                 try
                 {
                     // Check for filename conflicts in this batch
                     var incomingNames = files.Select(f => f.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
                     var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
-                    var existing = await _db.Invoices
+                    var existing = await Db.Invoices
                         .Where(i => i.BatchId == batchId && i.FilePath != null)
                         .Select(i => Path.GetFileName(i.FilePath!))
                         .ToListAsync();
@@ -300,7 +309,7 @@ public class BatchService : IBatchService
                             await src.CopyToAsync(dest);
                         }
 
-                        _db.Invoices.Add(new Invoice
+                        Db.Invoices.Add(new Invoice
                         {
                             BatchId       = batchId,
                             FilePath      = destPath,
@@ -309,7 +318,7 @@ public class BatchService : IBatchService
                         uploaded++;
                     }
 
-                    await _db.SaveChangesAsync();
+                    await Db.SaveChangesAsync();
                     await tx.CommitAsync();
                     return UploadResult.Ok(uploaded);
                 }

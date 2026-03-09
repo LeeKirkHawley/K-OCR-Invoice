@@ -64,30 +64,16 @@ builder.Host.UseSerilog();
 
 Log.Logger.Information("Starting K-OCR");
 
-// Database — DbContext and DatabaseService both Scoped for Blazor Server thread safety
-// (Singleton DatabaseService would conflict with Scoped KOCRDbContext)
+// Database — custom scoped factory defers ALL context creation (including options
+// building) until CreateDbContext() is actually called, so super-admin scopes can
+// inject BatchService/DatabaseService without hitting the org-routing throw.
 var databaseSettings = configuration.GetSection("Database").Get<DatabaseSettings>()
     ?? new DatabaseSettings();
-builder.Services.AddDbContext<KOCRDbContext>((sp, options) =>
-{
-    var tenant = sp.GetRequiredService<ITenantContext>();
-    var paths  = sp.GetRequiredService<IPathService>();
-
-    // Route to the per-org SQLite file; super-admin or unauthenticated callers must
-    // use SuperAdminDataService (enumerate-folders) instead of this scoped context.
-    var dbPath = tenant.OrganizationName is not null
-        ? paths.GetOrgDbPath(tenant.OrganizationName)
-        : throw new InvalidOperationException(
-            "KOCRDbContext requires an authenticated org user. " +
-            "Super-admin cross-org operations must use SuperAdminDataService.");
-
-    options.UseSqlite($"Data Source={dbPath}");
-
-    if (databaseSettings.EnableSensitiveDataLogging)
-        options.EnableSensitiveDataLogging();
-    if (databaseSettings.EnableDetailedErrors)
-        options.EnableDetailedErrors();
-});
+builder.Services.AddScoped<IDbContextFactory<KOCRDbContext>>(sp =>
+    new OrgDbContextFactory(
+        sp.GetRequiredService<ITenantContext>(),
+        sp.GetRequiredService<IPathService>(),
+        databaseSettings));
 builder.Services.AddScoped<DatabaseService>();
 
 // Identity — ApplicationDbContext uses the central identity database

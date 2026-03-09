@@ -9,48 +9,25 @@ using System.Threading.Tasks;
 
 namespace K_OCR.Services
 {
-    public class DatabaseService
+    public class DatabaseService : IAsyncDisposable
     {
-        private readonly KOCRDbContext _context;
+        private readonly IDbContextFactory<KOCRDbContext> _contextFactory;
         private readonly ILogger<DatabaseService> _logger;
-        private bool _isInitialized = false;
-        private readonly object _initLock = new object();
 
-        public DatabaseService(KOCRDbContext context, ILogger<DatabaseService> logger)
+        // Lazily created on first DB call; never created for super-admin code paths.
+        private KOCRDbContext? _context;
+        private KOCRDbContext Context => _context ??= _contextFactory.CreateDbContext();
+
+        public DatabaseService(IDbContextFactory<KOCRDbContext> contextFactory, ILogger<DatabaseService> logger)
         {
-            _context = context;
+            _contextFactory = contextFactory;
             _logger = logger;
         }
 
-        /// <summary>
-        /// Initialize the database with migrations. Call this explicitly after construction.
-        /// </summary>
-        public void Initialize()
+        public async ValueTask DisposeAsync()
         {
-            if (_isInitialized) return;
-
-            lock (_initLock)
-            {
-                if (_isInitialized) return;
-
-                try
-                {
-                    _logger.LogInformation("Applying database migrations...");
-                    
-                    // Get database path for logging
-                    var connectionString = _context.Database.GetConnectionString();
-                    _logger.LogInformation($"Database connection: {connectionString}");
-                    
-                    _context.Database.Migrate();
-                    _logger.LogInformation("Database migrations applied successfully.");
-                    _isInitialized = true;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error applying database migrations");
-                    throw;
-                }
-            }
+            if (_context is not null)
+                await _context.DisposeAsync();
         }
 
         // Database health check
@@ -59,7 +36,7 @@ namespace K_OCR.Services
             try
             {
                 // Simple query to test database connectivity
-                await _context.Invoices.FirstOrDefaultAsync(f => false);
+                await Context.Invoices.FirstOrDefaultAsync(f => false);
                 return true;
             }
             catch (Exception ex)
@@ -72,7 +49,7 @@ namespace K_OCR.Services
         // Invoice operations
         public async Task<Invoice?> GetInvoiceByIdAsync(int id)
         {
-            return await _context.Invoices
+            return await Context.Invoices
                 .Include(i => i.Items)
                 .Include(i => i.DocumentFields)
                 .FirstOrDefaultAsync(i => i.Id == id);
@@ -80,7 +57,7 @@ namespace K_OCR.Services
 
         public async Task<Invoice?> GetInvoiceByFilePathAsync(string filePath)
         {
-            return await _context.Invoices
+            return await Context.Invoices
                 .Include(i => i.Items)
                 .Include(i => i.DocumentFields)
                 .FirstOrDefaultAsync(i => i.FilePath == filePath);
@@ -88,7 +65,7 @@ namespace K_OCR.Services
 
         public async Task<List<Invoice>> GetAllInvoicesAsync()
         {
-            return await _context.Invoices
+            return await Context.Invoices
                 .Include(i => i.Items)
                 .Include(i => i.DocumentFields)
                 .OrderByDescending(i => i.UploadedAtUtc)
@@ -101,14 +78,14 @@ namespace K_OCR.Services
             {
                 if (invoice.Id == 0)
                 {
-                    _context.Invoices.Add(invoice);
+                    Context.Invoices.Add(invoice);
                 }
                 else
                 {
-                    _context.Invoices.Update(invoice);
+                    Context.Invoices.Update(invoice);
                 }
 
-                await _context.SaveChangesAsync();
+                await Context.SaveChangesAsync();
                 _logger.LogInformation($"Invoice saved with ID: {invoice.Id}");
                 return invoice;
             }
@@ -123,11 +100,11 @@ namespace K_OCR.Services
         {
             try
             {
-                var invoice = await _context.Invoices.FindAsync(id);
+                var invoice = await Context.Invoices.FindAsync(id);
                 if (invoice != null)
                 {
-                    _context.Invoices.Remove(invoice);
-                    await _context.SaveChangesAsync();
+                    Context.Invoices.Remove(invoice);
+                    await Context.SaveChangesAsync();
                     _logger.LogInformation($"Invoice deleted with ID: {id}");
                     return true;
                 }
@@ -148,8 +125,8 @@ namespace K_OCR.Services
         {
             try
             {
-                _context.Invoices.RemoveRange(_context.Invoices);
-                await _context.SaveChangesAsync();
+                Context.Invoices.RemoveRange(Context.Invoices);
+                await Context.SaveChangesAsync();
                 _logger.LogInformation("All invoice data cleared from database.");
             }
             catch (Exception ex)
@@ -165,7 +142,7 @@ namespace K_OCR.Services
         /// </summary>
         public async Task<List<Invoice>> GetInvoicesByBatchAsync(int batchId)
         {
-            return await _context.Invoices
+            return await Context.Invoices
                 .Where(i => i.BatchId == batchId)
                 .Select(i => new Invoice
                 {
