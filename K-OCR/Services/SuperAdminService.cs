@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System.Text;
@@ -274,7 +275,12 @@ public class SuperAdminService : ISuperAdminService
         _dbContext.Organizations.Remove(organization);
         await _dbContext.SaveChangesAsync();
 
-        // Delete org folder from disk
+        // Release any pooled SQLite connections to the org's database before
+        // deleting the folder. On Windows, open file handles prevent directory
+        // deletion; EF Core returns connections to the pool rather than closing
+        // them, so the handles stay alive until the pool is cleared.
+        SqliteConnection.ClearAllPools();
+
         var orgPath = _pathService.GetOrgFolderPath(organization.Name);
         if (Directory.Exists(orgPath))
             Directory.Delete(orgPath, recursive: true);

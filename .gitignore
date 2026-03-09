@@ -15,6 +15,7 @@ tessdata/
 *.user
 *.userosscache
 *.sln.docstates
+*.db
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -371,3 +372,4 @@ FodyWeavers.xsd
 *.db
 *.db-shm
 *.db-wal
+K-OCR/kocr.db
