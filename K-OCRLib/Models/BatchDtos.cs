@@ -65,3 +65,6 @@ public class UploadResult
                 ErrorMessage = "One or more files already exist in this batch." };
     public static UploadResult Error(string message) => new() { Success = false, ErrorMessage = message };
 }
+
+/// <summary>Framework-neutral file upload payload. Replaces IBrowserFile at the service boundary.</summary>
+public sealed record FileUpload(string FileName, Stream Content);

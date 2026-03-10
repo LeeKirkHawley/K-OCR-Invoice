@@ -244,26 +244,36 @@
         StateHasChanged();
         try
         {
-            var files  = e.GetMultipleFiles(maximumFileCount: 500).ToList();
-            var result = await BatchSvc.UploadFilesToBatchAsync(
-                State.CurrentBatch.BatchId, files, State.CurrentUserId);
+            const long maxFileSize = 50 * 1024 * 1024; // 50 MB per file
+            var uploads = e.GetMultipleFiles(maximumFileCount: 500)
+                .Select(f => new FileUpload(f.Name, f.OpenReadStream(maxFileSize)))
+                .ToList();
+            try
+            {
+                var result = await BatchSvc.UploadFilesToBatchAsync(
+                    State.CurrentBatch.BatchId, uploads, State.CurrentUserId);
 
-            if (result.Success)
-            {
-                Toast.ShowSuccess($"{result.FilesUploaded} file{(result.FilesUploaded == 1 ? "" : "s")} uploaded.");
-                await RefreshBatchFilesAsync();
+                if (result.Success)
+                {
+                    Toast.ShowSuccess($"{result.FilesUploaded} file{(result.FilesUploaded == 1 ? "" : "s")} uploaded.");
+                    await RefreshBatchFilesAsync();
+                }
+                else if (result.ConflictingFileNames.Count > 0)
+                {
+                    _uploadErrorMessage = result.ErrorMessage ?? "One or more files already exist in this batch.";
+                    _uploadConflicts    = result.ConflictingFileNames;
+                    _uploadErrorVisible = true;
+                }
+                else
+                {
+                    _uploadErrorMessage = result.ErrorMessage ?? "Upload failed.";
+                    _uploadConflicts    = [];
+                    _uploadErrorVisible = true;
+                }
             }
-            else if (result.ConflictingFileNames.Count > 0)
+            finally
             {
-                _uploadErrorMessage = result.ErrorMessage ?? "One or more files already exist in this batch.";
-                _uploadConflicts    = result.ConflictingFileNames;
-                _uploadErrorVisible = true;
-            }
-            else
-            {
-                _uploadErrorMessage = result.ErrorMessage ?? "Upload failed.";
-                _uploadConflicts    = [];
-                _uploadErrorVisible = true;
+                foreach (var u in uploads) u.Content.Dispose();
             }
         }
         catch (Exception ex)
