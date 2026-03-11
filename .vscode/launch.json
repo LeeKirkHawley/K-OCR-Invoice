@@ -3,6 +3,24 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Launch KOCRAsp (MVC)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "Build KOCRAsp Only",
+            "program": "${workspaceFolder}/KOCRAsp/bin/Debug/net10.0/KOCRAsp.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/KOCRAsp",
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            },
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            }
+        },
+        {
             "name": "Launch K-OCR (Blazor)",
             "type": "coreclr",
             "request": "launch",

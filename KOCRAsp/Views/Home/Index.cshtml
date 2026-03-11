@@ -1,0 +1,445 @@
+@model KOCRAsp.Models.HomeIndexViewModel
+@{
+    ViewData["Title"] = "Home";
+}
+
+<div class="d-flex gap-2" style="height: calc(100vh - 90px);">
+
+    <!-- ── Left panel: file list ─────────────────────────────── -->
+    <div class="file-list-panel border rounded p-2 bg-white" style="width: 260px; flex-shrink: 0;">
+
+        <!-- Batch selector -->
+        <select id="batchSelector" class="form-select form-select-sm mb-2">
+            <option value="">— Select Batch —</option>
+            @foreach (var batch in Model.AvailableBatches)
+            {
+                if (Model.CurrentBatch?.BatchId == batch.BatchId)
+                {
+                    <option value="@batch.BatchId" selected>
+                        @batch.Name (#@batch.BatchNumber)
+                    </option>
+                }
+                else
+                {
+                    <option value="@batch.BatchId">
+                        @batch.Name (#@batch.BatchNumber)
+                    </option>
+                }
+            }
+        </select>
+
+        <!-- Toolbar -->
+        <div class="d-flex gap-1 mb-2 flex-wrap">
+            <label class="btn btn-sm btn-outline-primary mb-0" title="Upload files">
+                📤 Upload
+                <input type="file" id="uploadInput" multiple hidden
+                       accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp" />
+            </label>
+            <button id="batchOcrBtn" class="btn btn-sm btn-outline-success" title="Run OCR on all files">
+                ▶ OCR All
+            </button>
+            <button id="refreshBtn" class="btn btn-sm btn-outline-secondary" title="Refresh file list">
+                🔄
+            </button>
+        </div>
+
+        <!-- File list -->
+        <div id="fileListContainer" style="overflow-y: auto; flex: 1;">
+            @if (Model.CurrentBatch == null)
+            {
+                <p class="text-muted small px-1">No batch selected.</p>
+            }
+            else if (!Model.Files.Any())
+            {
+                <p class="text-muted small px-1">No files in batch.</p>
+            }
+            else
+            {
+                foreach (var file in Model.Files)
+                {
+                    <div class="file-list-item d-flex align-items-center gap-1 p-1 border-bottom"
+                         data-filepath="@file.FilePath">
+                        <span class="file-status-dot @file.ProcessedDotClass"
+                              title="@file.ProcessedDotTitle"></span>
+                        <span class="file-status-dot @file.ValidationDotClass"
+                              title="@file.ValidationDotTitle"></span>
+                        <span class="small text-truncate" style="max-width: 185px;"
+                              title="@file.FileName">@file.FileName</span>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <!-- ── Middle panel: invoice ─────────────────────────────── -->
+    <div class="invoice-panel border rounded bg-white d-flex flex-column" style="flex: 1; min-width: 0;">
+
+        <!-- Tab bar -->
+        <ul class="nav nav-tabs px-2 pt-2 flex-shrink-0" id="invoiceTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-validation-btn"
+                        data-bs-toggle="tab" data-bs-target="#tab-validation"
+                        type="button" role="tab">Validation</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-rawjson-btn"
+                        data-bs-toggle="tab" data-bs-target="#tab-rawjson"
+                        type="button" role="tab">Raw JSON</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-validatedjson-btn"
+                        data-bs-toggle="tab" data-bs-target="#tab-validatedjson"
+                        type="button" role="tab">Validated JSON</button>
+            </li>
+        </ul>
+
+        <div class="tab-content p-2 flex-grow-1 overflow-auto">
+
+            <!-- Validation tab -->
+            <div class="tab-pane fade show active" id="tab-validation" role="tabpanel">
+                <div id="invoiceFields">
+                    <p class="text-muted">Select a file to view invoice data.</p>
+                </div>
+            </div>
+
+            <!-- Raw JSON tab -->
+            <div class="tab-pane fade" id="tab-rawjson" role="tabpanel">
+                <pre id="rawJsonContent" class="bg-light p-2 rounded"
+                     style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-all;"></pre>
+            </div>
+
+            <!-- Validated JSON tab -->
+            <div class="tab-pane fade" id="tab-validatedjson" role="tabpanel">
+                <pre id="validatedJsonContent" class="bg-light p-2 rounded"
+                     style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-all;"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Right panel: document viewer ──────────────────────── -->
+    <div class="document-viewer border rounded bg-white p-2 overflow-auto"
+         style="width: 380px; flex-shrink: 0;">
+        <p id="noDocMsg" class="text-muted small">No document selected.</p>
+        <img id="documentImage" src="" alt="Document preview"
+             style="max-width: 100%; display: none;" />
+    </div>
+</div>
+
+<!-- Setup link modal -->
+<div class="modal fade" id="setupLinkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Setup Link</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Email was not sent. Share this link with the user:</p>
+                <input type="text" id="setupLinkInput" class="form-control" readonly />
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    let _currentFilePath = null;
+    let _currentInvoice = null;
+    let _ocrPollInterval = null;
+
+    // ── Batch selector ──────────────────────────────────────────
+    document.getElementById('batchSelector').addEventListener('change', function () {
+        const batchId = this.value;
+        if (!batchId) return;
+        const fd = new FormData();
+        fd.append('batchId', batchId);
+        postForm('/home/selectbatch', fd)
+            .then(() => location.reload())
+            .catch(err => showToast('Failed to switch batch: ' + err.message, 'error'));
+    });
+
+    // ── File upload ─────────────────────────────────────────────
+    document.getElementById('uploadInput').addEventListener('change', async function () {
+        if (!this.files.length) return;
+        const fd = new FormData();
+        for (const f of this.files) fd.append('files', f);
+        try {
+            const result = await postForm('/home/uploadfiles', fd);
+            if (result.success) {
+                showToast(`Uploaded ${result.filesUploaded} file(s).`);
+                await refreshFileList();
+            } else {
+                showToast(result.error ?? 'Upload failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Upload error: ' + err.message, 'error');
+        }
+        this.value = '';
+    });
+
+    // ── Refresh ─────────────────────────────────────────────────
+    document.getElementById('refreshBtn').addEventListener('click', () => refreshFileList());
+
+    // ── Batch OCR ───────────────────────────────────────────────
+    document.getElementById('batchOcrBtn').addEventListener('click', async function () {
+        setButtonLoading(this, true);
+        const btn = this;
+        try {
+            const fd = new FormData();
+            const result = await postForm('/home/batchocr', fd);
+            if (result.success) {
+                showToast('Batch OCR started.');
+                startOcrPolling();
+            } else {
+                showToast(result.error ?? 'OCR failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Batch OCR error: ' + err.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    });
+
+    // ── File click ──────────────────────────────────────────────
+    document.getElementById('fileListContainer').addEventListener('click', function (e) {
+        const item = e.target.closest('.file-list-item');
+        if (!item) return;
+        document.querySelectorAll('.file-list-item').forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        selectFile(item.dataset.filepath);
+    });
+
+    async function selectFile(filePath) {
+        _currentFilePath = filePath;
+        loadDocumentImage(filePath);
+        try {
+            const result = await fetch('/home/getinvoice?filePath=' + encodeURIComponent(filePath));
+            const data = await result.json();
+            if (data.success && data.invoice) {
+                _currentInvoice = data.invoice;
+                renderInvoiceFields(data.invoice);
+                document.getElementById('validatedJsonContent').textContent =
+                    JSON.stringify(data.invoice, null, 2);
+            } else {
+                document.getElementById('invoiceFields').innerHTML =
+                    '<p class="text-muted">No invoice data yet. Run OCR to process this file.</p>';
+                renderRunOcrButton(filePath);
+                document.getElementById('validatedJsonContent').textContent = '';
+            }
+            document.getElementById('rawJsonContent').textContent =
+                JSON.stringify(data.invoice ?? null, null, 2);
+        } catch (err) {
+            showToast('Failed to load invoice: ' + err.message, 'error');
+        }
+    }
+
+    function loadDocumentImage(filePath) {
+        const img = document.getElementById('documentImage');
+        const msg = document.getElementById('noDocMsg');
+        img.src = '/api/image?path=' + encodeURIComponent(filePath);
+        img.style.display = 'block';
+        msg.style.display = 'none';
+        img.onerror = () => { img.style.display = 'none'; msg.style.display = 'block'; };
+    }
+
+    function renderRunOcrButton(filePath) {
+        const container = document.getElementById('invoiceFields');
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm btn-primary mt-2';
+        btn.textContent = '▶ Run OCR';
+        btn.onclick = () => runOcrOnFile(filePath, btn);
+        container.appendChild(btn);
+    }
+
+    async function runOcrOnFile(filePath, btn) {
+        setButtonLoading(btn, true);
+        try {
+            const fd = new FormData();
+            fd.append('filePath', filePath);
+            const result = await postForm('/home/startocr', fd);
+            if (result.success && result.invoice) {
+                _currentInvoice = result.invoice;
+                renderInvoiceFields(result.invoice);
+                document.getElementById('validatedJsonContent').textContent =
+                    JSON.stringify(result.invoice, null, 2);
+                document.getElementById('rawJsonContent').textContent =
+                    JSON.stringify(result.invoice, null, 2);
+                await refreshFileList();
+                showToast('OCR complete.');
+            } else {
+                showToast(result.error ?? 'OCR failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('OCR error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+
+    function renderInvoiceFields(inv) {
+        const container = document.getElementById('invoiceFields');
+        const fields = [
+            ['Vendor',     inv.vendorName   ?? ''],
+            ['Customer',   inv.customerName ?? ''],
+            ['Invoice #',  inv.invoiceId    ?? ''],
+            ['Date',       inv.invoiceDate  ?? ''],
+            ['Due Date',   inv.dueDate      ?? ''],
+            ['Subtotal',   inv.subtotal     != null ? '$' + inv.subtotal.toFixed(2) : ''],
+            ['Tax',        inv.totalTax     != null ? '$' + inv.totalTax.toFixed(2)  : ''],
+            ['Shipping',   inv.shipping     != null ? '$' + inv.shipping.toFixed(2)  : ''],
+            ['Total',      inv.total        != null ? '$' + inv.total.toFixed(2)     : ''],
+        ];
+
+        let html = '<table class="table table-sm invoice-field-table"><tbody>';
+        for (const [label, value] of fields) {
+            html += `<tr><td>${escapeHtml(label)}</td>
+                         <td><input class="form-control form-control-sm inv-field"
+                                    data-field="${escapeHtml(label.toLowerCase().replace(/[^a-z]/g,''))}"
+                                    value="${escapeHtml(String(value))}" /></td></tr>`;
+        }
+        html += '</tbody></table>';
+
+        // Line items
+        if (inv.items?.length) {
+            html += '<h6 class="mt-2">Line Items</h6>';
+            html += '<div class="table-responsive"><table class="table table-sm table-bordered">';
+            html += '<thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead><tbody>';
+            for (const item of inv.items) {
+                html += `<tr>
+                    <td>${escapeHtml(item.description ?? '')}</td>
+                    <td>${item.quantity ?? ''}</td>
+                    <td>${item.unitPrice != null ? '$' + item.unitPrice.toFixed(2) : ''}</td>
+                    <td>${item.lineTotal != null ? '$' + item.lineTotal.toFixed(2) : ''}</td>
+                </tr>`;
+            }
+            html += '</tbody></table></div>';
+        }
+
+        // Action buttons
+        html += `<div class="d-flex gap-2 mt-2 flex-wrap">
+            <button id="saveBtn" class="btn btn-sm btn-primary" onclick="saveInvoice()">💾 Save</button>
+            <button id="acceptBtn" class="btn btn-sm btn-success" onclick="acceptValidation()">✅ Accept</button>
+            <a id="exportBtn" href="#" class="btn btn-sm btn-outline-secondary"
+               onclick="exportDocx(event)">📄 Export DOCX</a>
+        </div>`;
+
+        container.innerHTML = html;
+
+        // Wire up inline edits to update _currentInvoice
+        container.querySelectorAll('.inv-field').forEach(input => {
+            input.addEventListener('change', () => {
+                applyFieldEdit(input.dataset.field, input.value);
+            });
+        });
+    }
+
+    function applyFieldEdit(field, value) {
+        if (!_currentInvoice) return;
+        const map = {
+            vendor: 'vendorName', customer: 'customerName', invoice: 'invoiceId',
+            date: 'invoiceDate', duedate: 'dueDate',
+            subtotal: 'subtotal', tax: 'totalTax', shipping: 'shipping', total: 'total'
+        };
+        const key = map[field];
+        if (key) _currentInvoice[key] = value;
+    }
+
+    async function saveInvoice() {
+        if (!_currentFilePath || !_currentInvoice) return;
+        const btn = document.getElementById('saveBtn');
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/home/saveinvoice',
+                { filePath: _currentFilePath, invoice: _currentInvoice });
+            if (result.success) {
+                showToast('Invoice saved.');
+                await refreshFileList();
+            } else {
+                showToast(result.error ?? 'Save failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Save error: ' + err.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function acceptValidation() {
+        if (!_currentFilePath) return;
+        const btn = document.getElementById('acceptBtn');
+        setButtonLoading(btn, true);
+        try {
+            const fd = new FormData();
+            fd.append('filePath', _currentFilePath);
+            const result = await postForm('/home/acceptvalidation', fd);
+            if (result.success) {
+                showToast('Validation accepted.');
+                await refreshFileList();
+            } else {
+                showToast(result.error ?? 'Accept failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Accept error: ' + err.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    function exportDocx(e) {
+        e.preventDefault();
+        if (!_currentFilePath) return;
+        window.location.href = '/home/exportdocx?filePath=' + encodeURIComponent(_currentFilePath);
+    }
+
+    async function refreshFileList() {
+        try {
+            const resp = await fetch('/home/getfiles');
+            const files = await resp.json();
+            renderFileList(files);
+        } catch (err) {
+            showToast('Refresh failed: ' + err.message, 'error');
+        }
+    }
+
+    function renderFileList(files) {
+        const container = document.getElementById('fileListContainer');
+        if (!files || files.length === 0) {
+            container.innerHTML = '<p class="text-muted small px-1">No files in batch.</p>';
+            return;
+        }
+        let html = '';
+        for (const file of files) {
+            const active = _currentFilePath === file.filePath ? ' active' : '';
+            html += `<div class="file-list-item d-flex align-items-center gap-1 p-1 border-bottom${active}"
+                          data-filepath="${escapeHtml(file.filePath)}">
+                <span class="file-status-dot ${escapeHtml(file.processedDotClass ?? '')}"
+                      title="${escapeHtml(file.processedDotTitle ?? '')}"></span>
+                <span class="file-status-dot ${escapeHtml(file.validationDotClass ?? '')}"
+                      title="${escapeHtml(file.validationDotTitle ?? '')}"></span>
+                <span class="small text-truncate" style="max-width:185px;"
+                      title="${escapeHtml(file.fileName)}">${escapeHtml(file.fileName)}</span>
+            </div>`;
+        }
+        container.innerHTML = html;
+    }
+
+    function startOcrPolling() {
+        if (_ocrPollInterval) return;
+        _ocrPollInterval = setInterval(async () => {
+            try {
+                const resp = await fetch('/home/getocrstatus');
+                const data = await resp.json();
+                if (data.success && data.processed >= data.total && data.total > 0) {
+                    clearInterval(_ocrPollInterval);
+                    _ocrPollInterval = null;
+                    showToast(`OCR complete: ${data.processed}/${data.total} files processed.`);
+                    await refreshFileList();
+                }
+            } catch { /* ignore poll errors */ }
+        }, 3000);
+    }
+</script>
+}

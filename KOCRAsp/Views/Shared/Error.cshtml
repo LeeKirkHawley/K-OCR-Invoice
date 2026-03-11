@@ -1,0 +1,55 @@
+@{
+    var statusCode = ViewData["StatusCode"] as int?;
+    var is404 = statusCode == 404;
+    Layout = is404 ? null : "_Layout";
+    ViewData["Title"] = is404 ? "Page Not Found" : $"Error {statusCode}";
+}
+
+@if (is404)
+{
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Page Not Found – K-OCR</title>
+        <link rel="stylesheet"
+              href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
+    </head>
+    <body class="bg-light">
+        <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+            <div class="text-center">
+                <h1 class="display-1 text-muted">404</h1>
+                <h3>Page Not Found</h3>
+                <p class="text-muted">The page you're looking for doesn't exist.</p>
+                <a href="/" class="btn btn-primary">Go Home</a>
+            </div>
+        </div>
+    </body>
+    </html>
+}
+else
+{
+    <div class="d-flex justify-content-center align-items-center py-5">
+        <div class="text-center">
+            <h1 class="display-3 text-danger">@(statusCode?.ToString() ?? "Error")</h1>
+            <h3 class="mb-3">Something went wrong</h3>
+            <p class="text-muted mb-4">
+                @if (statusCode == 403)
+                {
+                    <span>You don't have permission to access this page.</span>
+                }
+                else if (statusCode == 500)
+                {
+                    <span>An internal server error occurred. Please try again later.</span>
+                }
+                else
+                {
+                    <span>An unexpected error occurred (HTTP @statusCode).</span>
+                }
+            </p>
+            <a href="/" class="btn btn-primary me-2">Go Home</a>
+            <a href="javascript:history.back()" class="btn btn-outline-secondary">Go Back</a>
+        </div>
+    </div>
+}

@@ -1,0 +1,171 @@
+@using K_OCR.Models
+@model List<BatchSummary>
+@{
+    ViewData["Title"] = "Batches";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Batches</h4>
+</div>
+
+@if (TempData["Success"] is string ok)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @ok <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] is string err)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @err <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- New batch form -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="card-title">New Batch</h6>
+        <form method="post" asp-action="Create" asp-controller="Batch" class="row g-2">
+            @Html.AntiForgeryToken()
+            <div class="col-sm-8 col-md-6">
+                <input type="text" name="name" class="form-control"
+                       placeholder="Batch name" maxlength="200" required />
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary">Create</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Batch table -->
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0" id="batchTable">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">
+                            No batches yet. Create one above.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var batch in Model.OrderByDescending(b => b.CreatedAtUtc))
+                    {
+                        var isLocked = batch.LockedByUserId != null;
+                        <tr id="row-@batch.BatchId">
+                            <td>@batch.BatchNumber</td>
+                            <td>@batch.Name</td>
+                            <td>@batch.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                            <td>
+                                @if (isLocked)
+                                {
+                                    <span class="badge bg-warning text-dark">🔒 Locked</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">🔓 Open</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    @if (isLocked)
+                                    {
+                                        <button class="btn btn-outline-secondary"
+                                                onclick="unlockBatch(@batch.BatchId, this)"
+                                                title="Release lock">🔓 Unlock</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-outline-warning"
+                                                onclick="lockBatch(@batch.BatchId, this)"
+                                                title="Acquire lock">🔒 Lock</button>
+                                    }
+                                    <a class="btn btn-outline-primary"
+                                       href="/?batchId=@batch.BatchId" title="Open in viewer">Open</a>
+                                    <button class="btn btn-outline-danger"
+                                            onclick="deleteBatch(@batch.BatchId, this)"
+                                            title="Delete batch">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    async function lockBatch(batchId, btn) {
+        setButtonLoading(btn, true);
+        try {
+            const fd = new FormData();
+            fd.append('batchId', batchId);
+            const result = await postForm('/batch/lock', fd);
+            if (result.success) {
+                showToast('Batch locked.');
+                location.reload();
+            } else {
+                showToast(result.error ?? 'Lock failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Lock error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function unlockBatch(batchId, btn) {
+        setButtonLoading(btn, true);
+        try {
+            const fd = new FormData();
+            fd.append('batchId', batchId);
+            const result = await postForm('/batch/unlock', fd);
+            if (result.success) {
+                showToast('Batch unlocked.');
+                location.reload();
+            } else {
+                showToast(result.error ?? 'Unlock failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Unlock error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function deleteBatch(batchId, btn) {
+        if (!confirm('Delete this batch? This cannot be undone.')) return;
+        setButtonLoading(btn, true);
+        try {
+            const fd = new FormData();
+            fd.append('batchId', batchId);
+            const result = await postForm('/batch/delete', fd);
+            if (result.success) {
+                document.getElementById('row-' + batchId)?.remove();
+                showToast('Batch deleted.');
+            } else {
+                showToast(result.error ?? 'Delete failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Delete error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+</script>
+}

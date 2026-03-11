@@ -4,8 +4,7 @@
         {
             "label": "build",
             "dependsOn": [
-                "Build K-OCRLib Only",
-                "Build K-OCRIntegrationTests Only"
+                "Build KOCRAsp Only"
             ],
             "dependsOrder": "sequence",
             "group": {
@@ -13,6 +12,18 @@
                 "isDefault": true
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Build KOCRAsp Only",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/KOCRAsp/KOCRAsp.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile"
         },
         {
             "label": "Build K-OCR (Blazor) Only",

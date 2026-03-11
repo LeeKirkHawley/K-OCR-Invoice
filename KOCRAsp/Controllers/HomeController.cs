@@ -1,0 +1,344 @@
+using System.Security.Claims;
+using K_OCR.Data;
+using K_OCR.Models;
+using K_OCR.Security;
+using K_OCR.Services;
+using KOCRAsp.Models;
+using KOCRAsp.Security;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
+
+namespace KOCRAsp.Controllers;
+
+[Authorize]
+public class HomeController : Controller
+{
+    private readonly IInvoiceProcessingService _ocrSvc;
+    private readonly IBatchService _batchSvc;
+    private readonly IFileService _fileSvc;
+    private readonly IConfigurationService _configSvc;
+    private readonly IDocumentExportService _exportSvc;
+    private readonly DatabaseService _dbSvc;
+    private readonly ILogger<HomeController> _logger;
+
+    private static readonly string[] InvoiceExtensions =
+        [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"];
+
+    public HomeController(
+        IInvoiceProcessingService ocrSvc,
+        IBatchService batchSvc,
+        IFileService fileSvc,
+        IConfigurationService configSvc,
+        IDocumentExportService exportSvc,
+        DatabaseService dbSvc,
+        ILogger<HomeController> logger)
+    {
+        _ocrSvc = ocrSvc;
+        _batchSvc = batchSvc;
+        _fileSvc = fileSvc;
+        _configSvc = configSvc;
+        _exportSvc = exportSvc;
+        _dbSvc = dbSvc;
+        _logger = logger;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Index()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return RedirectToAction("Index", "Admin");
+
+        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+
+        var batches = (await _batchSvc.GetBatchesForOrgAsync(orgId)).ToList();
+
+        BatchSummary? currentBatch = null;
+        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        if (int.TryParse(currentBatchIdStr, out int currentBatchId))
+            currentBatch = batches.FirstOrDefault(b => b.BatchId == currentBatchId);
+
+        var files = new List<FileListEntry>();
+        if (currentBatch != null)
+            files = await BuildFileListAsync(currentBatch);
+
+        return View(new HomeIndexViewModel
+        {
+            AvailableBatches = batches,
+            CurrentBatch = currentBatch,
+            Files = files
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult SelectBatch(int batchId)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Forbid();
+
+        HttpContext.Session.SetString("CurrentBatchId", batchId.ToString());
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UploadFiles(List<IFormFile> files)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        if (!int.TryParse(currentBatchIdStr, out int batchId))
+            return Json(new { success = false, error = "No batch selected." });
+
+        var uploads = files
+            .Select(f => new FileUpload(f.FileName, f.OpenReadStream()))
+            .ToList();
+
+        var result = await _batchSvc.UploadFilesToBatchAsync(batchId, uploads, userId);
+        return Json(new
+        {
+            success = result.Success,
+            filesUploaded = result.FilesUploaded,
+            error = result.ErrorMessage,
+            conflicts = result.ConflictingFileNames
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartOcr(string filePath)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            return Json(new { success = false, error = "File path required." });
+
+        try
+        {
+            var settings = await _configSvc.LoadSettingsAsync();
+            var result = await _ocrSvc.ProcessFileAsync(filePath, useCache: false, settings.ProjectArtifacts);
+            if (!result.IsSuccess)
+                return Json(new { success = false, error = result.Error?.Message ?? "Processing failed." });
+
+            var invoice = await _ocrSvc.LoadCachedInvoiceAsync(filePath);
+            return Json(new { success = true, invoice });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "StartOcr failed for {FilePath}", filePath);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> BatchOcr()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        if (!int.TryParse(currentBatchIdStr, out int batchId))
+            return Json(new { success = false, error = "No batch selected." });
+
+        try
+        {
+            await _batchSvc.TriggerOcrAsync(batchId);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "BatchOcr failed for batch {BatchId}", batchId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetOcrStatus()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false });
+
+        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        if (!int.TryParse(currentBatchIdStr, out int batchId))
+            return Json(new { success = false });
+
+        var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
+        var batch = batches.FirstOrDefault(b => b.BatchId == batchId);
+        if (batch == null) return Json(new { success = false });
+
+        var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
+        var filePaths = Directory.Exists(invoicesFolder)
+            ? _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions).ToList()
+            : new List<string>();
+
+        int processed = filePaths.Count(fp => _ocrSvc.HasCachedResults(fp));
+        return Json(new { success = true, total = filePaths.Count, processed });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetFiles()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new List<FileListEntry>());
+
+        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        if (!int.TryParse(currentBatchIdStr, out int batchId))
+            return Json(new List<FileListEntry>());
+
+        var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
+        var batch = batches.FirstOrDefault(b => b.BatchId == batchId);
+        if (batch == null) return Json(new List<FileListEntry>());
+
+        var files = await BuildFileListAsync(batch);
+        return Json(files);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetInvoice(string filePath)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            return Json(new { success = false, error = "File path required." });
+
+        var invoice = await _ocrSvc.LoadCachedInvoiceAsync(filePath);
+        if (invoice == null)
+            return Json(new { success = false, error = "No cached invoice for this file." });
+
+        return Json(new { success = true, invoice });
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> SaveInvoice([FromBody] SaveInvoiceRequest request)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        if (string.IsNullOrWhiteSpace(request.FilePath) || request.Invoice == null)
+            return Json(new { success = false, error = "Invalid request." });
+
+        try
+        {
+            await _ocrSvc.SaveInvoiceAsync(request.FilePath, request.Invoice);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SaveInvoice failed for {FilePath}", request.FilePath);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AcceptValidation(string filePath)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            return Json(new { success = false, error = "File path required." });
+
+        try
+        {
+            var invoice = await _ocrSvc.LoadCachedInvoiceAsync(filePath);
+            if (invoice == null)
+                return Json(new { success = false, error = "No cached invoice for this file." });
+
+            invoice.IsValidationAccepted = true;
+            await _ocrSvc.SaveInvoiceAsync(filePath, invoice);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AcceptValidation failed for {FilePath}", filePath);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportDocx(string filePath)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Forbid();
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            return BadRequest("File path required.");
+
+        var invoice = await _ocrSvc.LoadCachedInvoiceAsync(filePath);
+        if (invoice == null)
+            return NotFound("No cached invoice for this file.");
+
+        var json = JsonConvert.SerializeObject(invoice);
+        var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.docx");
+        try
+        {
+            await _exportSvc.ExportToDocxAsync(json, tempPath);
+            var bytes = await System.IO.File.ReadAllBytesAsync(tempPath);
+            var downloadName = Path.GetFileNameWithoutExtension(filePath) + ".docx";
+            return File(bytes,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                downloadName);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempPath))
+                System.IO.File.Delete(tempPath);
+        }
+    }
+
+    [HttpGet]
+    public IActionResult Error(int? statusCode)
+    {
+        ViewData["StatusCode"] = statusCode;
+        return View();
+    }
+
+    private async Task<List<FileListEntry>> BuildFileListAsync(BatchSummary batch)
+    {
+        var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
+        if (!Directory.Exists(invoicesFolder))
+            return new List<FileListEntry>();
+
+        var filePaths = _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions);
+        var entries = new List<FileListEntry>();
+
+        foreach (var fp in filePaths)
+        {
+            var entry = new FileListEntry { FilePath = fp, FileName = Path.GetFileName(fp) };
+            var invoice = await _dbSvc.GetInvoiceByFilePathAsync(fp);
+            if (invoice != null)
+            {
+                entry.IsProcessed = true;
+                if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
+                {
+                    var dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
+                    if (dto != null)
+                    {
+                        entry.IsSavedOrAccepted = dto.IsValidationAccepted;
+                        if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
+                        {
+                            entry.HasSuspectFields =
+                                dto.TesseractConfirmed.Values.Any(v => !v)
+                                || (dto.MathConfirmed?.Values.Any(v => !v) ?? false)
+                                || (dto.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
+                            entry.IsValidated = !entry.HasSuspectFields;
+                        }
+                    }
+                }
+            }
+            entries.Add(entry);
+        }
+
+        return entries;
+    }
+}

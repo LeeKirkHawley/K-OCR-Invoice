@@ -1,0 +1,220 @@
+@using KOCRAsp.Models.Api.SuperAdmin
+@using K_OCR.Models
+@model OrganizationOverview[]
+@{
+    ViewData["Title"] = "Admin Console";
+    var batches = (ViewBag.Batches as BatchDetail[]) ?? Array.Empty<BatchDetail>();
+}
+
+<h4 class="mb-4">Admin Console</h4>
+
+<!-- Create org panel -->
+<div class="card mb-4">
+    <div class="card-header"><strong>Create Organization</strong></div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-sm-4">
+                <input type="text" id="orgName" class="form-control" placeholder="Organization name" maxlength="200" />
+            </div>
+            <div class="col-sm-4">
+                <input type="text" id="orgDesc" class="form-control" placeholder="Description (optional)" maxlength="500" />
+            </div>
+            <div class="col-sm-4">
+                <input type="email" id="adminEmail" class="form-control" placeholder="Admin email" />
+            </div>
+            <div class="col-sm-4">
+                <input type="text" id="adminName" class="form-control" placeholder="Admin full name" />
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary" id="createOrgBtn" onclick="createOrg()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Organizations table -->
+<div class="card mb-4">
+    <div class="card-header"><strong>Organizations</strong></div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0" id="orgTable">
+            <thead class="table-light">
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Users</th>
+                    <th>Created</th>
+                    <th>Active</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-3">No organizations.</td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var org in Model)
+                    {
+                        <tr id="org-row-@org.OrganizationId">
+                            <td>@org.Name</td>
+                            <td class="text-muted small">@org.Description</td>
+                            <td>@org.UserCount</td>
+                            <td>@org.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy")</td>
+                            <td>
+                                @if (org.IsActive)
+                                {
+                                    <span class="badge bg-success">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Inactive</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger"
+                                        onclick="deleteOrg('@org.OrganizationId', this)">Delete</button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- All batches table -->
+<div class="card">
+    <div class="card-header"><strong>All Batches</strong></div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Org</th>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Files</th>
+                    <th>Validated</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!batches.Any())
+                {
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-3">No batches.</td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var b in batches.OrderByDescending(x => x.CreatedAtUtc))
+                    {
+                        <tr>
+                            <td class="small text-muted">@b.OrganizationId</td>
+                            <td>@b.BatchNumber</td>
+                            <td>@b.Name</td>
+                            <td>@b.FileCount</td>
+                            <td>@b.ValidatedCount</td>
+                            <td>
+                                @if (b.LockedByUserId != null)
+                                {
+                                    <span class="badge bg-warning text-dark">Locked</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">Open</span>
+                                }
+                            </td>
+                            <td>@b.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy")</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Setup link modal -->
+<div class="modal fade" id="setupLinkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Admin Setup Link</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Email was not sent. Share this setup link with the organization admin:</p>
+                <input type="text" id="setupLinkInput" class="form-control mb-2" readonly />
+                <button class="btn btn-sm btn-outline-secondary" onclick="copySetupLink()">Copy</button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    async function createOrg() {
+        const name = document.getElementById('orgName').value.trim();
+        const desc = document.getElementById('orgDesc').value.trim();
+        const email = document.getElementById('adminEmail').value.trim();
+        const adminName = document.getElementById('adminName').value.trim();
+
+        if (!name || !email || !adminName) {
+            showToast('Name, admin email and admin name are required.', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('createOrgBtn');
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/createorganization', {
+                name, description: desc, adminEmail: email, adminName
+            });
+            if (result.success) {
+                showToast('Organization created.');
+                if (result.setupLink && !result.emailSent) {
+                    document.getElementById('setupLinkInput').value = result.setupLink;
+                    new bootstrap.Modal(document.getElementById('setupLinkModal')).show();
+                }
+                location.reload();
+            } else {
+                showToast(result.error ?? 'Create failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function deleteOrg(orgId, btn) {
+        if (!confirm('Delete this organization and all its data? This cannot be undone.')) return;
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/deleteorganization', { orgId });
+            if (result.success) {
+                document.getElementById('org-row-' + orgId)?.remove();
+                showToast('Organization deleted.');
+            } else {
+                showToast(result.error ?? 'Delete failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+
+    function copySetupLink() {
+        const input = document.getElementById('setupLinkInput');
+        input.select();
+        navigator.clipboard.writeText(input.value).then(() => showToast('Copied!'));
+    }
+</script>
+}

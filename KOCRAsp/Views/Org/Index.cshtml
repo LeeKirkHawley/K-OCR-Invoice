@@ -1,0 +1,204 @@
+@{
+    ViewData["Title"] = "Manage Users";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0">Manage Users</h4>
+</div>
+
+<!-- Invite user form -->
+<div class="card mb-4">
+    <div class="card-header"><strong>Invite User</strong></div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-sm-4">
+                <input type="text" id="inviteName" class="form-control" placeholder="Full name" maxlength="200" />
+            </div>
+            <div class="col-sm-4">
+                <input type="email" id="inviteEmail" class="form-control" placeholder="Email address" />
+            </div>
+            <div class="col-sm-3">
+                <select id="inviteRole" class="form-select">
+                    <option value="OrganizationUser">User</option>
+                    <option value="OrganizationValidator">Validator</option>
+                    <option value="OrganizationAdmin">Admin</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary" id="inviteBtn" onclick="inviteUser()">Invite</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Users table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Current Users</strong>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadUsers()">🔄 Refresh</button>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0" id="usersTable">
+            <thead class="table-light">
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Active</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody">
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-3">Loading…</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Setup link modal -->
+<div class="modal fade" id="setupLinkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">User Setup Link</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Email was not sent. Share this setup link with the user:</p>
+                <input type="text" id="setupLinkInput" class="form-control mb-2" readonly />
+                <button class="btn btn-sm btn-outline-secondary" onclick="copySetupLink()">Copy</button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const ROLE_LABELS = {
+        OrganizationAdmin: 'Admin',
+        OrganizationValidator: 'Validator',
+        OrganizationUser: 'User',
+        SuperAdmin: 'Super Admin'
+    };
+
+    document.addEventListener('DOMContentLoaded', loadUsers);
+
+    async function loadUsers() {
+        try {
+            const resp = await fetch('/org/getusers');
+            const users = await resp.json();
+            renderUsers(users);
+        } catch (err) {
+            showToast('Failed to load users: ' + err.message, 'error');
+        }
+    }
+
+    function renderUsers(users) {
+        const tbody = document.getElementById('usersTableBody');
+        if (!users || users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No users.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        for (const u of users) {
+            const roleLabel = u.roles?.map(r => ROLE_LABELS[r] ?? r).join(', ') || '—';
+            const primaryRole = u.roles?.[0] ?? 'OrganizationUser';
+            html += `<tr id="user-row-${escapeHtml(u.userId)}">
+                <td>${escapeHtml(u.fullName ?? '—')}</td>
+                <td>${escapeHtml(u.email ?? '—')}</td>
+                <td>
+                    <select class="form-select form-select-sm" style="width:auto;"
+                            onchange="changeRole('${escapeHtml(u.userId)}', this.value)">
+                        <option value="OrganizationUser" ${primaryRole === 'OrganizationUser' ? 'selected' : ''}>User</option>
+                        <option value="OrganizationValidator" ${primaryRole === 'OrganizationValidator' ? 'selected' : ''}>Validator</option>
+                        <option value="OrganizationAdmin" ${primaryRole === 'OrganizationAdmin' ? 'selected' : ''}>Admin</option>
+                    </select>
+                </td>
+                <td>${u.isActive ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-danger"
+                            onclick="removeUser('${escapeHtml(u.userId)}', this)">Remove</button>
+                </td>
+            </tr>`;
+        }
+        tbody.innerHTML = html;
+    }
+
+    async function inviteUser() {
+        const name = document.getElementById('inviteName').value.trim();
+        const email = document.getElementById('inviteEmail').value.trim();
+        const role = document.getElementById('inviteRole').value;
+
+        if (!name || !email) {
+            showToast('Name and email are required.', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('inviteBtn');
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/org/inviteuser', { name, email, role });
+            if (result.success) {
+                showToast('User invited.');
+                if (result.setupLink && !result.emailSent) {
+                    document.getElementById('setupLinkInput').value = result.setupLink;
+                    new bootstrap.Modal(document.getElementById('setupLinkModal')).show();
+                }
+                document.getElementById('inviteName').value = '';
+                document.getElementById('inviteEmail').value = '';
+                await loadUsers();
+            } else {
+                showToast(result.error ?? 'Invite failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function removeUser(userId, btn) {
+        if (!confirm('Remove this user from the organization?')) return;
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/org/removeuser', { userId });
+            if (result.success) {
+                document.getElementById('user-row-' + userId)?.remove();
+                showToast('User removed.');
+            } else {
+                showToast(result.error ?? 'Remove failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function changeRole(userId, newRole) {
+        try {
+            const result = await postJson('/org/changerole', { userId, newRole });
+            if (result.success) {
+                showToast('Role updated.');
+            } else {
+                showToast(result.error ?? 'Role change failed.', 'error');
+                await loadUsers();
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        }
+    }
+
+    function copySetupLink() {
+        const input = document.getElementById('setupLinkInput');
+        input.select();
+        navigator.clipboard.writeText(input.value).then(() => showToast('Copied!'));
+    }
+</script>
+}
