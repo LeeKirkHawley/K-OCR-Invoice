@@ -179,6 +179,34 @@
 .confidence-low      { background-color: #fff3cd; }
 .confidence-very-low { background-color: #f8d7da; }
 
+/* ── Bbox SVG overlay ─────────────────────────────────────────── */
+.viewer-bbox-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.viewer-bbox {
+    fill: transparent;
+    vector-effect: non-scaling-stroke;
+    stroke-width: 2;
+    opacity: 0.35;
+    transition: opacity 0.15s;
+}
+
+.bbox-ok       { stroke: #50c878; }
+.bbox-suspect  { stroke: #e05050; opacity: 0.55; }
+.bbox-selected { stroke: #ffaa00; fill: rgba(255,170,0,0.18); opacity: 1; stroke-width: 2.5; }
+
+/* ── Invoice field rows (clickable) ───────────────────────────── */
+.inv-field-row { cursor: pointer; }
+.inv-field-row:hover > td,
+.inv-field-row:hover > th { background-color: #e9ecef !important; transition: background-color 0.12s; }
+.inv-field-row.inv-field-selected > td,
+.inv-field-row.inv-field-selected > th { background-color: #fff3cd !important; }
+
 /* ── Sidebar nav ──────────────────────────────────────────────── */
 .sidebar .nav-link {
     color: #495057;

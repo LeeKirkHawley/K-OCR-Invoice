@@ -137,9 +137,10 @@
 
 @section Scripts {
 <script>
-    let _currentFilePath = null;
-    let _currentInvoice = null;
-    let _ocrPollInterval = null;
+    let _currentFilePath  = null;
+    let _currentInvoice   = null;
+    let _ocrPollInterval  = null;
+    let _selectedFieldKey = null;
 
     // ── Batch selector ──────────────────────────────────────────
     document.getElementById('batchSelector').addEventListener('change', function () {
@@ -204,7 +205,10 @@
     });
 
     async function selectFile(filePath) {
-        _currentFilePath = filePath;
+        _currentFilePath  = filePath;
+        _selectedFieldKey = null;
+        const existingSvg = document.getElementById('bboxOverlaySvg');
+        if (existingSvg) existingSvg.remove();
         loadDocumentImage(filePath);
         try {
             const result = await fetch('/home/getinvoice?filePath=' + encodeURIComponent(filePath));
@@ -238,7 +242,7 @@
         toolbar.style.display = '';
 
         img.src = '/api/image?path=' + encodeURIComponent(filePath);
-        img.onload = () => { fitViewerToHeight(); };
+        img.onload = () => { _viewerZoomPct = 100; applyViewerZoom(); renderBboxOverlay(); };
         img.onerror = () => {
             wrap.style.display    = 'none';
             toolbar.style.display = 'none';
@@ -280,74 +284,254 @@
         }
     }
 
+    const HEADER_FIELDS = [
+        { key: 'VendorName',    label: 'Vendor',    prop: 'vendorName'    },
+        { key: 'CustomerName',  label: 'Customer',  prop: 'customerName'  },
+        { key: 'InvoiceId',     label: 'Invoice #', prop: 'invoiceId'     },
+        { key: 'InvoiceDate',   label: 'Date',      prop: 'invoiceDate'   },
+        { key: 'DueDate',       label: 'Due Date',  prop: 'dueDate'       },
+        { key: 'PurchaseOrder', label: 'PO #',      prop: 'purchaseOrder' },
+        { key: 'Subtotal',      label: 'Subtotal',  prop: 'subtotal'      },
+        { key: 'TotalTax',      label: 'Tax',       prop: 'totalTax'      },
+        { key: 'Shipping',      label: 'Shipping',  prop: 'shipping'      },
+        { key: 'Total',         label: 'Total',     prop: 'total'         },
+    ];
+
+    function fmtMoney(v) { return v != null ? '$' + Number(v).toFixed(2) : ''; }
+
     function renderInvoiceFields(inv) {
         const container = document.getElementById('invoiceFields');
-        const fields = [
-            ['Vendor',     inv.vendorName   ?? ''],
-            ['Customer',   inv.customerName ?? ''],
-            ['Invoice #',  inv.invoiceId    ?? ''],
-            ['Date',       inv.invoiceDate  ?? ''],
-            ['Due Date',   inv.dueDate      ?? ''],
-            ['Subtotal',   inv.subtotal     != null ? '$' + inv.subtotal.toFixed(2) : ''],
-            ['Tax',        inv.totalTax     != null ? '$' + inv.totalTax.toFixed(2)  : ''],
-            ['Shipping',   inv.shipping     != null ? '$' + inv.shipping.toFixed(2)  : ''],
-            ['Total',      inv.total        != null ? '$' + inv.total.toFixed(2)     : ''],
-        ];
 
         let html = '<table class="table table-sm invoice-field-table"><tbody>';
-        for (const [label, value] of fields) {
-            html += `<tr><td>${escapeHtml(label)}</td>
+        for (const f of HEADER_FIELDS) {
+            const raw   = inv[f.prop];
+            const isNum = f.prop === 'subtotal' || f.prop === 'totalTax' ||
+                          f.prop === 'shipping'  || f.prop === 'total';
+            const value = isNum ? fmtMoney(raw) : (raw ?? '');
+            html += `<tr class="inv-field-row" data-fieldkey="${f.key}">
+                         <td>${escapeHtml(f.label)}</td>
                          <td><input class="form-control form-control-sm inv-field"
-                                    data-field="${escapeHtml(label.toLowerCase().replace(/[^a-z]/g,''))}"
-                                    value="${escapeHtml(String(value))}" /></td></tr>`;
+                                    data-field="${f.prop}"
+                                    data-fieldkey="${f.key}"
+                                    value="${escapeHtml(String(value))}" /></td>
+                     </tr>`;
         }
         html += '</tbody></table>';
 
-        // Line items
         if (inv.items?.length) {
             html += '<h6 class="mt-2">Line Items</h6>';
             html += '<div class="table-responsive"><table class="table table-sm table-bordered">';
             html += '<thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead><tbody>';
-            for (const item of inv.items) {
-                html += `<tr>
-                    <td>${escapeHtml(item.description ?? '')}</td>
-                    <td>${item.quantity ?? ''}</td>
-                    <td>${item.unitPrice != null ? '$' + item.unitPrice.toFixed(2) : ''}</td>
-                    <td>${item.lineTotal != null ? '$' + item.lineTotal.toFixed(2) : ''}</td>
-                </tr>`;
+            for (let i = 0; i < inv.items.length; i++) {
+                const item = inv.items[i];
+                const fk   = `Item_${i}_Desc`;
+                html += `<tr class="inv-field-row" data-fieldkey="${fk}">
+                             <td><input class="form-control form-control-sm inv-field" data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
+                             <td><input class="form-control form-control-sm inv-field" data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
+                             <td><input class="form-control form-control-sm inv-field" data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${item.unitPrice ?? ''}" /></td>
+                             <td><input class="form-control form-control-sm inv-field" data-item-idx="${i}" data-field="lineTotal"   data-fieldkey="${fk}" value="${item.lineTotal ?? ''}" /></td>
+                         </tr>`;
             }
             html += '</tbody></table></div>';
         }
 
-        // Action buttons
         html += `<div class="d-flex gap-2 mt-2 flex-wrap">
-            <button id="saveBtn" class="btn btn-sm btn-primary" onclick="saveInvoice()">💾 Save</button>
-            <button id="acceptBtn" class="btn btn-sm btn-success" onclick="acceptValidation()">✅ Accept</button>
-            <a id="exportBtn" href="#" class="btn btn-sm btn-outline-secondary"
-               onclick="exportDocx(event)">📄 Export DOCX</a>
+            <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1" onclick="saveInvoice()">Save</button>
+            <button id="acceptBtn" class="btn btn-sm btn-success"           tabindex="-1" onclick="acceptValidation()">Accept</button>
+            <a      id="exportBtn" href="#" class="btn btn-sm btn-outline-secondary"
+                    tabindex="-1" onclick="exportDocx(event)">Export DOCX</a>
         </div>`;
 
         container.innerHTML = html;
 
-        // Wire up inline edits to update _currentInvoice
-        container.querySelectorAll('.inv-field').forEach(input => {
+        const allInputs = Array.from(container.querySelectorAll('.inv-field'));
+        allInputs.forEach((input, idx) => {
             input.addEventListener('change', () => {
-                applyFieldEdit(input.dataset.field, input.value);
+                const itemIdx = input.dataset.itemIdx;
+                if (itemIdx !== undefined) {
+                    const i = parseInt(itemIdx);
+                    if (_currentInvoice?.items?.[i] != null)
+                        _currentInvoice.items[i][input.dataset.field] = input.value;
+                } else {
+                    applyFieldEdit(input.dataset.field, input.value);
+                }
             });
+            input.addEventListener('focus', () => selectField(input.dataset.fieldkey));
+            input.addEventListener('keydown', e => {
+                if (e.key !== 'Tab') return;
+                if (!e.shiftKey && idx === allInputs.length - 1) {
+                    e.preventDefault();
+                    allInputs[0].focus();
+                } else if (e.shiftKey && idx === 0) {
+                    e.preventDefault();
+                    allInputs[allInputs.length - 1].focus();
+                }
+            });
+        });
+        container.querySelectorAll('.inv-field-row').forEach(row => {
+            row.addEventListener('click', () => selectField(row.dataset.fieldkey));
+        });
+
+        renderBboxOverlay();
+
+        // Auto-select first field
+        const firstInput = container.querySelector('.inv-field');
+        if (firstInput) {
+            firstInput.focus();
+        } else {
+            selectField(HEADER_FIELDS[0].key);
+        }
+    }
+
+    function applyFieldEdit(prop, value) {
+        if (!_currentInvoice) return;
+        _currentInvoice[prop] = value;
+    }
+
+    // ── Two-way field / bbox highlighting ──────────────────────────────────────
+
+    function selectField(key) {
+        _selectedFieldKey = key;
+
+        // Update SVG polygon classes
+        const svg = document.getElementById('bboxOverlaySvg');
+        if (svg && _currentInvoice) {
+            svg.querySelectorAll('.viewer-bbox').forEach(poly => {
+                const fk = poly.dataset.fieldkey ?? '';
+                poly.classList.remove('bbox-ok', 'bbox-suspect', 'bbox-selected');
+                if (fk === key) {
+                    poly.classList.add('bbox-selected');
+                } else if (fk.startsWith('Item_')) {
+                    const itemIdx  = parseInt(fk.split('_')[1]);
+                    const keyPfx   = `Item_${itemIdx}_`;
+                    const item     = _currentInvoice.items?.[itemIdx];
+                    if (key && key.startsWith(keyPfx)) {
+                        poly.classList.add('bbox-selected');
+                    } else {
+                        poly.classList.add(item && isItemSuspect(_currentInvoice, item) ? 'bbox-suspect' : 'bbox-ok');
+                    }
+                } else {
+                    poly.classList.add(isSuspect(_currentInvoice, fk) ? 'bbox-suspect' : 'bbox-ok');
+                }
+            });
+        }
+
+        // Highlight field row in validation panel
+        document.querySelectorAll('.inv-field-row').forEach(row => {
+            const rk = row.dataset.fieldkey ?? '';
+            const match = rk === key ||
+                (key && key.startsWith('Item_') && rk.startsWith('Item_' + key.split('_')[1] + '_'));
+            row.classList.toggle('inv-field-selected', match);
+        });
+
+        // Scroll selected bbox into view in the viewer
+        requestAnimationFrame(() => scrollBboxIntoView());
+
+        // Scroll matching field row into view in the panel
+        requestAnimationFrame(() => {
+            const row = document.querySelector(`.inv-field-row[data-fieldkey="${CSS.escape(key)}"]`);
+            if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         });
     }
 
-    function applyFieldEdit(field, value) {
-        if (!_currentInvoice) return;
-        const map = {
-            vendor: 'vendorName', customer: 'customerName', invoice: 'invoiceId',
-            date: 'invoiceDate', duedate: 'dueDate',
-            subtotal: 'subtotal', tax: 'totalTax', shipping: 'shipping', total: 'total'
-        };
-        const key = map[field];
-        if (key) _currentInvoice[key] = value;
+    function renderBboxOverlay() {
+        const existing = document.getElementById('bboxOverlaySvg');
+        if (existing) existing.remove();
+
+        const img  = document.getElementById('documentImage');
+        const wrap = document.getElementById('viewerImgWrap');
+        if (!img || !wrap || !_currentInvoice) return;
+
+        const inv = _currentInvoice;
+        const pw  = inv.originalPageWidth;
+        const ph  = inv.originalPageHeight;
+        if (!pw || !ph) return;
+
+        const bboxes = inv.fieldBoundingBoxes ?? {};
+        const items  = inv.items ?? [];
+        if (!Object.keys(bboxes).length && !items.length) return;
+
+        const ns  = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(ns, 'svg');
+        svg.id    = 'bboxOverlaySvg';
+        svg.setAttribute('viewBox', `0 0 ${pw} ${ph}`);
+        svg.classList.add('viewer-bbox-overlay');
+
+        for (const [key, boxList] of Object.entries(bboxes)) {
+            for (const box of boxList) {
+                const pts = box.points;
+                if (!pts || pts.length < 4) continue;
+                const poly = document.createElementNS(ns, 'polygon');
+                poly.setAttribute('points', formatBboxPoints(pts));
+                poly.dataset.fieldkey      = key;
+                poly.style.pointerEvents   = 'all';
+                poly.style.cursor          = 'pointer';
+                poly.classList.add('viewer-bbox');
+                poly.classList.add(_selectedFieldKey === key ? 'bbox-selected'
+                                 : isSuspect(inv, key)       ? 'bbox-suspect'
+                                 :                             'bbox-ok');
+                poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
+                svg.appendChild(poly);
+            }
+        }
+
+        for (let i = 0; i < items.length; i++) {
+            const item   = items[i];
+            const key    = `Item_${i}_Desc`;
+            const prefix = `Item_${i}_`;
+            for (const box of (item.boundingBoxes ?? [])) {
+                const pts = box.points;
+                if (!pts || pts.length < 4) continue;
+                const poly = document.createElementNS(ns, 'polygon');
+                poly.setAttribute('points', formatBboxPoints(pts));
+                poly.dataset.fieldkey      = key;
+                poly.style.pointerEvents   = 'all';
+                poly.style.cursor          = 'pointer';
+                poly.classList.add('viewer-bbox');
+                poly.classList.add((_selectedFieldKey && _selectedFieldKey.startsWith(prefix)) ? 'bbox-selected'
+                                 : isItemSuspect(inv, item)                                     ? 'bbox-suspect'
+                                 :                                                                'bbox-ok');
+                poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
+                svg.appendChild(poly);
+            }
+        }
+
+        wrap.appendChild(svg);
     }
 
+    function scrollBboxIntoView() {
+        const polygon  = document.querySelector('.viewer-bbox.bbox-selected');
+        const scroller = document.getElementById('viewerScroll');
+        if (!polygon || !scroller) return;
+        const pr = polygon.getBoundingClientRect();
+        const sr = scroller.getBoundingClientRect();
+        const targetTop  = scroller.scrollTop  + (pr.top  + pr.height / 2 - sr.top)  - sr.height / 2;
+        const targetLeft = scroller.scrollLeft + (pr.left + pr.width  / 2 - sr.left) - sr.width  / 2;
+        scroller.scrollTo({ top: targetTop, left: targetLeft, behavior: 'smooth' });
+    }
+
+    function formatBboxPoints(pts) {
+        const pairs = [];
+        for (let j = 0; j + 1 < pts.length; j += 2) pairs.push(`${pts[j]},${pts[j + 1]}`);
+        return pairs.join(' ');
+    }
+
+    function isSuspect(inv, key) {
+        if (inv.isValidationAccepted) return false;
+        const tc = inv.tesseractConfirmed;
+        const cc = inv.confidenceConfirmed;
+        const mc = inv.mathConfirmed;
+        return (tc && key in tc && tc[key] === false)
+            || (cc && key in cc && cc[key] === false)
+            || (mc && key in mc && mc[key] === false);
+    }
+
+    function isItemSuspect(inv, item) {
+        if (inv.isValidationAccepted) return false;
+        const tc = item.tesseractConfirmed ?? {};
+        const cc = item.confidenceConfirmed ?? {};
+        return Object.values(tc).some(v => v === false) || Object.values(cc).some(v => v === false);
+    }
     async function saveInvoice() {
         if (!_currentFilePath || !_currentInvoice) return;
         const btn = document.getElementById('saveBtn');
