@@ -22,7 +22,16 @@
         <a class="navbar-brand fw-bold" href="/">K-OCR</a>
         @if (User.Identity?.IsAuthenticated == true)
         {
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-3 ms-auto">
+                @if (User.IsInRole(RoleNames.OrganizationAdmin) || User.IsInRole(RoleNames.SuperAdmin))
+                {
+                    <a class="nav-link text-light small" asp-controller="Org" asp-action="Index">👥 Manage Users</a>
+                }
+                @if (User.IsInRole(RoleNames.SuperAdmin))
+                {
+                    <a class="nav-link text-light small" asp-controller="Settings" asp-action="Index">⚙️ Settings</a>
+                    <a class="nav-link text-light small" asp-controller="Admin" asp-action="Index">🔧 Admin</a>
+                }
                 <span class="text-light small">@User.Identity.Name</span>
                 <form method="post" action="/auth/logout" class="d-inline">
                     @Html.AntiForgeryToken()
@@ -33,38 +42,6 @@
     </nav>
 
     <div class="d-flex" style="padding-top: 56px; min-height: calc(100vh - 56px);">
-        @if (ViewData["HideNav"] as bool? != true)
-        {
-            <nav class="sidebar bg-light border-end p-3 flex-shrink-0" style="width: 220px;">
-                <ul class="nav flex-column gap-1">
-                    <li class="nav-item">
-                        <a class="nav-link" asp-controller="Home" asp-action="Index">🏠 Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" asp-controller="Batch" asp-action="Index">📦 Batches</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" asp-controller="Settings" asp-action="Index">⚙️ Settings</a>
-                    </li>
-                    @if (User.IsInRole(RoleNames.OrganizationAdmin) || User.IsInRole(RoleNames.SuperAdmin))
-                    {
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Org" asp-action="Index">👥 Manage Users</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="EmailConfig" asp-action="Index">📧 Email Config</a>
-                        </li>
-                    }
-                    @if (User.IsInRole(RoleNames.SuperAdmin))
-                    {
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Admin" asp-action="Index">🔧 Admin Console</a>
-                        </li>
-                    }
-                </ul>
-            </nav>
-        }
-
         <main class="flex-grow-1 @(ViewData["FullScreen"] as bool? == true ? "overflow-hidden p-0" : "p-4 overflow-auto")">
             @RenderBody()
         </main>

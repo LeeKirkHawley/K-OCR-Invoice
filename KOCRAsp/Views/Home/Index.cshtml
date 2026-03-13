@@ -69,11 +69,7 @@
         </div>
         <div class="viewer-scroll" id="viewerScroll">
             <div class="viewer-placeholder" id="noDocMsg">Select a file to view the document</div>
-            <div class="viewer-page-wrap" id="viewerPageWrap" style="display:none;">
-                <div class="viewer-img-wrap" id="viewerImgWrap" style="width:100%;">
-                    <img id="documentImage" class="viewer-page-img" alt="Document preview" />
-                </div>
-            </div>
+            <div id="viewerPagesContainer"></div>
         </div>
     </div>
 
@@ -207,9 +203,7 @@
     async function selectFile(filePath) {
         _currentFilePath  = filePath;
         _selectedFieldKey = null;
-        const existingSvg = document.getElementById('bboxOverlaySvg');
-        if (existingSvg) existingSvg.remove();
-        loadDocumentImage(filePath);
+        loadDocumentPages(filePath);
         try {
             const result = await fetch('/home/getinvoice?filePath=' + encodeURIComponent(filePath));
             const data = await result.json();
@@ -231,23 +225,64 @@
         }
     }
 
-    function loadDocumentImage(filePath) {
-        const img      = document.getElementById('documentImage');
-        const msg      = document.getElementById('noDocMsg');
-        const wrap     = document.getElementById('viewerPageWrap');
-        const toolbar  = document.getElementById('viewerToolbar');
+    async function loadDocumentPages(filePath) {
+        const container = document.getElementById('viewerPagesContainer');
+        const msg       = document.getElementById('noDocMsg');
+        const toolbar   = document.getElementById('viewerToolbar');
 
-        msg.style.display  = 'none';
-        wrap.style.display = 'flex';
+        container.innerHTML   = '';
+        msg.style.display     = 'none';
         toolbar.style.display = '';
 
-        img.src = '/api/image?path=' + encodeURIComponent(filePath);
-        img.onload = () => { _viewerZoomPct = 100; applyViewerZoom(); renderBboxOverlay(); };
-        img.onerror = () => {
-            wrap.style.display    = 'none';
-            toolbar.style.display = 'none';
+        try {
+            const resp = await fetch('/api/pages?path=' + encodeURIComponent(filePath));
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const paths = await resp.json();
+
+            if (!paths || !paths.length) {
+                msg.style.display     = '';
+                toolbar.style.display = 'none';
+                return;
+            }
+
+            const multiPage = paths.length > 1;
+            paths.forEach((pagePath, idx) => {
+                const pageNum  = idx + 1;
+                const pageWrap = document.createElement('div');
+                pageWrap.className = 'viewer-page-wrap';
+
+                if (multiPage) {
+                    const lbl = document.createElement('div');
+                    lbl.className   = 'viewer-page-label';
+                    lbl.textContent = `Page ${pageNum}`;
+                    pageWrap.appendChild(lbl);
+                }
+
+                const imgWrap = document.createElement('div');
+                imgWrap.className    = 'viewer-img-wrap';
+                imgWrap.style.width  = _viewerZoomPct + '%';
+                imgWrap.dataset.page = pageNum;
+
+                const img = document.createElement('img');
+                img.className = 'viewer-page-img';
+                img.alt       = `Page ${pageNum}`;
+                img.loading   = 'lazy';
+                img.src       = '/api/image?path=' + encodeURIComponent(pagePath);
+                img.onload = () => {
+                    if (idx === 0) { _viewerZoomPct = 100; applyViewerZoom(); }
+                    renderBboxOverlayForPage(pageNum);
+                };
+                img.onerror = () => { imgWrap.style.opacity = '0.3'; };
+
+                imgWrap.appendChild(img);
+                pageWrap.appendChild(imgWrap);
+                container.appendChild(pageWrap);
+            });
+        } catch (err) {
+            showToast('Failed to load pages: ' + err.message, 'error');
             msg.style.display     = '';
-        };
+            toolbar.style.display = 'none';
+        }
     }
 
     function renderRunOcrButton(filePath) {
@@ -393,18 +428,17 @@
     function selectField(key) {
         _selectedFieldKey = key;
 
-        // Update SVG polygon classes
-        const svg = document.getElementById('bboxOverlaySvg');
-        if (svg && _currentInvoice) {
-            svg.querySelectorAll('.viewer-bbox').forEach(poly => {
+        // Update SVG polygon classes across all pages
+        if (_currentInvoice) {
+            document.querySelectorAll('.viewer-bbox').forEach(poly => {
                 const fk = poly.dataset.fieldkey ?? '';
                 poly.classList.remove('bbox-ok', 'bbox-suspect', 'bbox-selected');
                 if (fk === key) {
                     poly.classList.add('bbox-selected');
                 } else if (fk.startsWith('Item_')) {
-                    const itemIdx  = parseInt(fk.split('_')[1]);
-                    const keyPfx   = `Item_${itemIdx}_`;
-                    const item     = _currentInvoice.items?.[itemIdx];
+                    const itemIdx = parseInt(fk.split('_')[1]);
+                    const keyPfx  = `Item_${itemIdx}_`;
+                    const item    = _currentInvoice.items?.[itemIdx];
                     if (key && key.startsWith(keyPfx)) {
                         poly.classList.add('bbox-selected');
                     } else {
@@ -418,7 +452,7 @@
 
         // Highlight field row in validation panel
         document.querySelectorAll('.inv-field-row').forEach(row => {
-            const rk = row.dataset.fieldkey ?? '';
+            const rk    = row.dataset.fieldkey ?? '';
             const match = rk === key ||
                 (key && key.startsWith('Item_') && rk.startsWith('Item_' + key.split('_')[1] + '_'));
             row.classList.toggle('inv-field-selected', match);
@@ -435,12 +469,18 @@
     }
 
     function renderBboxOverlay() {
-        const existing = document.getElementById('bboxOverlaySvg');
-        if (existing) existing.remove();
+        document.querySelectorAll('.viewer-bbox-overlay').forEach(s => s.remove());
+        if (!_currentInvoice) return;
+        document.querySelectorAll('.viewer-img-wrap[data-page]').forEach(wrap => {
+            renderBboxOverlayForPage(parseInt(wrap.dataset.page), wrap);
+        });
+    }
 
-        const img  = document.getElementById('documentImage');
-        const wrap = document.getElementById('viewerImgWrap');
-        if (!img || !wrap || !_currentInvoice) return;
+    function renderBboxOverlayForPage(pageNum, wrap) {
+        if (!wrap) wrap = document.querySelector(`.viewer-img-wrap[data-page="${pageNum}"]`);
+        if (!wrap || !_currentInvoice) return;
+
+        wrap.querySelector('.viewer-bbox-overlay')?.remove();
 
         const inv = _currentInvoice;
         const pw  = inv.originalPageWidth;
@@ -449,23 +489,24 @@
 
         const bboxes = inv.fieldBoundingBoxes ?? {};
         const items  = inv.items ?? [];
-        if (!Object.keys(bboxes).length && !items.length) return;
-
-        const ns  = 'http://www.w3.org/2000/svg';
-        const svg = document.createElementNS(ns, 'svg');
-        svg.id    = 'bboxOverlaySvg';
+        const ns     = 'http://www.w3.org/2000/svg';
+        const svg    = document.createElementNS(ns, 'svg');
         svg.setAttribute('viewBox', `0 0 ${pw} ${ph}`);
         svg.classList.add('viewer-bbox-overlay');
 
+        let hasAny = false;
+
         for (const [key, boxList] of Object.entries(bboxes)) {
             for (const box of boxList) {
+                if ((box.pageNumber ?? 1) !== pageNum) continue;
                 const pts = box.points;
                 if (!pts || pts.length < 4) continue;
+                hasAny = true;
                 const poly = document.createElementNS(ns, 'polygon');
                 poly.setAttribute('points', formatBboxPoints(pts));
-                poly.dataset.fieldkey      = key;
-                poly.style.pointerEvents   = 'all';
-                poly.style.cursor          = 'pointer';
+                poly.dataset.fieldkey    = key;
+                poly.style.pointerEvents = 'all';
+                poly.style.cursor        = 'pointer';
                 poly.classList.add('viewer-bbox');
                 poly.classList.add(_selectedFieldKey === key ? 'bbox-selected'
                                  : isSuspect(inv, key)       ? 'bbox-suspect'
@@ -480,13 +521,15 @@
             const key    = `Item_${i}_Desc`;
             const prefix = `Item_${i}_`;
             for (const box of (item.boundingBoxes ?? [])) {
+                if ((box.pageNumber ?? 1) !== pageNum) continue;
                 const pts = box.points;
                 if (!pts || pts.length < 4) continue;
+                hasAny = true;
                 const poly = document.createElementNS(ns, 'polygon');
                 poly.setAttribute('points', formatBboxPoints(pts));
-                poly.dataset.fieldkey      = key;
-                poly.style.pointerEvents   = 'all';
-                poly.style.cursor          = 'pointer';
+                poly.dataset.fieldkey    = key;
+                poly.style.pointerEvents = 'all';
+                poly.style.cursor        = 'pointer';
                 poly.classList.add('viewer-bbox');
                 poly.classList.add((_selectedFieldKey && _selectedFieldKey.startsWith(prefix)) ? 'bbox-selected'
                                  : isItemSuspect(inv, item)                                     ? 'bbox-suspect'
@@ -496,7 +539,7 @@
             }
         }
 
-        wrap.appendChild(svg);
+        if (hasAny) wrap.appendChild(svg);
     }
 
     function scrollBboxIntoView() {

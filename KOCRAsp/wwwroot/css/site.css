@@ -127,8 +127,18 @@
 
 .viewer-page-wrap {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
     width: 100%;
+    margin-bottom: 10px;
+}
+
+.viewer-page-label {
+    font-size: 11px;
+    color: #bbb;
+    padding: 2px 4px 4px;
+    align-self: flex-start;
+    user-select: none;
 }
 
 .viewer-img-wrap {

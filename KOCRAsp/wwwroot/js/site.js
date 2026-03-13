@@ -165,14 +165,15 @@ function initKocrZoom() {
 }
 
 function applyViewerZoom() {
-    const wrap  = document.getElementById('viewerImgWrap');
     const label = document.getElementById('zoomLabel');
-    if (wrap)  wrap.style.width  = _viewerZoomPct + '%';
     if (label) label.textContent = Math.round(_viewerZoomPct) + '%';
+    document.querySelectorAll('.viewer-img-wrap').forEach(w => {
+        w.style.width = _viewerZoomPct + '%';
+    });
 }
 
 function fitViewerToHeight() {
-    const img    = document.getElementById('documentImage');
+    const img    = document.querySelector('.viewer-page-img');
     const scroll = document.getElementById('viewerScroll');
     if (!img || !scroll || !img.naturalHeight) return;
     const available = scroll.clientHeight - 24; // subtract padding

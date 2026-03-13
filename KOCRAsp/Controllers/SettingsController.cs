@@ -1,11 +1,12 @@
 using K_OCR.Configuration;
+using K_OCR.Security;
 using K_OCR.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KOCRAsp.Controllers;
 
-[Authorize]
+[Authorize(Roles = RoleNames.SuperAdmin)]
 public class SettingsController : Controller
 {
     private readonly IConfigurationService _configSvc;

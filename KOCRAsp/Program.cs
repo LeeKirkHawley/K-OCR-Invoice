@@ -180,6 +180,40 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
+// ── Page-list endpoint: returns all PNG paths for a document (multi-page aware) ──
+app.MapGet("/api/pages", async (string path, IImageService imageSvc) =>
+{
+    if (string.IsNullOrWhiteSpace(path))
+        return Results.BadRequest("path is required.");
+
+    string abs;
+    try { abs = Path.GetFullPath(path); }
+    catch { return Results.BadRequest("Invalid path."); }
+
+    if (!File.Exists(abs))
+        return Results.NotFound();
+
+    var ext = Path.GetExtension(abs).ToLowerInvariant();
+    if (ext == ".pdf")
+    {
+        try
+        {
+            var invoicesDir  = Path.GetDirectoryName(abs)!;
+            var batchDir     = Path.GetDirectoryName(invoicesDir)!;
+            var artifactsDir = Path.Combine(batchDir, "Artifacts");
+            var pages        = await imageSvc.ConvertPdfToAllPngsAsync(abs, artifactsDir);
+            return Results.Json(pages);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem(ex.Message, statusCode: 500);
+        }
+    }
+
+    // Single-image formats (PNG, JPEG, TIFF, BMP) → one-element list
+    return Results.Json(new List<string> { abs });
+}).RequireAuthorization();
+
 // ── Local image serving endpoint ──────────────────────────────────────────────
 var allowedImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff" };
