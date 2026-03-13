@@ -148,7 +148,7 @@ public class SuperAdminService : ISuperAdminService
         {
             var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(invitationToken));
             var baseUrl = BuildBaseUrl();
-            setupLink = $"{baseUrl}/account/set-password?userId={Uri.EscapeDataString(user.Id)}&token={encodedToken}";
+            setupLink = $"{baseUrl}/auth/setpassword?userId={Uri.EscapeDataString(user.Id)}&token={encodedToken}";
 
             try
             {

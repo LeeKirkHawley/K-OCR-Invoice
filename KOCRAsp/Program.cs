@@ -184,7 +184,7 @@ app.MapControllerRoute(
 var allowedImageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff" };
 
-app.MapGet("/api/image", (string path) =>
+app.MapGet("/api/image", async (string path, IImageService imageSvc) =>
 {
     if (string.IsNullOrWhiteSpace(path))
         return Results.BadRequest("path is required.");
@@ -193,12 +193,31 @@ app.MapGet("/api/image", (string path) =>
     try { abs = Path.GetFullPath(path); }
     catch { return Results.BadRequest("Invalid path."); }
 
-    var ext = Path.GetExtension(abs).ToLowerInvariant();
-    if (!allowedImageExts.Contains(ext))
-        return Results.BadRequest("File type not allowed.");
-
     if (!File.Exists(abs))
         return Results.NotFound();
+
+    var ext = Path.GetExtension(abs).ToLowerInvariant();
+
+    // Convert PDF to PNG on-demand, matching the behaviour of K-OCR's DocumentViewer.
+    // The artifacts directory lives alongside the PDF: {BatchDir}/Artifacts/
+    if (ext == ".pdf")
+    {
+        try
+        {
+            var artifactsDir = Path.Combine(Path.GetDirectoryName(abs)!, "Artifacts");
+            var pngPath = await imageSvc.ConvertPdfToPngAsync(abs, artifactsDir);
+            if (pngPath == null || !File.Exists(pngPath))
+                return Results.NotFound();
+            return Results.File(pngPath, "image/png", enableRangeProcessing: false);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem(ex.Message, statusCode: 500);
+        }
+    }
+
+    if (!allowedImageExts.Contains(ext))
+        return Results.BadRequest("File type not allowed.");
 
     var mime = ext switch
     {

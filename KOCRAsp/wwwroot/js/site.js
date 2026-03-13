@@ -105,3 +105,81 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
+
+// ── 3-pane splitter drag + localStorage ──────────────────────────────────────
+function initKocrSplitters() {
+    const shell = document.getElementById('kocrShell');
+    if (!shell) return;
+
+    const saved = (() => {
+        const l = localStorage.getItem('kocr-pane-left');
+        const r = localStorage.getItem('kocr-pane-right');
+        return l && r ? { left: parseFloat(l), right: parseFloat(r) } : null;
+    })();
+
+    let leftPx  = saved ? saved.left  : 220;
+    let rightPx = saved ? saved.right : 420;
+    shell.style.gridTemplateColumns = `${leftPx}px 4px 1fr 4px ${rightPx}px`;
+
+    function makeDragger(id, onDrag) {
+        const splitter = document.getElementById(id);
+        if (!splitter) return;
+        let dragging = false, startX = 0;
+
+        splitter.addEventListener('mousedown', e => {
+            dragging = true; startX = e.clientX;
+            splitter.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', e => {
+            if (!dragging) return;
+            onDrag(e.clientX - startX);
+            startX = e.clientX;
+            shell.style.gridTemplateColumns = `${leftPx}px 4px 1fr 4px ${rightPx}px`;
+        });
+        document.addEventListener('mouseup', () => {
+            if (!dragging) return;
+            dragging = false;
+            splitter.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            localStorage.setItem('kocr-pane-left',  leftPx);
+            localStorage.setItem('kocr-pane-right', rightPx);
+        });
+    }
+
+    makeDragger('splitterLeft',  dx => { leftPx  = Math.max(140, leftPx  + dx); });
+    makeDragger('splitterRight', dx => { rightPx = Math.max(200, rightPx - dx); });
+}
+
+// ── Document viewer zoom ──────────────────────────────────────────────────────
+let _viewerZoomPct = 100;
+
+function initKocrZoom() {
+    document.getElementById('zoomInBtn') ?.addEventListener('click', () => { _viewerZoomPct = Math.min(_viewerZoomPct * 1.25, 500); applyViewerZoom(); });
+    document.getElementById('zoomOutBtn')?.addEventListener('click', () => { _viewerZoomPct = Math.max(_viewerZoomPct / 1.25,  10); applyViewerZoom(); });
+    document.getElementById('zoomFitWBtn')?.addEventListener('click', () => { _viewerZoomPct = 100; applyViewerZoom(); });
+    document.getElementById('zoomFitHBtn')?.addEventListener('click', fitViewerToHeight);
+}
+
+function applyViewerZoom() {
+    const wrap  = document.getElementById('viewerImgWrap');
+    const label = document.getElementById('zoomLabel');
+    if (wrap)  wrap.style.width  = _viewerZoomPct + '%';
+    if (label) label.textContent = Math.round(_viewerZoomPct) + '%';
+}
+
+function fitViewerToHeight() {
+    const img    = document.getElementById('documentImage');
+    const scroll = document.getElementById('viewerScroll');
+    if (!img || !scroll || !img.naturalHeight) return;
+    const available = scroll.clientHeight - 24; // subtract padding
+    const scale     = available / img.naturalHeight;
+    const needed    = scale * img.naturalWidth;
+    _viewerZoomPct  = Math.max(10, Math.min(500, (needed / scroll.clientWidth) * 100));
+    applyViewerZoom();
+    scroll.scrollTop = 0;
+}
+

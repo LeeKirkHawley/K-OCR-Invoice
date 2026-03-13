@@ -1,130 +1,121 @@
 @model KOCRAsp.Models.HomeIndexViewModel
 @{
     ViewData["Title"] = "Home";
+    ViewData["FullScreen"] = true;
 }
 
-<div class="d-flex gap-2" style="height: calc(100vh - 90px);">
+<div class="kocr-shell" id="kocrShell">
 
-    <!-- ── Left panel: file list ─────────────────────────────── -->
-    <div class="file-list-panel border rounded p-2 bg-white" style="width: 260px; flex-shrink: 0;">
-
-        <!-- Batch selector -->
-        <select id="batchSelector" class="form-select form-select-sm mb-2">
-            <option value="">— Select Batch —</option>
-            @foreach (var batch in Model.AvailableBatches)
-            {
-                if (Model.CurrentBatch?.BatchId == batch.BatchId)
+    <!-- ── Left pane: file list ──────────────────────────────────── -->
+    <div class="kocr-pane kocr-pane-left">
+        <div class="kocr-file-list-header p-1">
+            <select id="batchSelector" class="form-select form-select-sm mb-1">
+                <option value="">— Select Batch —</option>
+                @foreach (var batch in Model.AvailableBatches)
                 {
-                    <option value="@batch.BatchId" selected>
-                        @batch.Name (#@batch.BatchNumber)
-                    </option>
+                    if (Model.CurrentBatch?.BatchId == batch.BatchId)
+                    {
+                        <option value="@batch.BatchId" selected>@batch.Name (#@batch.BatchNumber)</option>
+                    }
+                    else
+                    {
+                        <option value="@batch.BatchId">@batch.Name (#@batch.BatchNumber)</option>
+                    }
                 }
-                else
-                {
-                    <option value="@batch.BatchId">
-                        @batch.Name (#@batch.BatchNumber)
-                    </option>
-                }
-            }
-        </select>
-
-        <!-- Toolbar -->
-        <div class="d-flex gap-1 mb-2 flex-wrap">
-            <label class="btn btn-sm btn-outline-primary mb-0" title="Upload files">
-                📤 Upload
-                <input type="file" id="uploadInput" multiple hidden
-                       accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp" />
-            </label>
-            <button id="batchOcrBtn" class="btn btn-sm btn-outline-success" title="Run OCR on all files">
-                ▶ OCR All
-            </button>
-            <button id="refreshBtn" class="btn btn-sm btn-outline-secondary" title="Refresh file list">
-                🔄
-            </button>
+            </select>
+            <div class="d-flex gap-1">
+                <label class="btn btn-sm btn-outline-primary mb-0 py-0 px-2" title="Upload files">
+                    📤
+                    <input type="file" id="uploadInput" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp" />
+                </label>
+                <button id="batchOcrBtn" class="btn btn-sm btn-outline-success py-0" title="Run OCR on all files">▶ OCR All</button>
+                <button id="refreshBtn"  class="btn btn-sm btn-outline-secondary py-0" title="Refresh">🔄</button>
+            </div>
         </div>
-
-        <!-- File list -->
-        <div id="fileListContainer" style="overflow-y: auto; flex: 1;">
+        <div class="kocr-file-items" id="fileListContainer">
             @if (Model.CurrentBatch == null)
             {
-                <p class="text-muted small px-1">No batch selected.</p>
+                <p class="text-muted small px-2 pt-2">No batch selected.</p>
             }
             else if (!Model.Files.Any())
             {
-                <p class="text-muted small px-1">No files in batch.</p>
+                <p class="text-muted small px-2 pt-2">No files in batch.</p>
             }
             else
             {
                 foreach (var file in Model.Files)
                 {
-                    <div class="file-list-item d-flex align-items-center gap-1 p-1 border-bottom"
-                         data-filepath="@file.FilePath">
-                        <span class="file-status-dot @file.ProcessedDotClass"
-                              title="@file.ProcessedDotTitle"></span>
-                        <span class="file-status-dot @file.ValidationDotClass"
-                              title="@file.ValidationDotTitle"></span>
-                        <span class="small text-truncate" style="max-width: 185px;"
-                              title="@file.FileName">@file.FileName</span>
+                    <div class="file-list-item" data-filepath="@file.FilePath">
+                        <span class="file-status-dot @file.ProcessedDotClass"  title="@file.ProcessedDotTitle"></span>
+                        <span class="file-status-dot @file.ValidationDotClass" title="@file.ValidationDotTitle"></span>
+                        <span class="text-truncate" style="flex:1;min-width:0;" title="@file.FileName">@file.FileName</span>
                     </div>
                 }
             }
         </div>
     </div>
 
-    <!-- ── Middle panel: invoice ─────────────────────────────── -->
-    <div class="invoice-panel border rounded bg-white d-flex flex-column" style="flex: 1; min-width: 0;">
+    <!-- ── Left splitter ─────────────────────────────────────────── -->
+    <div class="splitter" id="splitterLeft"></div>
 
-        <!-- Tab bar -->
-        <ul class="nav nav-tabs px-2 pt-2 flex-shrink-0" id="invoiceTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="tab-validation-btn"
-                        data-bs-toggle="tab" data-bs-target="#tab-validation"
-                        type="button" role="tab">Validation</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="tab-rawjson-btn"
-                        data-bs-toggle="tab" data-bs-target="#tab-rawjson"
-                        type="button" role="tab">Raw JSON</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="tab-validatedjson-btn"
-                        data-bs-toggle="tab" data-bs-target="#tab-validatedjson"
-                        type="button" role="tab">Validated JSON</button>
-            </li>
-        </ul>
-
-        <div class="tab-content p-2 flex-grow-1 overflow-auto">
-
-            <!-- Validation tab -->
-            <div class="tab-pane fade show active" id="tab-validation" role="tabpanel">
-                <div id="invoiceFields">
-                    <p class="text-muted">Select a file to view invoice data.</p>
+    <!-- ── Center pane: document viewer ─────────────────────────── -->
+    <div class="kocr-pane kocr-pane-center">
+        <div class="viewer-toolbar" id="viewerToolbar" style="display:none;">
+            <button class="viewer-btn" id="zoomOutBtn"  title="Zoom out">−</button>
+            <span   class="viewer-zoom-label" id="zoomLabel">100%</span>
+            <button class="viewer-btn" id="zoomInBtn"   title="Zoom in">+</button>
+            <button class="viewer-btn viewer-btn-fit" id="zoomFitWBtn" title="Fit to width">⊞ Fit W</button>
+            <button class="viewer-btn viewer-btn-fit" id="zoomFitHBtn" title="Fit to height">↕ Fit H</button>
+        </div>
+        <div class="viewer-scroll" id="viewerScroll">
+            <div class="viewer-placeholder" id="noDocMsg">Select a file to view the document</div>
+            <div class="viewer-page-wrap" id="viewerPageWrap" style="display:none;">
+                <div class="viewer-img-wrap" id="viewerImgWrap" style="width:100%;">
+                    <img id="documentImage" class="viewer-page-img" alt="Document preview" />
                 </div>
-            </div>
-
-            <!-- Raw JSON tab -->
-            <div class="tab-pane fade" id="tab-rawjson" role="tabpanel">
-                <pre id="rawJsonContent" class="bg-light p-2 rounded"
-                     style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-all;"></pre>
-            </div>
-
-            <!-- Validated JSON tab -->
-            <div class="tab-pane fade" id="tab-validatedjson" role="tabpanel">
-                <pre id="validatedJsonContent" class="bg-light p-2 rounded"
-                     style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-all;"></pre>
             </div>
         </div>
     </div>
 
-    <!-- ── Right panel: document viewer ──────────────────────── -->
-    <div class="document-viewer border rounded bg-white p-2 overflow-auto"
-         style="width: 380px; flex-shrink: 0;">
-        <p id="noDocMsg" class="text-muted small">No document selected.</p>
-        <img id="documentImage" src="" alt="Document preview"
-             style="max-width: 100%; display: none;" />
-    </div>
-</div>
+    <!-- ── Right splitter ────────────────────────────────────────── -->
+    <div class="splitter" id="splitterRight"></div>
 
+    <!-- ── Right pane: invoice/validation ────────────────────────── -->
+    <div class="kocr-pane kocr-pane-right">
+        <div class="kocr-invoice-header">
+            <ul class="nav nav-tabs px-2 pt-1" id="invoiceTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active py-1 px-2 small" data-bs-toggle="tab"
+                            data-bs-target="#tab-validation" type="button" role="tab">Validation</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link py-1 px-2 small" data-bs-toggle="tab"
+                            data-bs-target="#tab-rawjson" type="button" role="tab">Raw JSON</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link py-1 px-2 small" data-bs-toggle="tab"
+                            data-bs-target="#tab-validatedjson" type="button" role="tab">Validated JSON</button>
+                </li>
+            </ul>
+        </div>
+        <div class="kocr-invoice-body tab-content">
+            <div class="tab-pane fade show active" id="tab-validation" role="tabpanel">
+                <div id="invoiceFields">
+                    <p class="text-muted small">Select a file to view invoice data.</p>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="tab-rawjson" role="tabpanel">
+                <pre id="rawJsonContent" class="bg-light p-2 rounded"
+                     style="font-size:0.72rem;white-space:pre-wrap;word-break:break-all;"></pre>
+            </div>
+            <div class="tab-pane fade" id="tab-validatedjson" role="tabpanel">
+                <pre id="validatedJsonContent" class="bg-light p-2 rounded"
+                     style="font-size:0.72rem;white-space:pre-wrap;word-break:break-all;"></pre>
+            </div>
+        </div>
+    </div>
+
+</div>
 <!-- Setup link modal -->
 <div class="modal fade" id="setupLinkModal" tabindex="-1">
     <div class="modal-dialog">
@@ -237,12 +228,22 @@
     }
 
     function loadDocumentImage(filePath) {
-        const img = document.getElementById('documentImage');
-        const msg = document.getElementById('noDocMsg');
+        const img      = document.getElementById('documentImage');
+        const msg      = document.getElementById('noDocMsg');
+        const wrap     = document.getElementById('viewerPageWrap');
+        const toolbar  = document.getElementById('viewerToolbar');
+
+        msg.style.display  = 'none';
+        wrap.style.display = 'flex';
+        toolbar.style.display = '';
+
         img.src = '/api/image?path=' + encodeURIComponent(filePath);
-        img.style.display = 'block';
-        msg.style.display = 'none';
-        img.onerror = () => { img.style.display = 'none'; msg.style.display = 'block'; };
+        img.onload = () => { fitViewerToHeight(); };
+        img.onerror = () => {
+            wrap.style.display    = 'none';
+            toolbar.style.display = 'none';
+            msg.style.display     = '';
+        };
     }
 
     function renderRunOcrButton(filePath) {
@@ -413,13 +414,12 @@
         let html = '';
         for (const file of files) {
             const active = _currentFilePath === file.filePath ? ' active' : '';
-            html += `<div class="file-list-item d-flex align-items-center gap-1 p-1 border-bottom${active}"
-                          data-filepath="${escapeHtml(file.filePath)}">
+            html += `<div class="file-list-item${active}" data-filepath="${escapeHtml(file.filePath)}">
                 <span class="file-status-dot ${escapeHtml(file.processedDotClass ?? '')}"
                       title="${escapeHtml(file.processedDotTitle ?? '')}"></span>
                 <span class="file-status-dot ${escapeHtml(file.validationDotClass ?? '')}"
                       title="${escapeHtml(file.validationDotTitle ?? '')}"></span>
-                <span class="small text-truncate" style="max-width:185px;"
+                <span class="text-truncate" style="flex:1;min-width:0;"
                       title="${escapeHtml(file.fileName)}">${escapeHtml(file.fileName)}</span>
             </div>`;
         }
@@ -441,5 +441,9 @@
             } catch { /* ignore poll errors */ }
         }, 3000);
     }
+
+    // ── Init ────────────────────────────────────────────────────
+    initKocrSplitters();
+    initKocrZoom();
 </script>
 }

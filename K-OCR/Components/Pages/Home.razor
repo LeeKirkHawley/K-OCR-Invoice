@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @rendermode InteractiveServer
 @inject IFileService FileService
 @inject DatabaseService DatabaseSvc
@@ -398,8 +398,11 @@
         State.SetOcrProgress(filePath, $"Running OCR on {Path.GetFileName(filePath)}…");
         try
         {
-            var settings = await ConfigService.LoadSettingsAsync();
-            var result   = await ProcessingService.ProcessFileAsync(filePath, useCache: false, settings.ProjectArtifacts);
+            var settings     = await ConfigService.LoadSettingsAsync();
+            var artifactsDir = State.CurrentBatch is not null
+                ? Path.Combine(State.CurrentBatch.FolderPath, "Artifacts")
+                : settings.ProjectArtifacts;
+            var result   = await ProcessingService.ProcessFileAsync(filePath, useCache: false, artifactsDir);
 
             if (result.IsSuccess)
             {
@@ -430,7 +433,10 @@
         if (State.IsOcrRunning || State.Files.Count == 0) return;
 
         State.SetOcrRunning(true, $"Batch OCR starting ({State.Files.Count} files)…");
-        var settings = await ConfigService.LoadSettingsAsync();
+        var settings     = await ConfigService.LoadSettingsAsync();
+        var artifactsDir = State.CurrentBatch is not null
+            ? Path.Combine(State.CurrentBatch.FolderPath, "Artifacts")
+            : settings.ProjectArtifacts;
         var total    = State.Files.Count;
         var done     = 0;
         var errors   = 0;
@@ -443,7 +449,7 @@
                 try
                 {
                     var result = await ProcessingService.ProcessFileAsync(
-                        file.FilePath, useCache: true, settings.ProjectArtifacts);
+                        file.FilePath, useCache: true, artifactsDir);
 
                     if (result.IsSuccess)
                     {

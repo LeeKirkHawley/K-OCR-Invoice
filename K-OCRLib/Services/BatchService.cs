@@ -7,8 +7,13 @@ namespace K_OCR.Services;
 
 public class BatchService : IBatchService, IAsyncDisposable
 {
+    private static readonly string[] InvoiceExtensions =
+        [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"];
+
     private readonly IDbContextFactory<KOCRDbContext> _dbFactory;
     private readonly IPathService _pathService;
+    private readonly IInvoiceProcessingService _processingService;
+    private readonly IFileService _fileService;
     private readonly ILogger<BatchService> _logger;
 
     private KOCRDbContext? _db;
@@ -17,11 +22,15 @@ public class BatchService : IBatchService, IAsyncDisposable
     public BatchService(
         IDbContextFactory<KOCRDbContext> dbFactory,
         IPathService pathService,
+        IInvoiceProcessingService processingService,
+        IFileService fileService,
         ILogger<BatchService> logger)
     {
-        _dbFactory   = dbFactory;
-        _pathService = pathService;
-        _logger      = logger;
+        _dbFactory          = dbFactory;
+        _pathService        = pathService;
+        _processingService  = processingService;
+        _fileService        = fileService;
+        _logger             = logger;
     }
 
     public async ValueTask DisposeAsync()
@@ -249,10 +258,35 @@ public class BatchService : IBatchService, IAsyncDisposable
 
     public async Task TriggerOcrAsync(int batchId)
     {
-        // Queues unprocessed invoices — actual processing is handled by InvoiceProcessingService.
-        // For now, this is a stub that logs intent; Phase 6 wires up the full flow.
-        _logger.LogInformation("TriggerOcrAsync called for batch {BatchId}. Full processing wired in Phase 6.", batchId);
-        await Task.CompletedTask;
+        var batch = await Db.Batches.FindAsync(batchId);
+        if (batch is null)
+        {
+            _logger.LogWarning("TriggerOcrAsync: batch {BatchId} not found.", batchId);
+            return;
+        }
+
+        var invoicesDir  = Path.Combine(batch.FolderPath, "Invoices");
+        var artifactsDir = Path.Combine(batch.FolderPath, "Artifacts");
+
+        if (!Directory.Exists(invoicesDir))
+        {
+            _logger.LogWarning("TriggerOcrAsync: invoices folder does not exist for batch {BatchId}.", batchId);
+            return;
+        }
+
+        var filePaths = _fileService.LoadFiles(invoicesDir, InvoiceExtensions).ToList();
+        if (filePaths.Count == 0)
+        {
+            _logger.LogInformation("TriggerOcrAsync: no files to process in batch {BatchId}.", batchId);
+            return;
+        }
+
+        _logger.LogInformation("TriggerOcrAsync: processing {Count} file(s) in batch {BatchId}.", filePaths.Count, batchId);
+
+        await _processingService.ProcessBatchAsync(
+            filePaths,
+            useCache: true,
+            artifactsDirectory: artifactsDir);
     }
 
     public async Task<UploadResult> UploadFilesToBatchAsync(

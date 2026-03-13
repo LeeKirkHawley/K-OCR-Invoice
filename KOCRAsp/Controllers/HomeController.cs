@@ -78,7 +78,7 @@ public class HomeController : Controller
             return Forbid();
 
         HttpContext.Session.SetString("CurrentBatchId", batchId.ToString());
-        return RedirectToAction(nameof(Index));
+        return Json(new { success = true });
     }
 
     [HttpPost]
@@ -119,8 +119,14 @@ public class HomeController : Controller
 
         try
         {
-            var settings = await _configSvc.LoadSettingsAsync();
-            var result = await _ocrSvc.ProcessFileAsync(filePath, useCache: false, settings.ProjectArtifacts);
+            // File lives at {batchDir}/Invoices/{name} — artifacts belong at {batchDir}/Artifacts
+            var invoicesDir  = Path.GetDirectoryName(filePath);
+            var batchDir     = Path.GetDirectoryName(invoicesDir ?? string.Empty);
+            var settings     = await _configSvc.LoadSettingsAsync();
+            var artifactsDir = !string.IsNullOrEmpty(batchDir)
+                ? Path.Combine(batchDir, "Artifacts")
+                : settings.ProjectArtifacts;
+            var result = await _ocrSvc.ProcessFileAsync(filePath, useCache: false, artifactsDir);
             if (!result.IsSuccess)
                 return Json(new { success = false, error = result.Error?.Message ?? "Processing failed." });
 
@@ -321,7 +327,15 @@ public class HomeController : Controller
                 entry.IsProcessed = true;
                 if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
                 {
-                    var dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
+                    InvoiceDto? dto = null;
+                    try
+                    {
+                        dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
+                    }
+                    catch
+                    {
+                        dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
+                    }
                     if (dto != null)
                     {
                         entry.IsSavedOrAccepted = dto.IsValidationAccepted;

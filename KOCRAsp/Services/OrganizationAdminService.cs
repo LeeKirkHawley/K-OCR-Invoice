@@ -145,7 +145,7 @@ public class OrganizationAdminService : IOrganizationAdminService
         var request = _httpContextAccessor.HttpContext?.Request;
         if (request is null) return string.Empty;
         var baseUrl = $"{request.Scheme}://{request.Host}";
-        return $"{baseUrl}/account/set-password?userId={Uri.EscapeDataString(userId)}&token={encodedToken}";
+        return $"{baseUrl}/auth/setpassword?userId={Uri.EscapeDataString(userId)}&token={encodedToken}";
     }
 
     private static string GenerateTemporaryPassword()

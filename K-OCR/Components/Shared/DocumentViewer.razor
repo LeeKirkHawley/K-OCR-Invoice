@@ -181,16 +181,12 @@ else
 
             if (ext == ".pdf")
             {
-                var settings  = await ConfigService.LoadSettingsAsync();
-                var artifacts = settings.ProjectArtifacts;
-
-                if (string.IsNullOrEmpty(artifacts))
-                {
-                    // Fall back to an "artifacts" sub-folder beside the PDF
-                    artifacts = Path.Combine(
-                        Path.GetDirectoryName(filePath) ?? string.Empty,
-                        "artifacts");
-                }
+                // Files live at {batchDir}/Invoices/{name} — artifacts are at {batchDir}/Artifacts
+                var invoicesDir = Path.GetDirectoryName(filePath);
+                var batchDir    = Path.GetDirectoryName(invoicesDir ?? string.Empty);
+                var artifacts   = !string.IsNullOrEmpty(batchDir)
+                    ? Path.Combine(batchDir, "Artifacts")
+                    : Path.Combine(invoicesDir ?? string.Empty, "Artifacts");
 
                 var pages = await ImageService.ConvertPdfToAllPngsAsync(filePath, artifacts);
                 _pages = pages;
