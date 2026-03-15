@@ -149,19 +149,6 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Ensure configured artifact directory exists
-var appConfigService = app.Services.GetRequiredService<IConfigurationService>();
-try
-{
-    var settings = await appConfigService.LoadSettingsAsync();
-    if (!string.IsNullOrEmpty(settings.ProjectArtifacts) && !Directory.Exists(settings.ProjectArtifacts))
-        Directory.CreateDirectory(settings.ProjectArtifacts);
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Error creating project directories: {ex.Message}");
-}
-
 // ── HTTP pipeline ─────────────────────────────────────────────────────────────
 if (!app.Environment.IsDevelopment())
 {

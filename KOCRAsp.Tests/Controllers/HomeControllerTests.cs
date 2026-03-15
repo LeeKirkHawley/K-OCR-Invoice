@@ -98,18 +98,13 @@ public class HomeControllerTests
     {
         SetControllerContext();
 
-        var settings = new AppSettings { ProjectArtifacts = @"C:\artifacts" };
-        _mockConfigSvc
-            .Setup(s => s.LoadSettingsAsync(null))
-            .ReturnsAsync(settings);
-
         var processingResult = new ProcessingResult
         {
             Context = new K_OCR.PipelineService.PipelineContext(),
             Json = "{}"
         };
         _mockOcrSvc
-            .Setup(s => s.ProcessFileAsync(@"C:\invoices\file.pdf", false, settings.ProjectArtifacts))
+            .Setup(s => s.ProcessFileAsync(@"C:\invoices\file.pdf", false, @"C:\Artifacts"))
             .ReturnsAsync(processingResult);
 
         var invoice = new InvoiceDto { VendorName = "Acme Corp" };

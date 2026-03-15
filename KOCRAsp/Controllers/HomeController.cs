@@ -124,10 +124,9 @@ public class HomeController : Controller
             // File lives at {batchDir}/Invoices/{name} — artifacts belong at {batchDir}/Artifacts
             var invoicesDir  = Path.GetDirectoryName(filePath);
             var batchDir     = Path.GetDirectoryName(invoicesDir ?? string.Empty);
-            var settings     = await _configSvc.LoadSettingsAsync();
             var artifactsDir = !string.IsNullOrEmpty(batchDir)
                 ? Path.Combine(batchDir, "Artifacts")
-                : settings.ProjectArtifacts;
+                : null;
             var result = await _ocrSvc.ProcessFileAsync(filePath, useCache: false, artifactsDir);
             if (!result.IsSuccess)
                 return Json(new { success = false, error = result.Error?.Message ?? "Processing failed." });

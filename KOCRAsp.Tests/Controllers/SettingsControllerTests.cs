@@ -31,8 +31,7 @@ public class SettingsControllerTests
     {
         var settings = new AppSettings
         {
-            OCRProvider = "Azure",
-            ProjectArtifacts = @"C:\artifacts"
+            OCRProvider = "Azure"
         };
         _mockConfigSvc
             .Setup(s => s.LoadSettingsAsync(null))
