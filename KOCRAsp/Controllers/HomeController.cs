@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Text;
+using ClosedXML.Excel;
 using K_OCR.Data;
 using K_OCR.Models;
 using K_OCR.Security;
@@ -224,12 +226,25 @@ public class HomeController : Controller
 
     [HttpPost]
     [IgnoreAntiforgeryToken]
-    public async Task<IActionResult> SaveInvoice([FromBody] SaveInvoiceRequest request)
+    public async Task<IActionResult> SaveInvoice()
     {
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { success = false, error = "Super-admin does not have org batch access." });
 
-        if (string.IsNullOrWhiteSpace(request.FilePath) || request.Invoice == null)
+        SaveInvoiceRequest? request;
+        try
+        {
+            using var reader = new StreamReader(Request.Body);
+            var body = await reader.ReadToEndAsync();
+            request = JsonConvert.DeserializeObject<SaveInvoiceRequest>(body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SaveInvoice: failed to parse request body");
+            return Json(new { success = false, error = "Invalid request body." });
+        }
+
+        if (request == null || string.IsNullOrWhiteSpace(request.FilePath) || request.Invoice == null)
             return Json(new { success = false, error = "Invalid request." });
 
         try
@@ -354,5 +369,120 @@ public class HomeController : Controller
         }
 
         return entries;
+    }
+
+    private async Task<BatchSummary?> GetCurrentBatchAsync()
+    {
+        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        if (!int.TryParse(currentBatchIdStr, out int batchId)) return null;
+        var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
+        return batches.FirstOrDefault(b => b.BatchId == batchId);
+    }
+
+    private async Task<List<(string FileName, InvoiceDto Invoice)>> LoadBatchInvoicesAsync(BatchSummary batch)
+    {
+        var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
+        if (!Directory.Exists(invoicesFolder)) return new();
+        var filePaths = _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions);
+        var result = new List<(string, InvoiceDto)>();
+        foreach (var fp in filePaths)
+        {
+            var inv = await _ocrSvc.LoadCachedInvoiceAsync(fp);
+            if (inv != null) result.Add((Path.GetFileName(fp), inv));
+        }
+        return result;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportBatchJson()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Forbid();
+
+        var batch = await GetCurrentBatchAsync();
+        if (batch == null) return BadRequest("No batch selected.");
+
+        var invoices = await LoadBatchInvoicesAsync(batch);
+        var payload = invoices.Select(t => new { fileName = t.FileName, invoice = t.Invoice }).ToList();
+        var json = JsonConvert.SerializeObject(payload, Formatting.Indented);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        var name = Path.GetFileName(batch.FolderPath.TrimEnd(Path.DirectorySeparatorChar));
+        return File(bytes, "application/json", $"{name}.json");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportBatchExcel()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Forbid();
+
+        var batch = await GetCurrentBatchAsync();
+        if (batch == null) return BadRequest("No batch selected.");
+
+        var invoices = await LoadBatchInvoicesAsync(batch);
+
+        using var wb = new XLWorkbook();
+
+        // Sheet 1: header fields
+        var ws = wb.Worksheets.Add("Invoices");
+        string[] hdrs = ["File", "Vendor", "Customer", "Invoice #", "Invoice Date",
+                         "Due Date", "PO #", "Subtotal", "Tax", "Shipping", "Total"];
+        for (int c = 0; c < hdrs.Length; c++)
+        {
+            var cell = ws.Cell(1, c + 1);
+            cell.Value = hdrs[c];
+            cell.Style.Font.Bold = true;
+        }
+        for (int r = 0; r < invoices.Count; r++)
+        {
+            var (fn, inv) = invoices[r];
+            int row = r + 2;
+            ws.Cell(row, 1).Value  = fn;
+            ws.Cell(row, 2).Value  = inv.VendorName;
+            ws.Cell(row, 3).Value  = inv.CustomerName;
+            ws.Cell(row, 4).Value  = inv.InvoiceId;
+            ws.Cell(row, 5).Value  = inv.InvoiceDate;
+            ws.Cell(row, 6).Value  = inv.DueDate;
+            ws.Cell(row, 7).Value  = inv.PurchaseOrder;
+            ws.Cell(row, 8).Value  = inv.Subtotal.HasValue  ? (double)inv.Subtotal.Value  : (double?)null;
+            ws.Cell(row, 9).Value  = inv.TotalTax.HasValue  ? (double)inv.TotalTax.Value  : (double?)null;
+            ws.Cell(row, 10).Value = inv.Shipping.HasValue  ? (double)inv.Shipping.Value  : (double?)null;
+            ws.Cell(row, 11).Value = inv.Total.HasValue     ? (double)inv.Total.Value     : (double?)null;
+        }
+        ws.Columns().AdjustToContents();
+
+        // Sheet 2: line items
+        var ws2 = wb.Worksheets.Add("Line Items");
+        string[] hdrs2 = ["File", "Line #", "Description", "Quantity", "Unit Price", "Amount"];
+        for (int c = 0; c < hdrs2.Length; c++)
+        {
+            var cell = ws2.Cell(1, c + 1);
+            cell.Value = hdrs2[c];
+            cell.Style.Font.Bold = true;
+        }
+        int row2 = 2;
+        foreach (var (fn, inv) in invoices)
+        {
+            for (int i = 0; i < inv.Items.Count; i++)
+            {
+                var item = inv.Items[i];
+                ws2.Cell(row2, 1).Value = fn;
+                ws2.Cell(row2, 2).Value = i + 1;
+                ws2.Cell(row2, 3).Value = item.Description;
+                ws2.Cell(row2, 4).Value = item.Quantity.HasValue   ? (double)item.Quantity.Value   : (double?)null;
+                ws2.Cell(row2, 5).Value = item.UnitPrice.HasValue  ? (double)item.UnitPrice.Value  : (double?)null;
+                ws2.Cell(row2, 6).Value = item.Amount.HasValue     ? (double)item.Amount.Value     : (double?)null;
+                row2++;
+            }
+        }
+        ws2.Columns().AdjustToContents();
+
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        var name = Path.GetFileName(batch.FolderPath.TrimEnd(Path.DirectorySeparatorChar));
+        return File(ms.ToArray(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"{name}.xlsx");
     }
 }

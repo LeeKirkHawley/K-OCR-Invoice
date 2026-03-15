@@ -184,3 +184,129 @@ function fitViewerToHeight() {
     scroll.scrollTop = 0;
 }
 
+// ── Validation-window custom tooltip ─────────────────────────────────────────
+// Elements with [data-vtip] show a styled floating tooltip.
+// Content is "\n"-delimited: line 1 = field value (normal text),
+// subsequent lines = validation errors (red text).
+function initVtip() {
+    const tip = document.getElementById('kocrVtip');
+    if (!tip) return;
+
+    let currentTarget = null;
+
+    function show(el, x, y) {
+        const value  = el.dataset.vtip ?? '';
+        const errors = (el.dataset.vtipErrors ?? '').split('\n').filter(Boolean);
+
+        let html = `<div class="kocr-vtip-value">${escapeHtml(value)}</div>`;
+        for (const err of errors) {
+            html += `<div class="kocr-vtip-error">${escapeHtml(err)}</div>`;
+        }
+        tip.innerHTML = html;
+        tip.style.display = 'block';
+        position(x, y);
+    }
+
+    function position(x, y) {
+        const pad  = 14;
+        const tw   = tip.offsetWidth;
+        const th   = tip.offsetHeight;
+        const vw   = window.innerWidth;
+        const vh   = window.innerHeight;
+        let left   = x + pad;
+        let top    = y + pad;
+        if (left + tw > vw - 8) left = x - tw - pad;
+        if (top  + th > vh - 8) top  = y - th - pad;
+        tip.style.left = left + 'px';
+        tip.style.top  = top  + 'px';
+    }
+
+    function hide() {
+        tip.style.display = 'none';
+        currentTarget = null;
+    }
+
+    document.addEventListener('mouseover', e => {
+        const el = e.target.closest('[data-vtip]');
+        if (!el) { hide(); return; }
+        if (el === currentTarget) return;
+        currentTarget = el;
+        show(el, e.clientX, e.clientY);
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!currentTarget) return;
+        position(e.clientX, e.clientY);
+    });
+
+    document.addEventListener('mouseout', e => {
+        if (!currentTarget) return;
+        const el = e.target.closest('[data-vtip]');
+        if (el === currentTarget && !currentTarget.contains(e.relatedTarget)) {
+            hide();
+        }
+    });
+}
+
+// ── Line-item column resize ───────────────────────────────────────────────────
+// Drag handles in the <thead> resize the four columns (Description/Qty/Unit Price/Total).
+// Widths (as percentages) are persisted in localStorage under 'kocr-li-cols'.
+function initLiColResize() {
+    const table = document.getElementById('liTable');
+    if (!table) return;
+
+    const cols = document.querySelectorAll('#liTable col.li-col');
+    if (cols.length < 4) return;
+
+    // Load saved widths or use defaults
+    const saved = JSON.parse(localStorage.getItem('kocr-li-cols') || 'null');
+    const widths = saved && saved.length === 4 ? saved : [50, 10, 20, 20];
+
+    function applyWidths() {
+        cols[0].style.width = widths[0] + '%';
+        cols[1].style.width = widths[1] + '%';
+        cols[2].style.width = widths[2] + '%';
+        cols[3].style.width = widths[3] + '%';
+    }
+    applyWidths();
+
+    const handles = table.querySelectorAll('.li-col-drag');
+    handles.forEach(handle => {
+        let dragging = false;
+        let startX   = 0;
+        const colIdx = parseInt(handle.dataset.col);
+
+        handle.addEventListener('mousedown', e => {
+            dragging = true;
+            startX   = e.clientX;
+            handle.classList.add('dragging');
+            document.body.style.cursor     = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        document.addEventListener('mousemove', e => {
+            if (!dragging) return;
+            const dx      = e.clientX - startX;
+            startX        = e.clientX;
+            const totalPx = table.getBoundingClientRect().width;
+            if (!totalPx) return;
+            const deltaPct = (dx / totalPx) * 100;
+            const pair     = widths[colIdx] + widths[colIdx + 1];
+            widths[colIdx]     = Math.min(Math.max(widths[colIdx] + deltaPct, 4), pair - 4);
+            widths[colIdx + 1] = pair - widths[colIdx];
+            applyWidths();
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove('dragging');
+            document.body.style.cursor     = '';
+            document.body.style.userSelect = '';
+            localStorage.setItem('kocr-li-cols', JSON.stringify(widths));
+        });
+    });
+}
+

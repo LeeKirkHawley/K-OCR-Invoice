@@ -211,7 +211,7 @@
                 _currentInvoice = data.invoice;
                 renderInvoiceFields(data.invoice);
                 document.getElementById('validatedJsonContent').textContent =
-                    JSON.stringify(data.invoice, null, 2);
+                    data.invoice.isValidationAccepted ? JSON.stringify(data.invoice, null, 2) : '';
             } else {
                 document.getElementById('invoiceFields').innerHTML =
                     '<p class="text-muted">No invoice data yet. Run OCR to process this file.</p>';
@@ -303,8 +303,7 @@
             if (result.success && result.invoice) {
                 _currentInvoice = result.invoice;
                 renderInvoiceFields(result.invoice);
-                document.getElementById('validatedJsonContent').textContent =
-                    JSON.stringify(result.invoice, null, 2);
+                document.getElementById('validatedJsonContent').textContent = '';
                 document.getElementById('rawJsonContent').textContent =
                     JSON.stringify(result.invoice, null, 2);
                 await refreshFileList();
@@ -339,13 +338,15 @@
 
         let html = '<table class="table table-sm invoice-field-table"><tbody>';
         for (const f of HEADER_FIELDS) {
-            const raw   = inv[f.prop];
-            const isNum = f.prop === 'subtotal' || f.prop === 'totalTax' ||
-                          f.prop === 'shipping'  || f.prop === 'total';
-            const value = isNum ? fmtMoney(raw) : (raw ?? '');
-            html += `<tr class="inv-field-row" data-fieldkey="${f.key}">
+            const raw     = inv[f.prop];
+            const isNum   = f.prop === 'subtotal' || f.prop === 'totalTax' ||
+                            f.prop === 'shipping'  || f.prop === 'total';
+            const value   = isNum ? fmtMoney(raw) : (raw ?? '');
+            const suspect = isSuspect(inv, f.key);
+            const tipData = buildFieldTooltip(inv, f.key, value);
+            html += `<tr class="inv-field-row${suspect ? ' inv-suspect-row' : ''}" data-fieldkey="${f.key}" data-vtip="${escapeHtml(tipData.value)}" data-vtip-errors="${escapeHtml(tipData.errors.join('\n'))}">
                          <td>${escapeHtml(f.label)}</td>
-                         <td><input class="form-control form-control-sm inv-field"
+                         <td><input class="form-control form-control-sm inv-field${suspect ? ' inv-suspect-input' : ''}"
                                     data-field="${f.prop}"
                                     data-fieldkey="${f.key}"
                                     value="${escapeHtml(String(value))}" /></td>
@@ -355,16 +356,40 @@
 
         if (inv.items?.length) {
             html += '<h6 class="mt-2">Line Items</h6>';
-            html += '<div class="table-responsive"><table class="table table-sm table-bordered">';
-            html += '<thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead><tbody>';
+            html += '<div class="table-responsive li-table-wrap"><table class="table table-sm table-bordered li-table" id="liTable">';
+            html += '<colgroup>'
+                  + '<col class="li-col" id="liColDesc" style="width:50%">'
+                  + '<col class="li-col" id="liColQty"  style="width:10%">'
+                  + '<col class="li-col" id="liColUp"   style="width:20%">'
+                  + '<col class="li-col" id="liColAmt"  style="width:20%">'
+                  + '</colgroup>';
+            html += '<thead><tr>'
+                  + '<th class="li-th">Description<span class="li-col-drag" data-col="0"></span></th>'
+                  + '<th class="li-th">Qty<span class="li-col-drag" data-col="1"></span></th>'
+                  + '<th class="li-th">Unit Price<span class="li-col-drag" data-col="2"></span></th>'
+                  + '<th class="li-th">Total</th>'
+                  + '</tr></thead><tbody>';
             for (let i = 0; i < inv.items.length; i++) {
                 const item = inv.items[i];
                 const fk   = `Item_${i}_Desc`;
+
+                const dSusp = isItemFieldSuspect(inv, item, 'Description', i);
+                const qSusp = isItemFieldSuspect(inv, item, 'Quantity',    i);
+                const uSusp = isItemFieldSuspect(inv, item, 'UnitPrice',   i);
+                const aSusp = isItemFieldSuspect(inv, item, 'Amount',      i);
+
+                const dTip = buildItemFieldTooltip(inv, item, 'Description', i, item.description);
+                const qTip = buildItemFieldTooltip(inv, item, 'Quantity',    i, item.quantity);
+                const uTip = buildItemFieldTooltip(inv, item, 'UnitPrice',   i, item.unitPrice);
+                const aTip = buildItemFieldTooltip(inv, item, 'Amount',      i, item.lineTotal);
+
+                const vtip = t => `data-vtip="${escapeHtml(t.value)}" data-vtip-errors="${escapeHtml(t.errors.join('\n'))}"`;
+                const sc = f => f ? ' inv-suspect-input' : '';
                 html += `<tr class="inv-field-row" data-fieldkey="${fk}">
-                             <td><input class="form-control form-control-sm inv-field" data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
-                             <td><input class="form-control form-control-sm inv-field" data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
-                             <td><input class="form-control form-control-sm inv-field" data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${item.unitPrice ?? ''}" /></td>
-                             <td><input class="form-control form-control-sm inv-field" data-item-idx="${i}" data-field="lineTotal"   data-fieldkey="${fk}" value="${item.lineTotal ?? ''}" /></td>
+                             <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
+                             <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
+                             <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${item.unitPrice ?? ''}" /></td>
+                             <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="lineTotal"   data-fieldkey="${fk}" value="${item.lineTotal ?? ''}" /></td>
                          </tr>`;
             }
             html += '</tbody></table></div>';
@@ -378,6 +403,8 @@
         </div>`;
 
         container.innerHTML = html;
+
+        initLiColResize();
 
         const allInputs = Array.from(container.querySelectorAll('.inv-field'));
         allInputs.forEach((input, idx) => {
@@ -442,7 +469,7 @@
                     if (key && key.startsWith(keyPfx)) {
                         poly.classList.add('bbox-selected');
                     } else {
-                        poly.classList.add(item && isItemSuspect(_currentInvoice, item) ? 'bbox-suspect' : 'bbox-ok');
+                        poly.classList.add(item && isItemSuspect(_currentInvoice, item, itemIdx) ? 'bbox-suspect' : 'bbox-ok');
                     }
                 } else {
                     poly.classList.add(isSuspect(_currentInvoice, fk) ? 'bbox-suspect' : 'bbox-ok');
@@ -532,7 +559,7 @@
                 poly.style.cursor        = 'pointer';
                 poly.classList.add('viewer-bbox');
                 poly.classList.add((_selectedFieldKey && _selectedFieldKey.startsWith(prefix)) ? 'bbox-selected'
-                                 : isItemSuspect(inv, item)                                     ? 'bbox-suspect'
+                                 : isItemSuspect(inv, item, i)                                     ? 'bbox-suspect'
                                  :                                                                'bbox-ok');
                 poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
                 svg.appendChild(poly);
@@ -569,11 +596,94 @@
             || (mc && key in mc && mc[key] === false);
     }
 
-    function isItemSuspect(inv, item) {
+    function fieldTooltip(inv, key) {
+        const reasons = [];
+        const tc = inv.tesseractConfirmed;
+        const cc = inv.confidenceConfirmed;
+        const mc = inv.mathConfirmed;
+        if (tc && key in tc && tc[key] === false) reasons.push('Tesseract mismatch');
+        if (cc && key in cc && cc[key] === false) reasons.push('Low Azure confidence');
+        if (mc && key in mc && mc[key] === false) reasons.push('Math error');
+        return reasons.join(' · ');
+    }
+
+    // Tooltip: value on line 1, one validation error per subsequent line.
+    function buildFieldTooltip(inv, key, value) {
+        const errors = [];
+        const tc = inv.tesseractConfirmed;
+        const cc = inv.confidenceConfirmed;
+        const mc = inv.mathConfirmed;
+        if (tc && key in tc && tc[key] === false) errors.push('Tesseract mismatch');
+        if (cc && key in cc && cc[key] === false) errors.push('Low Azure confidence');
+        if (mc && key in mc && mc[key] === false) errors.push('Math error');
+        const valueStr = (value !== null && value !== undefined && value !== '') ? String(value) : '—';
+        return { value: valueStr, errors };
+    }
+    function isItemSuspect(inv, item, idx) {
         if (inv.isValidationAccepted) return false;
         const tc = item.tesseractConfirmed ?? {};
         const cc = item.confidenceConfirmed ?? {};
-        return Object.values(tc).some(v => v === false) || Object.values(cc).some(v => v === false);
+        if (Object.values(tc).some(v => v === false) || Object.values(cc).some(v => v === false)) return true;
+        const mc = inv.mathConfirmed ?? {};
+        return mc[`LineItem[${idx}].Amount`] === false;
+    }
+
+    function isItemFieldSuspect(inv, item, fieldKey, idx) {
+        if (inv.isValidationAccepted) return false;
+        const tc = item.tesseractConfirmed ?? {};
+        const cc = item.confidenceConfirmed ?? {};
+        if (tc[fieldKey] === false || cc[fieldKey] === false) return true;
+        if (fieldKey === 'Amount') {
+            const mc = inv.mathConfirmed ?? {};
+            return mc[`LineItem[${idx}].Amount`] === false;
+        }
+        return false;
+    }
+
+    function itemFieldTooltip(inv, item, fieldKey, idx) {
+        if (inv.isValidationAccepted) return '';
+        const reasons = [];
+        const tc = item.tesseractConfirmed ?? {};
+        const cc = item.confidenceConfirmed ?? {};
+        if (tc[fieldKey] === false) reasons.push('Tesseract mismatch');
+        if (cc[fieldKey] === false) reasons.push('Low Azure confidence');
+        if (fieldKey === 'Amount') {
+            const mc = inv.mathConfirmed ?? {};
+            if (mc[`LineItem[${idx}].Amount`] === false) reasons.push('Math error');
+        }
+        return reasons.join(' · ');
+    }
+
+    // Tooltip showing the field value on line 1, then one error per line.
+    function buildItemFieldTooltip(inv, item, fieldKey, idx, value) {
+        const errors = [];
+        if (!inv.isValidationAccepted) {
+            const tc = item.tesseractConfirmed ?? {};
+            const cc = item.confidenceConfirmed ?? {};
+            if (tc[fieldKey] === false) errors.push('Tesseract mismatch');
+            if (cc[fieldKey] === false) errors.push('Low Azure confidence');
+            if (fieldKey === 'Amount') {
+                const mc = inv.mathConfirmed ?? {};
+                if (mc[`LineItem[${idx}].Amount`] === false) errors.push('Math error');
+            }
+        }
+        const valueStr = (value !== null && value !== undefined && value !== '') ? String(value) : '—';
+        return { value: valueStr, errors };
+    }
+
+    function itemTooltip(inv, item, idx) {
+        if (inv.isValidationAccepted) return '';
+        const fieldReasons = {};
+        const add = (field, reason) => { (fieldReasons[field] ??= []).push(reason); };
+        const tc = item.tesseractConfirmed ?? {};
+        const cc = item.confidenceConfirmed ?? {};
+        for (const [k, v] of Object.entries(tc)) if (v === false) add(k, 'Tesseract mismatch');
+        for (const [k, v] of Object.entries(cc)) if (v === false) add(k, 'Low Azure confidence');
+        const mc = inv.mathConfirmed ?? {};
+        if (mc[`LineItem[${idx}].Amount`] === false) add('Amount', 'Math error');
+        return Object.entries(fieldReasons)
+            .map(([k, v]) => `${k}: ${v.join(', ')}`)
+            .join(' · ');
     }
     async function saveInvoice() {
         if (!_currentFilePath || !_currentInvoice) return;
@@ -584,6 +694,8 @@
                 { filePath: _currentFilePath, invoice: _currentInvoice });
             if (result.success) {
                 showToast('Invoice saved.');
+                document.getElementById('validatedJsonContent').textContent =
+                    JSON.stringify(_currentInvoice, null, 2);
                 await refreshFileList();
             } else {
                 showToast(result.error ?? 'Save failed.', 'error');
@@ -605,6 +717,11 @@
             const result = await postForm('/home/acceptvalidation', fd);
             if (result.success) {
                 showToast('Validation accepted.');
+                if (_currentInvoice) {
+                    _currentInvoice.isValidationAccepted = true;
+                    document.getElementById('validatedJsonContent').textContent =
+                        JSON.stringify(_currentInvoice, null, 2);
+                }
                 await refreshFileList();
             } else {
                 showToast(result.error ?? 'Accept failed.', 'error');
@@ -621,6 +738,58 @@
         if (!_currentFilePath) return;
         window.location.href = '/home/exportdocx?filePath=' + encodeURIComponent(_currentFilePath);
     }
+
+    async function _savePickerDownload(url, suggestedName, mimeType, extensions) {
+        const response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) {
+            const msg = await response.text().catch(() => response.statusText);
+            throw new Error(msg || response.statusText);
+        }
+        const blob = await response.blob();
+        if (window.showSaveFilePicker) {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName,
+                    types: [{ description: mimeType, accept: { [mimeType]: extensions } }]
+                });
+                const writable = await handle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                return;
+            } catch (err) {
+                if (err.name === 'AbortError') return; // user cancelled
+                // fall through to standard download
+            }
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = suggestedName;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    window.exportBatchJson = async function () {
+        try {
+            await _savePickerDownload('/home/exportbatchjson', 'batch.json', 'application/json', ['.json']);
+            showToast('Exported to JSON.');
+        } catch (err) {
+            showToast('Export failed: ' + err.message, 'error');
+        }
+    };
+
+    window.exportBatchExcel = async function () {
+        try {
+            await _savePickerDownload(
+                '/home/exportbatchexcel',
+                'batch.xlsx',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                ['.xlsx']
+            );
+            showToast('Exported to Excel.');
+        } catch (err) {
+            showToast('Export failed: ' + err.message, 'error');
+        }
+    };
 
     async function refreshFileList() {
         try {
@@ -672,5 +841,6 @@
     // ── Init ────────────────────────────────────────────────────
     initKocrSplitters();
     initKocrZoom();
+    initVtip();
 </script>
 }

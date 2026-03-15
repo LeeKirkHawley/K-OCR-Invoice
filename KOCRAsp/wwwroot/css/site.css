@@ -217,6 +217,51 @@
 .inv-field-row.inv-field-selected > td,
 .inv-field-row.inv-field-selected > th { background-color: #fff3cd !important; }
 
+/* ── Validation error highlighting ───────────────────────────── */
+.inv-suspect-row > td,
+.inv-suspect-row > th { background-color: #fff0f0 !important; }
+.inv-suspect-row.inv-field-selected > td,
+.inv-suspect-row.inv-field-selected > th { background-color: #ffe4c8 !important; }
+.inv-suspect-input.form-control { border-color: #e08080 !important; background-color: #fff8f8 !important; }
+.inv-suspect-input.form-control:focus { border-color: #c04040 !important; box-shadow: 0 0 0 0.2rem rgba(192,64,64,0.2) !important; }
+
+/* ── Validation custom tooltip ────────────────────────────────── */
+.kocr-vtip {
+    position: fixed;
+    z-index: 10000;
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    padding: 6px 9px;
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.18);
+    max-width: 320px;
+    pointer-events: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.kocr-vtip-value  { color: #222; }
+.kocr-vtip-error  { color: #c0392b; font-weight: 500; }
+
+/* ── Line-item table: fixed + resizable columns ───────────────── */
+.li-table-wrap { overflow-x: auto; }
+.li-table { table-layout: fixed; width: 100%; }
+.li-table td, .li-table th { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.li-table td input.inv-field { width: 100%; }
+
+.li-th { position: relative; white-space: nowrap; overflow: hidden; user-select: none; }
+
+/* Drag handle — sits at the right edge of each resizable header cell */
+.li-col-drag {
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 1;
+}
+.li-col-drag:hover, .li-col-drag.dragging { background: rgba(13,110,253,0.5); }
+
 /* ── Sidebar nav ──────────────────────────────────────────────── */
 .sidebar .nav-link {
     color: #495057;
@@ -226,6 +271,23 @@
 .sidebar .nav-link:hover {
     background-color: #e9ecef;
     color: #212529;
+}
+
+/* ── Navbar nested dropdown ───────────────────────────────────── */
+.dropdown-submenu { position: relative; }
+.dropdown-submenu > .dropdown-menu {
+    top: 0;
+    left: 100%;
+    margin-top: -2px;
+    display: none;
+}
+.dropdown-submenu:hover > .dropdown-menu,
+.dropdown-submenu:focus-within > .dropdown-menu { display: block; }
+.dropdown-submenu > .dropdown-item::after {
+    content: ' ▶';
+    float: right;
+    font-size: 0.75em;
+    opacity: 0.7;
 }
 
 html { font-size: 14px; }
