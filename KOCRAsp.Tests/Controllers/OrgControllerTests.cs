@@ -1,6 +1,10 @@
+using K_OCR.Configuration;
+using K_OCR.Data;
+using K_OCR.Services;
 using KOCRAsp.Controllers;
 using KOCRAsp.Identity;
 using KOCRAsp.Models.Api.OrganizationAdmin;
+using KOCRAsp.Models.Api.SuperAdmin;
 using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Identity;
@@ -10,24 +14,39 @@ using Moq;
 
 namespace KOCRAsp.Tests.Controllers;
 
-public class OrgControllerTests
+public class OrgConfigControllerTests
 {
+    private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
+    private readonly Mock<ITenantContext> _mockTenantContext;
+    private readonly Mock<ISuperAdminService> _mockSuperAdminSvc;
     private readonly Mock<IOrganizationAdminService> _mockOrgAdminSvc;
     private readonly Mock<UserManager<ApplicationUser>> _mockUserManager;
-    private readonly Mock<ILogger<OrgController>> _mockLogger;
-    private readonly OrgController _controller;
+    private readonly Mock<ILogger<OrgConfigController>> _mockLogger;
+    private readonly OrgConfigController _controller;
 
-    private const string OrgId = "org-id-123";
+    private const string OrgId   = "org-id-123";
+    private const string OrgName = "TestOrg";
 
-    public OrgControllerTests()
+    public OrgConfigControllerTests()
     {
-        _mockOrgAdminSvc = new Mock<IOrganizationAdminService>();
-        _mockUserManager = new Mock<UserManager<ApplicationUser>>(
+        _mockOrgConfigSvc  = new Mock<IOrgConfigService>();
+        _mockTenantContext = new Mock<ITenantContext>();
+        _mockSuperAdminSvc = new Mock<ISuperAdminService>();
+        _mockOrgAdminSvc   = new Mock<IOrganizationAdminService>();
+        _mockUserManager   = new Mock<UserManager<ApplicationUser>>(
             Mock.Of<IUserStore<ApplicationUser>>(),
             null, null, null, null, null, null, null, null);
-        _mockLogger = new Mock<ILogger<OrgController>>();
+        _mockLogger = new Mock<ILogger<OrgConfigController>>();
 
-        _controller = new OrgController(
+        _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
+        _mockTenantContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        _mockOrgConfigSvc.Setup(s => s.LoadAsync(OrgName))
+                         .ReturnsAsync(new OrgConfig { MinConfidenceThreshold = 0.8 });
+
+        _controller = new OrgConfigController(
+            _mockOrgConfigSvc.Object,
+            _mockTenantContext.Object,
+            _mockSuperAdminSvc.Object,
             _mockOrgAdminSvc.Object,
             _mockUserManager.Object,
             _mockLogger.Object);
@@ -37,11 +56,12 @@ public class OrgControllerTests
     }
 
     [Fact]
-    public void Index_ReturnsView()
+    public async Task Index_OrgAdmin_ReturnsView()
     {
-        var result = _controller.Index();
+        var result = await _controller.Index();
 
-        Assert.IsType<ViewResult>(result);
+        var view = Assert.IsType<ViewResult>(result);
+        Assert.IsType<OrgConfig>(view.Model);
     }
 
     [Fact]
@@ -49,13 +69,13 @@ public class OrgControllerTests
     {
         var request = new InviteUserRequest
         {
-            Name = "Jane Doe",
+            Name  = "Jane Doe",
             Email = "jane@example.com",
-            Role = "OrganizationUser"
+            Role  = "OrganizationUser"
         };
         var inviteResult = new InviteUserResult
         {
-            UserId = "new-user-id",
+            UserId    = "new-user-id",
             EmailSent = true,
             SetupLink = "https://example.com/set-password?token=abc"
         };
@@ -64,13 +84,13 @@ public class OrgControllerTests
             .Setup(s => s.InviteUserAsync(OrgId, request))
             .ReturnsAsync(inviteResult);
 
-        var result = await _controller.InviteUser(request);
+        var result = await _controller.InviteUser(request, orgId: null);
 
-        var json = Assert.IsType<JsonResult>(result);
-        var value = json.Value!;
-        var successProp = value.GetType().GetProperty("success");
-        Assert.NotNull(successProp);
-        Assert.True((bool)successProp.GetValue(value)!);
+        var json      = Assert.IsType<JsonResult>(result);
+        var value     = json.Value!;
+        var success   = value.GetType().GetProperty("success");
+        Assert.NotNull(success);
+        Assert.True((bool)success.GetValue(value)!);
 
         var userIdProp = value.GetType().GetProperty("userId");
         Assert.NotNull(userIdProp);
