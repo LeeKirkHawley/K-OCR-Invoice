@@ -103,6 +103,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 
 // Singletons: no DB dependency
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
+builder.Services.AddSingleton<IOrgConfigService, OrgConfigService>();
 builder.Services.AddSingleton<IImageService, ImageService>();
 builder.Services.AddSingleton<IInvoiceService, InvoiceService>();
 builder.Services.AddSingleton<IAnalysisService, AnalysisService>();

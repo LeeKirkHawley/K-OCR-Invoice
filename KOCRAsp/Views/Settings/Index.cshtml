@@ -64,28 +64,6 @@
         </div>
     </div>
 
-    <!-- Validation -->
-    <div class="card mb-3">
-        <div class="card-header"><strong>Validation</strong></div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-5">
-                    <label asp-for="MinConfidenceThreshold" class="form-label">
-                        Min Confidence Threshold:
-                        <span id="confidenceLabel">@Model.MinConfidenceThreshold.ToString("F2")</span>
-                    </label>
-                    <input asp-for="MinConfidenceThreshold" type="range"
-                           class="form-range" min="0" max="1" step="0.01"
-                           oninput="document.getElementById('confidenceLabel').textContent =
-                                    parseFloat(this.value).toFixed(2);" />
-                    <div class="d-flex justify-content-between small text-muted">
-                        <span>0.00 (low)</span><span>1.00 (strict)</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Paths -->
     <div class="card mb-3">
         <div class="card-header"><strong>Paths</strong></div>

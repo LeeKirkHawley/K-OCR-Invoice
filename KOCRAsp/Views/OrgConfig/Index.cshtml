@@ -1,0 +1,83 @@
+@using K_OCR.Configuration
+@using KOCRAsp.Models.Api.SuperAdmin
+@using K_OCR.Security
+@model OrgConfig
+@{
+    ViewData["Title"] = "Organization Configuration";
+    var allOrgs       = ViewBag.AllOrgs as OrganizationOverview[];
+    var selectedOrgId = ViewBag.SelectedOrgId as string;
+    var orgName       = ViewBag.OrgName as string;
+    bool isSuperAdmin = User.IsInRole(RoleNames.SuperAdmin);
+}
+
+<h4 class="mb-4">Organization Configuration</h4>
+
+@if (TempData["Success"] is string ok)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @ok <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] is string err)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @err <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+@if (isSuperAdmin && allOrgs is { Length: > 0 })
+{
+    <div class="card mb-3">
+        <div class="card-header"><strong>Organization</strong></div>
+        <div class="card-body">
+            <form method="get" asp-action="Index" asp-controller="OrgConfig" class="d-flex align-items-center gap-3">
+                <label class="form-label mb-0 text-nowrap">Select Organization:</label>
+                <select name="orgId" class="form-select w-auto" onchange="this.form.submit()">
+                    @foreach (var org in allOrgs)
+                    {
+                        <option value="@org.OrganizationId"
+                                selected="@(org.OrganizationId == selectedOrgId ? "selected" : null)">
+                            @org.Name
+                        </option>
+                    }
+                </select>
+            </form>
+        </div>
+    </div>
+}
+else if (!isSuperAdmin)
+{
+    <p class="text-muted small mb-3">Configuring: <strong>@orgName</strong></p>
+}
+
+<form method="post" asp-action="Save" asp-controller="OrgConfig">
+    @Html.AntiForgeryToken()
+    @if (selectedOrgId is not null)
+    {
+        <input type="hidden" name="orgId" value="@selectedOrgId" />
+    }
+
+    <!-- Validation -->
+    <div class="card mb-3">
+        <div class="card-header"><strong>Validation</strong></div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label asp-for="MinConfidenceThreshold" class="form-label">
+                        Min Confidence Threshold:
+                        <span id="confidenceLabel">@Model.MinConfidenceThreshold.ToString("F2")</span>
+                    </label>
+                    <input asp-for="MinConfidenceThreshold" type="range"
+                           class="form-range" min="0" max="1" step="0.01"
+                           oninput="document.getElementById('confidenceLabel').textContent =
+                                    parseFloat(this.value).toFixed(2);" />
+                    <div class="d-flex justify-content-between small text-muted">
+                        <span>0.00 (low)</span><span>1.00 (strict)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save</button>
+</form>

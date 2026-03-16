@@ -21,6 +21,9 @@ public class PathService : IPathService
     public string GetOrgDbPath(string orgName) =>
         Path.Combine(GetOrgFolderPath(orgName), "kocr.db");
 
+    public string GetOrgConfigPath(string orgName) =>
+        Path.Combine(GetOrgFolderPath(orgName), "OrgConfig.json");
+
     public string GetBatchFolderPath(string orgName, string batchName) =>
         Path.Combine(GetOrgFolderPath(orgName), SanitizeName(batchName));
 

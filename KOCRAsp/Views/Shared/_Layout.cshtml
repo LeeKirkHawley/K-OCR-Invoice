@@ -41,6 +41,7 @@
                 }
                 @if (User.IsInRole(RoleNames.OrganizationAdmin) || User.IsInRole(RoleNames.SuperAdmin))
                 {
+                    <a class="nav-link text-light small" asp-controller="OrgConfig" asp-action="Index">🏢 Org Config</a>
                     <a class="nav-link text-light small" asp-controller="Org" asp-action="Index">👥 Manage Users</a>
                 }
                 @if (User.IsInRole(RoleNames.SuperAdmin))

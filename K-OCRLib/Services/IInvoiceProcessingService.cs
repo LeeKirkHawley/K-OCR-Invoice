@@ -10,8 +10,9 @@ public interface IInvoiceProcessingService
     /// <param name="filePath">Path to the file to process</param>
     /// <param name="useCache">Whether to use cached results if available</param>
     /// <param name="artifactsDirectory">Directory where artifacts are stored (optional)</param>
+    /// <param name="minConfidenceThreshold">Minimum confidence score override; falls back to app configuration when null</param>
     /// <returns>Processing result with context and JSON</returns>
-    Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true, string? artifactsDirectory = null);
+    Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true, string? artifactsDirectory = null, double? minConfidenceThreshold = null);
     
     /// <summary>
     /// Process multiple files in batch with progress reporting
@@ -20,12 +21,14 @@ public interface IInvoiceProcessingService
     /// <param name="useCache">Whether to use cached results if available</param>
     /// <param name="progress">Optional progress reporter</param>
     /// <param name="artifactsDirectory">Directory where artifacts are stored (optional)</param>
+    /// <param name="minConfidenceThreshold">Minimum confidence score override; falls back to app configuration when null</param>
     /// <returns>Dictionary of file paths to processing results</returns>
     Task<Dictionary<string, ProcessingResult>> ProcessBatchAsync(
         IEnumerable<string> filePaths,
         bool useCache = true,
         IProgress<(int completed, int total, string currentFile)>? progress = null,
-        string? artifactsDirectory = null);
+        string? artifactsDirectory = null,
+        double? minConfidenceThreshold = null);
     
     /// <summary>
     /// Save a validated invoice to the database Invoice row.

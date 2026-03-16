@@ -18,26 +18,32 @@ public class HomeControllerTests
     private readonly Mock<IInvoiceProcessingService> _mockOcrSvc;
     private readonly Mock<IBatchService> _mockBatchSvc;
     private readonly Mock<IFileService> _mockFileSvc;
-    private readonly Mock<IConfigurationService> _mockConfigSvc;
     private readonly Mock<IDocumentExportService> _mockExportSvc;
+    private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
+    private readonly Mock<ITenantContext> _mockTenantContext;
     private readonly Mock<ILogger<HomeController>> _mockLogger;
     private readonly DatabaseService _dbSvc;
     private readonly HomeController _controller;
 
     private const string UserId = "user-id-123";
-    private const string OrgId = "org-id-123";
+    private const string OrgId  = "org-id-123";
+    private const string OrgName = "TestOrg";
 
     public HomeControllerTests()
     {
-        _mockOcrSvc = new Mock<IInvoiceProcessingService>();
-        _mockBatchSvc = new Mock<IBatchService>();
-        _mockFileSvc = new Mock<IFileService>();
-        _mockConfigSvc = new Mock<IConfigurationService>();
-        _mockExportSvc = new Mock<IDocumentExportService>();
-        _mockLogger = new Mock<ILogger<HomeController>>();
+        _mockOcrSvc        = new Mock<IInvoiceProcessingService>();
+        _mockBatchSvc      = new Mock<IBatchService>();
+        _mockFileSvc       = new Mock<IFileService>();
+        _mockExportSvc     = new Mock<IDocumentExportService>();
+        _mockOrgConfigSvc  = new Mock<IOrgConfigService>();
+        _mockTenantContext = new Mock<ITenantContext>();
+        _mockLogger        = new Mock<ILogger<HomeController>>();
+
+        _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
+        _mockOrgConfigSvc.Setup(s => s.LoadAsync(OrgName))
+                         .ReturnsAsync(new OrgConfig { MinConfidenceThreshold = 0.8 });
 
         // DatabaseService is a concrete class; construct it with a mock factory.
-        // Tests that don't trigger a session-resolved current batch won't invoke it.
         var mockContextFactory = new Mock<IDbContextFactory<KOCRDbContext>>();
         _dbSvc = new DatabaseService(mockContextFactory.Object, Mock.Of<ILogger<DatabaseService>>());
 
@@ -45,9 +51,10 @@ public class HomeControllerTests
             _mockOcrSvc.Object,
             _mockBatchSvc.Object,
             _mockFileSvc.Object,
-            _mockConfigSvc.Object,
             _mockExportSvc.Object,
             _dbSvc,
+            _mockOrgConfigSvc.Object,
+            _mockTenantContext.Object,
             _mockLogger.Object);
     }
 
@@ -104,7 +111,7 @@ public class HomeControllerTests
             Json = "{}"
         };
         _mockOcrSvc
-            .Setup(s => s.ProcessFileAsync(@"C:\invoices\file.pdf", false, @"C:\Artifacts"))
+            .Setup(s => s.ProcessFileAsync(@"C:\invoices\file.pdf", false, @"C:\Artifacts", 0.8))
             .ReturnsAsync(processingResult);
 
         var invoice = new InvoiceDto { VendorName = "Acme Corp" };

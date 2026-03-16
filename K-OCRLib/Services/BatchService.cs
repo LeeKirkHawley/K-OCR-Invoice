@@ -256,7 +256,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         return session?.BatchId;
     }
 
-    public async Task TriggerOcrAsync(int batchId)
+    public async Task TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null)
     {
         var batch = await Db.Batches.FindAsync(batchId);
         if (batch is null)
@@ -286,7 +286,8 @@ public class BatchService : IBatchService, IAsyncDisposable
         await _processingService.ProcessBatchAsync(
             filePaths,
             useCache: true,
-            artifactsDirectory: artifactsDir);
+            artifactsDirectory: artifactsDir,
+            minConfidenceThreshold: minConfidenceThreshold);
     }
 
     public async Task<UploadResult> UploadFilesToBatchAsync(

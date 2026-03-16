@@ -47,7 +47,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         return _fileService.HasCachedJson(filePath);
     }
     
-    public async Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true, string? artifactsDirectory = null)
+    public async Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true, string? artifactsDirectory = null, double? minConfidenceThreshold = null)
     {
         var result = new ProcessingResult();
         
@@ -62,9 +62,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
                 var cachedContext = await _fileService.LoadCachedContextAsync(filePath, artifactsDirectory);
                 if (cachedContext != null && !string.IsNullOrWhiteSpace(cachedContext.TesseractOcrText))
                 {
-                    // Re-run validation in memory — cheap, and guarantees the flags
-                    // always reflect the current validation logic rather than stale cache.
-                    RunValidation(cachedContext);
+                    RunValidation(cachedContext, minConfidenceThreshold);
                     result.Context = cachedContext;
                     result.Json = Newtonsoft.Json.JsonConvert.SerializeObject(cachedContext, Newtonsoft.Json.Formatting.Indented);
                     result.WasCached = true;
@@ -107,7 +105,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             }
 
             // Cross-validate every Azure-extracted field against the Tesseract text.
-            RunValidation(processedContext);
+            RunValidation(processedContext, minConfidenceThreshold);
 
             // Save to cache
             await _fileService.SaveContextAsync(filePath, processedContext, artifactsDirectory);
@@ -130,7 +128,8 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         IEnumerable<string> filePaths,
         bool useCache = true,
         IProgress<(int completed, int total, string currentFile)>? progress = null,
-        string? artifactsDirectory = null)
+        string? artifactsDirectory = null,
+        double? minConfidenceThreshold = null)
     {
         var results = new Dictionary<string, ProcessingResult>();
         var filePathsList = filePaths.ToList();
@@ -144,7 +143,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             {
                 progress?.Report((completed, total, Path.GetFileName(filePath)));
                 
-                var result = await ProcessFileAsync(filePath, useCache, artifactsDirectory);
+                var result = await ProcessFileAsync(filePath, useCache, artifactsDirectory, minConfidenceThreshold);
                 
                 lock (results)
                 {
@@ -210,7 +209,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     /// it is converted to <see cref="List{InvoiceDto}"/> before validation so the
     /// same code path is exercised regardless of how the context was loaded.
     /// </summary>
-    private void RunValidation(PipelineContext context)
+    private void RunValidation(PipelineContext context, double? minConfidenceThreshold = null)
     {
         // null  = Tesseract task threw an exception (infrastructure failure)
         //         → skip Tesseract validation; leave TesseractConfirmed empty
@@ -245,7 +244,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             _lineItemValidation.ValidateInvoiceMath(invoice);
 
             // Run Azure confidence validation
-            var minConfidence = _configuration.GetValue<double>("MinConfidenceThreshold", 0.8);
+            var minConfidence = minConfidenceThreshold ?? _configuration.GetValue<double>("MinConfidenceThreshold", 0.8);
             _confidenceValidation.ValidateConfidence(invoice, minConfidence);
         }
     }

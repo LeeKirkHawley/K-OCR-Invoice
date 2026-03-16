@@ -23,6 +23,7 @@ public class SuperAdminService : ISuperAdminService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
     private readonly IPathService _pathService;
+    private readonly IOrgConfigService _orgConfigSvc;
     private readonly ILogger<SuperAdminService> _logger;
 
     public SuperAdminService(
@@ -33,6 +34,7 @@ public class SuperAdminService : ISuperAdminService
         IHttpContextAccessor httpContextAccessor,
         IConfiguration configuration,
         IPathService pathService,
+        IOrgConfigService orgConfigSvc,
         ILogger<SuperAdminService> logger)
     {
         _dbContext = dbContext;
@@ -42,6 +44,7 @@ public class SuperAdminService : ISuperAdminService
         _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
         _pathService = pathService;
+        _orgConfigSvc = orgConfigSvc;
         _logger = logger;
     }
 
@@ -179,6 +182,17 @@ public class SuperAdminService : ISuperAdminService
             await _dbContext.SaveChangesAsync();
             throw new InvalidOperationException(
                 $"Organization was created but the folder could not be created at \"{orgPath}\": {ex.Message}");
+        }
+
+        // Write default OrgConfig.json
+        try
+        {
+            await _orgConfigSvc.SaveAsync(organization.Name, new K_OCR.Configuration.OrgConfig());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write OrgConfig.json for organization {OrgId}; defaults will be used.", organization.Id);
+            // Non-fatal: the service falls back to defaults when the file is absent.
         }
 
         // Create and migrate the per-org SQLite database

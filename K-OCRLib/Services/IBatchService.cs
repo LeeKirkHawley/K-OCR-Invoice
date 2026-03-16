@@ -13,6 +13,6 @@ public interface IBatchService
     Task ReleaseBatchLockAsync(int batchId, string userId);
     Task SetUserLastBatchAsync(string userId, string organizationId, int? batchId);
     Task<int?> GetUserLastBatchIdAsync(string userId, string organizationId);
-    Task TriggerOcrAsync(int batchId);
+    Task TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null);
     Task<UploadResult> UploadFilesToBatchAsync(int batchId, IReadOnlyList<FileUpload> files, string userId);
 }

@@ -19,9 +19,10 @@ public class HomeController : Controller
     private readonly IInvoiceProcessingService _ocrSvc;
     private readonly IBatchService _batchSvc;
     private readonly IFileService _fileSvc;
-    private readonly IConfigurationService _configSvc;
     private readonly IDocumentExportService _exportSvc;
     private readonly DatabaseService _dbSvc;
+    private readonly IOrgConfigService _orgConfigSvc;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<HomeController> _logger;
 
     private static readonly string[] InvoiceExtensions =
@@ -31,18 +32,20 @@ public class HomeController : Controller
         IInvoiceProcessingService ocrSvc,
         IBatchService batchSvc,
         IFileService fileSvc,
-        IConfigurationService configSvc,
         IDocumentExportService exportSvc,
         DatabaseService dbSvc,
+        IOrgConfigService orgConfigSvc,
+        ITenantContext tenantContext,
         ILogger<HomeController> logger)
     {
-        _ocrSvc = ocrSvc;
-        _batchSvc = batchSvc;
-        _fileSvc = fileSvc;
-        _configSvc = configSvc;
-        _exportSvc = exportSvc;
-        _dbSvc = dbSvc;
-        _logger = logger;
+        _ocrSvc        = ocrSvc;
+        _batchSvc      = batchSvc;
+        _fileSvc       = fileSvc;
+        _exportSvc     = exportSvc;
+        _dbSvc         = dbSvc;
+        _orgConfigSvc  = orgConfigSvc;
+        _tenantContext = tenantContext;
+        _logger        = logger;
     }
 
     [HttpGet]
@@ -127,7 +130,15 @@ public class HomeController : Controller
             var artifactsDir = !string.IsNullOrEmpty(batchDir)
                 ? Path.Combine(batchDir, "Artifacts")
                 : null;
-            var result = await _ocrSvc.ProcessFileAsync(filePath, useCache: false, artifactsDir);
+
+            double? minConfidence = null;
+            if (!string.IsNullOrEmpty(_tenantContext.OrganizationName))
+            {
+                var orgConfig = await _orgConfigSvc.LoadAsync(_tenantContext.OrganizationName);
+                minConfidence = orgConfig.MinConfidenceThreshold;
+            }
+
+            var result = await _ocrSvc.ProcessFileAsync(filePath, useCache: false, artifactsDir, minConfidence);
             if (!result.IsSuccess)
                 return Json(new { success = false, error = result.Error?.Message ?? "Processing failed." });
 
@@ -154,7 +165,14 @@ public class HomeController : Controller
 
         try
         {
-            await _batchSvc.TriggerOcrAsync(batchId);
+            double? minConfidence = null;
+            if (!string.IsNullOrEmpty(_tenantContext.OrganizationName))
+            {
+                var orgConfig = await _orgConfigSvc.LoadAsync(_tenantContext.OrganizationName);
+                minConfidence = orgConfig.MinConfidenceThreshold;
+            }
+
+            await _batchSvc.TriggerOcrAsync(batchId, minConfidence);
             return Json(new { success = true });
         }
         catch (Exception ex)
