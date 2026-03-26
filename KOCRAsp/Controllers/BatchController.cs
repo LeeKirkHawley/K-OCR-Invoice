@@ -61,6 +61,42 @@ public class BatchController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    [HttpGet]
+    public async Task<IActionResult> GetNextBatchNumber()
+    {
+        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        var next = await _batchSvc.GetNextBatchNumberAsync(orgId);
+        return Json(new { nextBatchNumber = next });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateAjax(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Json(new { success = false, error = "Batch name is required." });
+
+        var request = new CreateBatchRequest
+        {
+            Name = name,
+            CreatedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
+            OrgName = User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty
+        };
+
+        try
+        {
+            var result = await _batchSvc.CreateBatchAsync(request);
+            if (!result.Success)
+                return Json(new { success = false, error = result.ErrorMessage ?? "Failed to create batch." });
+            return Json(new { success = true, batchId = result.BatchId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Create batch (AJAX) failed");
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int batchId)

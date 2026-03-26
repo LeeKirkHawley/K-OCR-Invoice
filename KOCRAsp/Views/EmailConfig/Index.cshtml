@@ -47,7 +47,12 @@
                         <div class="col-md-6">
                             <label asp-for="Password" class="form-label">Password</label>
                             <input asp-for="Password" type="password" class="form-control"
-                                   autocomplete="new-password" placeholder="••••••••" />
+                                   autocomplete="new-password"
+                                   placeholder="@(Model?.Password != null ? "(unchanged)" : "Enter password")" />
+                            @if (Model?.Password != null)
+                            {
+                                <div class="form-text">Leave blank to keep the current password.</div>
+                            }
                         </div>
                         <div class="col-md-6">
                             <label asp-for="FromAddress" class="form-label">From Address</label>

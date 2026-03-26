@@ -37,6 +37,12 @@ public class EmailConfigController : Controller
         try
         {
             var settings = await _configSvc.LoadSettingsAsync();
+
+            // If the password field was left blank, preserve the previously saved password
+            // (browsers never pre-fill type="password" inputs, so a blank value means "unchanged").
+            if (string.IsNullOrEmpty(model.Password) && settings.Email is not null)
+                model.Password = settings.Email.Password;
+
             settings.Email = model;
             await _configSvc.SaveSettingsAsync(settings);
             TempData["Success"] = "Email settings saved.";

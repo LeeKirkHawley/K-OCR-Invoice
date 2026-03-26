@@ -29,6 +29,8 @@
                         <a class="nav-link text-light small dropdown-toggle" href="#"
                            data-bs-toggle="dropdown" aria-expanded="false">📦 Batch</a>
                         <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" onclick="openNewBatchModal(); return false;">➕ New Batch</a></li>
+                            <li><hr class="dropdown-divider"></li>
                             <li class="dropdown-submenu">
                                 <a class="dropdown-item dropdown-toggle" href="#">📤 Export</a>
                                 <ul class="dropdown-menu dropdown-menu-dark">
@@ -73,6 +75,97 @@
             integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
             crossorigin="anonymous"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+
+    <!-- New Batch Modal -->
+    <div class="modal fade" id="newBatchModal" tabindex="-1" aria-labelledby="newBatchModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="newBatchModalLabel">📦 New Batch</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="newBatchNameInput" class="form-label">Batch Name</label>
+                        <input type="text" class="form-control" id="newBatchNameInput"
+                               maxlength="200" placeholder="Enter batch name" autocomplete="off" />
+                        <div class="invalid-feedback">Batch name is required.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="newBatchCreateBtn" onclick="submitNewBatch()">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const modal = document.getElementById('newBatchModal');
+
+            async function openNewBatchModal() {
+                const nameInput = document.getElementById('newBatchNameInput');
+                nameInput.value = '';
+                nameInput.classList.remove('is-invalid');
+
+                try {
+                    const resp = await fetch('/batch/getnextbatchnumber');
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        nameInput.value = 'Batch' + data.nextBatchNumber;
+                    }
+                } catch (e) { /* leave blank on error */ }
+
+                bootstrap.Modal.getOrCreateInstance(modal).show();
+            }
+
+            async function submitNewBatch() {
+                const nameInput = document.getElementById('newBatchNameInput');
+                const btn = document.getElementById('newBatchCreateBtn');
+                const name = nameInput.value.trim();
+
+                if (!name) {
+                    nameInput.classList.add('is-invalid');
+                    nameInput.focus();
+                    return;
+                }
+                nameInput.classList.remove('is-invalid');
+                setButtonLoading(btn, true);
+
+                const fd = new FormData();
+                fd.append('name', name);
+                try {
+                    const result = await postForm('/batch/createajax', fd);
+                    if (result.success) {
+                        bootstrap.Modal.getInstance(modal).hide();
+                        showToast(`Batch '${escapeHtml(name)}' created.`);
+                        // Refresh the batch table if we're on the Batch/Index page
+                        if (typeof refreshBatchList === 'function') refreshBatchList();
+                    } else {
+                        showToast(result.error ?? 'Failed to create batch.', 'error');
+                    }
+                } catch (err) {
+                    showToast('Error: ' + err.message, 'error');
+                } finally {
+                    setButtonLoading(btn, false);
+                }
+            }
+
+            // Submit on Enter key
+            document.getElementById('newBatchNameInput')
+                .addEventListener('keydown', e => { if (e.key === 'Enter') submitNewBatch(); });
+
+            // Reset validation state when modal closes
+            modal.addEventListener('hidden.bs.modal', () => {
+                document.getElementById('newBatchNameInput').classList.remove('is-invalid');
+            });
+
+            window.openNewBatchModal = openNewBatchModal;
+            window.submitNewBatch = submitNewBatch;
+        })();
+    </script>
+
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

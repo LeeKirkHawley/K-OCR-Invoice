@@ -79,4 +79,14 @@ public class AuthService : IAuthService
         await _userManager.UpdateAsync(user);
         await _userManager.UpdateSecurityStampAsync(user);
     }
+
+    public async Task<string?> GeneratePasswordResetLinkAsync(string email, string baseUrl)
+    {
+        var user = await _userManager.FindByEmailAsync(email);
+        if (user is null) return null;
+
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+        return $"{baseUrl}/auth/setpassword?userId={Uri.EscapeDataString(user.Id)}&token={encodedToken}";
+    }
 }

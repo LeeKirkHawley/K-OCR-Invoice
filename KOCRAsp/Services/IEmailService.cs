@@ -25,4 +25,9 @@ public interface IEmailService
     /// Sends a plain test email to verify SMTP configuration.
     /// </summary>
     Task SendTestEmailAsync(string toEmail);
+
+    /// <summary>
+    /// Sends a password reset email containing a link to set a new password.
+    /// </summary>
+    Task SendPasswordResetAsync(string toEmail, string toName, string resetLink);
 }
