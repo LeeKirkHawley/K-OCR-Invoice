@@ -211,7 +211,7 @@
                 _currentInvoice = data.invoice;
                 renderInvoiceFields(data.invoice);
                 document.getElementById('validatedJsonContent').textContent =
-                    data.invoice.isValidationAccepted ? JSON.stringify(data.invoice, null, 2) : '';
+                    data.invoice.isValidationAccepted ? JSON.stringify(stripBboxFields(data.invoice), null, 2) : '';
             } else {
                 document.getElementById('invoiceFields').innerHTML =
                     '<p class="text-muted">No invoice data yet. Run OCR to process this file.</p>';
@@ -219,7 +219,7 @@
                 document.getElementById('validatedJsonContent').textContent = '';
             }
             document.getElementById('rawJsonContent').textContent =
-                JSON.stringify(data.invoice ?? null, null, 2);
+                JSON.stringify(stripBboxFields(data.invoice) ?? null, null, 2);
         } catch (err) {
             showToast('Failed to load invoice: ' + err.message, 'error');
         }
@@ -305,7 +305,7 @@
                 renderInvoiceFields(result.invoice);
                 document.getElementById('validatedJsonContent').textContent = '';
                 document.getElementById('rawJsonContent').textContent =
-                    JSON.stringify(result.invoice, null, 2);
+                    JSON.stringify(stripBboxFields(result.invoice), null, 2);
                 await refreshFileList();
                 showToast('OCR complete.');
             } else {
@@ -695,7 +695,7 @@
             if (result.success) {
                 showToast('Invoice saved.');
                 document.getElementById('validatedJsonContent').textContent =
-                    JSON.stringify(_currentInvoice, null, 2);
+                    JSON.stringify(stripBboxFields(_currentInvoice), null, 2);
                 await refreshFileList();
             } else {
                 showToast(result.error ?? 'Save failed.', 'error');
@@ -720,7 +720,7 @@
                 if (_currentInvoice) {
                     _currentInvoice.isValidationAccepted = true;
                     document.getElementById('validatedJsonContent').textContent =
-                        JSON.stringify(_currentInvoice, null, 2);
+                        JSON.stringify(stripBboxFields(_currentInvoice), null, 2);
                 }
                 await refreshFileList();
             } else {
@@ -836,6 +836,17 @@
                 }
             } catch { /* ignore poll errors */ }
         }, 3000);
+    }
+
+    // ── Strip bbox-only fields for JSON display / export ────────
+    // Keeps _currentInvoice intact so 2-way highlighting still works.
+    function stripBboxFields(inv) {
+        if (!inv) return inv;
+        const { fieldBoundingBoxes, originalPageWidth, originalPageHeight, pageCount, items, ...rest } = inv;
+        return {
+            ...rest,
+            items: (items ?? []).map(({ boundingBoxes, ...itemRest }) => itemRest)
+        };
     }
 
     // ── Init ────────────────────────────────────────────────────

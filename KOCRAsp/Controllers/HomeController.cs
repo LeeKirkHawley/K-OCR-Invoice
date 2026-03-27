@@ -10,6 +10,7 @@ using KOCRAsp.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace KOCRAsp.Controllers;
 
@@ -316,7 +317,7 @@ public class HomeController : Controller
         if (invoice == null)
             return NotFound("No cached invoice for this file.");
 
-        var json = JsonConvert.SerializeObject(invoice);
+        var json = JsonConvert.SerializeObject(StripBboxFields(invoice));
         var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.docx");
         try
         {
@@ -339,6 +340,19 @@ public class HomeController : Controller
     {
         ViewData["StatusCode"] = statusCode;
         return View();
+    }
+
+    private static JObject StripBboxFields(InvoiceDto invoice)
+    {
+        var jObj = JObject.FromObject(invoice);
+        jObj.Remove("FieldBoundingBoxes");
+        jObj.Remove("OriginalPageWidth");
+        jObj.Remove("OriginalPageHeight");
+        jObj.Remove("PageCount");
+        if (jObj["Items"] is JArray items)
+            foreach (var item in items.OfType<JObject>())
+                item.Remove("BoundingBoxes");
+        return jObj;
     }
 
     private async Task<List<FileListEntry>> BuildFileListAsync(BatchSummary batch)
@@ -421,7 +435,7 @@ public class HomeController : Controller
         if (batch == null) return BadRequest("No batch selected.");
 
         var invoices = await LoadBatchInvoicesAsync(batch);
-        var payload = invoices.Select(t => new { fileName = t.FileName, invoice = t.Invoice }).ToList();
+        var payload = invoices.Select(t => new { fileName = t.FileName, invoice = StripBboxFields(t.Invoice) }).ToList();
         var json = JsonConvert.SerializeObject(payload, Formatting.Indented);
         var bytes = Encoding.UTF8.GetBytes(json);
         var name = Path.GetFileName(batch.FolderPath.TrimEnd(Path.DirectorySeparatorChar));
