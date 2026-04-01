@@ -61,6 +61,8 @@ namespace K_OCR.Models
         public bool IsFullyProcessed { get; set; } = false;
         public bool IsValidationAccepted { get; set; } = false;
 
+        public string? Notes { get; set; }
+
         // Navigation properties
         public virtual Batch? Batch { get; set; }
         public virtual ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();

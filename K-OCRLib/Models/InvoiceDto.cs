@@ -105,6 +105,9 @@ namespace K_OCR.Models
         /// When true, validation checks will be skipped and no validation indicators will be shown.
         /// </summary>
         public bool IsValidationAccepted { get; set; }
+
+        /// <summary>Free-text notes entered by the user for this invoice.</summary>
+        public string? Notes { get; set; }
         
     }
 }

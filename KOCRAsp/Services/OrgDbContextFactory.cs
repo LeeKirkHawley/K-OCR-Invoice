@@ -51,6 +51,8 @@ internal sealed class OrgDbContextFactory : IDbContextFactory<KOCRDbContext>
         if (_settings.EnableDetailedErrors)
             optionsBuilder.EnableDetailedErrors();
 
-        return new KOCRDbContext(optionsBuilder.Options);
+        var context = new KOCRDbContext(optionsBuilder.Options);
+        context.Database.Migrate();
+        return context;
     }
 }

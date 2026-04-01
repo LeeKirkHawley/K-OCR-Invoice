@@ -171,7 +171,25 @@
     flex-shrink: 0;
     background: #f8f9fa;
     border-bottom: 1px solid #dee2e6;
+    display: flex;
+    align-items: flex-end;
 }
+
+.kocr-invoice-header .nav-tabs {
+    flex: 1;
+    border-bottom: none;
+}
+
+.validation-status-label {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0 10px 6px;
+    white-space: nowrap;
+}
+
+.validation-status-label.is-validated    { color: #28a745; }
+.validation-status-label.is-not-validated { color: #dc3545; }
 
 .kocr-invoice-body {
     flex: 1;

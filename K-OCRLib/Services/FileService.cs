@@ -129,10 +129,13 @@ namespace K_OCR.Services
                 existing.Total                = invoice.Total;
                 existing.InvoiceDate          = DateTime.TryParse(invoice.InvoiceDate, out var invDate) ? invDate : null;
                 existing.DueDate              = DateTime.TryParse(invoice.DueDate,     out var dueDate) ? dueDate : null;
+                existing.Notes                = invoice.Notes;
 
-                // Mark the invoice as human-validated and record when
+                // Preserve the caller's validation state — AcceptValidation sets
+                // IsValidationAccepted = true on the DTO before calling here;
+                // a plain Save leaves it unchanged.
                 existing.ValidatedOcrText     = validatedJson;
-                existing.IsValidationAccepted = true;
+                existing.IsValidationAccepted = invoice.IsValidationAccepted;
                 existing.ProcessedAtUtc       = DateTime.UtcNow;
 
                 await _databaseService.SaveInvoiceAsync(existing);

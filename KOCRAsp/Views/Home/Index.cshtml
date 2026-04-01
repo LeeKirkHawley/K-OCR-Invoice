@@ -93,6 +93,7 @@
                             data-bs-target="#tab-validatedjson" type="button" role="tab">Validated JSON</button>
                 </li>
             </ul>
+            <span id="validationStatusLabel" class="validation-status-label" aria-live="polite"></span>
         </div>
         <div class="kocr-invoice-body tab-content">
             <div class="tab-pane fade show active" id="tab-validation" role="tabpanel">
@@ -210,6 +211,7 @@
             if (data.success && data.invoice) {
                 _currentInvoice = data.invoice;
                 renderInvoiceFields(data.invoice);
+                updateValidationStatusLabel(data.invoice);
                 document.getElementById('validatedJsonContent').textContent =
                     data.invoice.isValidationAccepted ? JSON.stringify(stripBboxFields(data.invoice), null, 2) : '';
             } else {
@@ -217,6 +219,7 @@
                     '<p class="text-muted">No invoice data yet. Run OCR to process this file.</p>';
                 renderRunOcrButton(filePath);
                 document.getElementById('validatedJsonContent').textContent = '';
+                updateValidationStatusLabel(null);
             }
             document.getElementById('rawJsonContent').textContent =
                 JSON.stringify(stripBboxFields(data.invoice) ?? null, null, 2);
@@ -303,6 +306,7 @@
             if (result.success && result.invoice) {
                 _currentInvoice = result.invoice;
                 renderInvoiceFields(result.invoice);
+                updateValidationStatusLabel(result.invoice);
                 document.getElementById('validatedJsonContent').textContent = '';
                 document.getElementById('rawJsonContent').textContent =
                     JSON.stringify(stripBboxFields(result.invoice), null, 2);
@@ -395,6 +399,13 @@
             html += '</tbody></table></div>';
         }
 
+        html += `<div class="mt-3">
+            <label class="form-label form-label-sm mb-1" for="notesField">Notes</label>
+            <textarea id="notesField" class="form-control form-control-sm" rows="3"
+                      style="resize:vertical;overflow-y:auto"
+                      tabindex="-1">${escapeHtml(inv.notes ?? '')}</textarea>
+        </div>`;
+
         html += `<div class="d-flex gap-2 mt-2 flex-wrap">
             <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1" onclick="saveInvoice()">Save</button>
             <button id="acceptBtn" class="btn btn-sm btn-success"           tabindex="-1" onclick="acceptValidation()">Accept</button>
@@ -403,6 +414,13 @@
         </div>`;
 
         container.innerHTML = html;
+
+        const notesEl = container.querySelector('#notesField');
+        if (notesEl) {
+            notesEl.addEventListener('input', () => {
+                if (_currentInvoice) _currentInvoice.notes = notesEl.value;
+            });
+        }
 
         initLiColResize();
 
@@ -448,6 +466,23 @@
     function applyFieldEdit(prop, value) {
         if (!_currentInvoice) return;
         _currentInvoice[prop] = value;
+    }
+
+    function updateValidationStatusLabel(inv) {
+        const el = document.getElementById('validationStatusLabel');
+        if (!el) return;
+        if (!inv) {
+            el.textContent = '';
+            el.className = 'validation-status-label';
+            return;
+        }
+        if (inv.isValidationAccepted) {
+            el.textContent = 'Validated';
+            el.className = 'validation-status-label is-validated';
+        } else {
+            el.textContent = 'Not Validated';
+            el.className = 'validation-status-label is-not-validated';
+        }
     }
 
     // ── Two-way field / bbox highlighting ──────────────────────────────────────
@@ -719,6 +754,7 @@
                 showToast('Validation accepted.');
                 if (_currentInvoice) {
                     _currentInvoice.isValidationAccepted = true;
+                    updateValidationStatusLabel(_currentInvoice);
                     document.getElementById('validatedJsonContent').textContent =
                         JSON.stringify(stripBboxFields(_currentInvoice), null, 2);
                 }
