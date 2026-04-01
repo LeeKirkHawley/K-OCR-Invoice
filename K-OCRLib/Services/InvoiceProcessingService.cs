@@ -1,5 +1,4 @@
 using K_OCR.Models;
-using K_OCR.PipelineService;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
@@ -16,7 +15,6 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     private readonly IConfidenceValidationService _confidenceValidation;
     private readonly IConfiguration _configuration;
     private readonly ILogger<InvoiceProcessingService> _logger;
-    private readonly string _defaultPipelineConfigPath;
     
     public InvoiceProcessingService(
         IFileService fileService,
@@ -36,10 +34,6 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         _confidenceValidation = confidenceValidation;
         _configuration = configuration;
         _logger = logger;
-        _defaultPipelineConfigPath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, 
-            "PipelineService", 
-            "DefaultPipeline.json");
     }
     
     public bool HasCachedResults(string filePath)
@@ -71,16 +65,15 @@ public class InvoiceProcessingService : IInvoiceProcessingService
                 // Cache absent or predates Tesseract validation — fall through to full reprocessing.
             }
             
-            // No usable cache — run pipeline
-            var config = PipelineConfigLoader.Load(_defaultPipelineConfigPath);
-            var executor = new PipelineExecutor(_invoiceService);
-            var context = new PipelineContext
+            // No usable cache — run Azure OCR and local Tesseract validation concurrently.
+            async Task<PipelineContext> RunAzureAsync()
             {
-                InputPath = filePath
-            };
+                var ctx = new PipelineContext { InputPath = filePath };
+                ctx.Layout = await _invoiceService.RunAzureInvoiceParse(filePath);
+                return ctx;
+            }
 
-            // Run Azure OCR pipeline and local Tesseract validation concurrently.
-            var azureTask = executor.RunAsync(config, context);
+            var azureTask = RunAzureAsync();
             var tesseractTask = _tesseractValidation.ExtractTextAsync(filePath, artifactsDirectory);
 
             // Await both tasks. A Tesseract failure must NOT abort the Azure result —

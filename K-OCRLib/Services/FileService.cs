@@ -1,6 +1,5 @@
 ﻿using System.IO;
 using K_OCR.Models;
-using K_OCR.PipelineService;
 using Microsoft.Extensions.Logging;
 
 

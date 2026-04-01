@@ -32,10 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="PipelineService\DefaultPipeline.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="PipelineService\FieldSynonyms.json">
+    <None Update="Configuration\FieldMappings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

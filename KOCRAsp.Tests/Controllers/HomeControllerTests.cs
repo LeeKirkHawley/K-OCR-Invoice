@@ -107,7 +107,7 @@ public class HomeControllerTests
 
         var processingResult = new ProcessingResult
         {
-            Context = new K_OCR.PipelineService.PipelineContext(),
+            Context = new K_OCR.Models.PipelineContext(),
             Json = "{}"
         };
         _mockOcrSvc

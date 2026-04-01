@@ -1,4 +1,4 @@
-﻿using K_OCR.PipelineService;
+﻿using K_OCR.Models;
 
 namespace K_OCR.Services
 {

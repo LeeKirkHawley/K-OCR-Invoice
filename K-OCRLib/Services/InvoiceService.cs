@@ -57,7 +57,7 @@ namespace K_OCR.Services
                 // entirely new keys are added as-is.
                 try
                 {
-                    var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PipelineService", "FieldMappings.json");
+                    var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Configuration", "FieldMappings.json");
                     if (File.Exists(configPath))
                     {
                         var json = File.ReadAllText(configPath);

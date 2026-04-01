@@ -1,5 +1,3 @@
-using K_OCR.PipelineService;
-
 namespace K_OCR.Models;
 
 public class ProcessingResult
