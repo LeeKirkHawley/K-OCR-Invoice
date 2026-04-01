@@ -1,7 +1,6 @@
 using K_OCR.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 
 namespace K_OCR.Services;
 
@@ -170,37 +169,12 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     public async Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath)
     {
         var context = await _fileService.LoadCachedContextAsync(filePath);
-        
-        if (context?.Layout == null)
-            return null;
-        
-        // Extract invoice from Layout property
-        if (context.Layout is JArray layoutArray && layoutArray.Count > 0)
-        {
-            try
-            {
-                return layoutArray[0].ToObject<InvoiceDto>();
-            }
-            catch
-            {
-                return null;
-            }
-        }
-        else if (context.Layout is List<InvoiceDto> invoiceList && invoiceList.Count > 0)
-        {
-            return invoiceList[0];
-        }
-        
-        return null;
+        return context?.Layout?.FirstOrDefault();
     }
 
     /// <summary>
     /// Runs cross-validation of all Azure-extracted invoice fields against the
     /// Tesseract text stored in <paramref name="context"/>.
-    /// Handles both freshly-processed and cache-reloaded contexts.
-    /// When the Layout is a <see cref="JArray"/> (Newtonsoft deserialised from cache),
-    /// it is converted to <see cref="List{InvoiceDto}"/> before validation so the
-    /// same code path is exercised regardless of how the context was loaded.
     /// </summary>
     private void RunValidation(PipelineContext context, double? minConfidenceThreshold = null)
     {
@@ -211,32 +185,15 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         // other = normal text; validate field by field
         var tesseractText = context.TesseractOcrText; // intentionally NOT coalesced to ""
 
-        List<InvoiceDto>? invoices = null;
+        if (context.Layout == null) return;
 
-        if (context.Layout is List<InvoiceDto> list)
+        foreach (var invoice in context.Layout)
         {
-            invoices = list;
-        }
-        else if (context.Layout is JArray jArray)
-        {
-            try { invoices = jArray.ToObject<List<InvoiceDto>>(); }
-            catch (Exception ex) { _logger.LogWarning(ex, "[RunValidation] Failed to deserialize layout JArray; skipping validation."); }
-        }
-
-        if (invoices == null) return;
-
-        foreach (var invoice in invoices)
-        {
-            // Only run Tesseract validation when text is available.
-            // null  = task failed (infrastructure error) → skip so fields are not incorrectly flagged
-            // ""    = task succeeded but found no text  → ValidateAgainstTesseract flags extracted fields
             if (tesseractText != null)
                 _invoiceValidation.ValidateAgainstTesseract(invoice, tesseractText);
             
-            // Run mathematical validation
             _lineItemValidation.ValidateInvoiceMath(invoice);
 
-            // Run Azure confidence validation
             var minConfidence = minConfidenceThreshold ?? _configuration.GetValue<double>("MinConfidenceThreshold", 0.8);
             _confidenceValidation.ValidateConfidence(invoice, minConfidence);
         }
