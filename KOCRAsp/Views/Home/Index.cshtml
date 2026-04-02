@@ -113,6 +113,13 @@
     </div>
 
 </div>
+<!-- OCR In Progress overlay -->
+<div id="ocrOverlay">
+    <div class="spinner-border text-light ocr-spinner" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <span class="ocr-overlay-label">OCR In Progress...</span>
+</div>
 <!-- Setup link modal -->
 <div class="modal fade" id="setupLinkModal" tabindex="-1">
     <div class="modal-dialog">
@@ -299,6 +306,7 @@
 
     async function runOcrOnFile(filePath, btn) {
         setButtonLoading(btn, true);
+        showOcrOverlay();
         try {
             const fd = new FormData();
             fd.append('filePath', filePath);
@@ -319,6 +327,8 @@
         } catch (err) {
             showToast('OCR error: ' + err.message, 'error');
             setButtonLoading(btn, false);
+        } finally {
+            hideOcrOverlay();
         }
     }
 
@@ -466,6 +476,14 @@
     function applyFieldEdit(prop, value) {
         if (!_currentInvoice) return;
         _currentInvoice[prop] = value;
+    }
+
+    function showOcrOverlay() {
+        document.getElementById('ocrOverlay').classList.add('active');
+    }
+
+    function hideOcrOverlay() {
+        document.getElementById('ocrOverlay').classList.remove('active');
     }
 
     function updateValidationStatusLabel(inv) {
@@ -860,6 +878,7 @@
 
     function startOcrPolling() {
         if (_ocrPollInterval) return;
+        showOcrOverlay();
         _ocrPollInterval = setInterval(async () => {
             try {
                 const resp = await fetch('/home/getocrstatus');
@@ -867,6 +886,7 @@
                 if (data.success && data.processed >= data.total && data.total > 0) {
                     clearInterval(_ocrPollInterval);
                     _ocrPollInterval = null;
+                    hideOcrOverlay();
                     showToast(`OCR complete: ${data.processed}/${data.total} files processed.`);
                     await refreshFileList();
                 }
