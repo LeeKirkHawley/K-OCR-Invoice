@@ -26,6 +26,20 @@
             "problemMatcher": "$msCompile"
         },
         {
+            "label": "Build KOCRAsp Release",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/KOCRAsp/KOCRAsp.csproj",
+                "-c",
+                "Release",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
             "label": "Build K-OCR (Blazor) Only",
             "command": "dotnet",
             "type": "process",
