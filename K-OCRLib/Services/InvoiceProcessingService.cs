@@ -169,6 +169,8 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     public async Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath)
     {
         var context = await _fileService.LoadCachedContextAsync(filePath);
+        if (context?.Layout != null)
+            RunValidation(context);
         return context?.Layout?.FirstOrDefault();
     }
 

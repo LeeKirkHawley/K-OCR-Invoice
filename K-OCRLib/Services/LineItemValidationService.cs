@@ -62,10 +62,10 @@ public class LineItemValidationService : ILineItemValidationService
         
         invoice.MathConfirmed["Subtotal"] = isValid;
         
-        if (!isValid)
-        {
-            Console.WriteLine($"[Math Validation] Subtotal failed: Sum of line items = {expectedSubtotal:C}, but Subtotal = {actualSubtotal:C}");
-        }
+        // if (!isValid)
+        // {
+        //     Console.WriteLine($"[Math Validation] Subtotal failed: Sum of line items = {expectedSubtotal:C}, but Subtotal = {actualSubtotal:C}");
+        // }
     }
     
     private void ValidateTotal(InvoiceDto invoice)
@@ -105,9 +105,9 @@ public class LineItemValidationService : ILineItemValidationService
         
         invoice.MathConfirmed["Total"] = isValid;
         
-        if (!isValid)
-        {
-            Console.WriteLine($"[Math Validation] Total failed: Expected {expectedTotal:C}, but got {actualTotal:C}");
-        }
+        // if (!isValid)
+        // {
+        //     Console.WriteLine($"[Math Validation] Total failed: Expected {expectedTotal:C}, but got {actualTotal:C}");
+        // }
     }
 }

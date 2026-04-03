@@ -395,7 +395,7 @@
                 const dTip = buildItemFieldTooltip(inv, item, 'Description', i, item.description);
                 const qTip = buildItemFieldTooltip(inv, item, 'Quantity',    i, item.quantity);
                 const uTip = buildItemFieldTooltip(inv, item, 'UnitPrice',   i, item.unitPrice);
-                const aTip = buildItemFieldTooltip(inv, item, 'Amount',      i, item.lineTotal);
+                const aTip = buildItemFieldTooltip(inv, item, 'Amount',      i, item.amount);
 
                 const vtip = t => `data-vtip="${escapeHtml(t.value)}" data-vtip-errors="${escapeHtml(t.errors.join('\n'))}"`;
                 const sc = f => f ? ' inv-suspect-input' : '';
@@ -403,7 +403,7 @@
                              <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${item.unitPrice ?? ''}" /></td>
-                             <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="lineTotal"   data-fieldkey="${fk}" value="${item.lineTotal ?? ''}" /></td>
+                             <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="amount"      data-fieldkey="${fk}" value="${item.amount ?? ''}" /></td>
                          </tr>`;
             }
             html += '</tbody></table></div>';
