@@ -105,8 +105,8 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./publish/
           server-dir: /kirkhawley.org/wwwroot/
-          # Only upload changed files; does NOT wipe the server directory
-          dangerous-clean-slate: false
+          # Wipe server directory before uploading for a clean deployment
+          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.git*/**
