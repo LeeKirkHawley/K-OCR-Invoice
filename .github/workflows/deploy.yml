@@ -88,6 +88,10 @@ jobs:
                   <environmentVariables>
                     <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
                   </environmentVariables>
+                  <handlerSettings>
+                    <handlerSetting name="debugFile" value=".\\logs\\ancm-debug.log" />
+                    <handlerSetting name="debugLevel" value="file,trace" />
+                  </handlerSettings>
                 </aspNetCore>
               </system.webServer>
             </location>
