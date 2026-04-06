@@ -1,0 +1,111 @@
+name: Deploy to kirkhawley.org
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:   # also allows manual trigger from GitHub Actions UI
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore KOCRAsp/KOCRAsp.csproj
+
+      - name: Publish (Release)
+        run: dotnet publish KOCRAsp/KOCRAsp.csproj -c Release -o ./publish --nologo
+
+      # Replace appsettings.json in the publish output with production values.
+      # Azure credentials are carried over from the checked-in appsettings.json.
+      # Note: move AzureCognitiveServicesKey to a GitHub Secret when the repo goes public.
+      - name: Write production appsettings.json
+        run: |
+          python3 << 'EOF'
+          import json
+
+          with open('./KOCRAsp/appsettings.json') as f:
+              base = json.load(f)
+
+          prod = {
+            "AllowDuplicateEmails": True,
+            "Logging": {
+              "LogLevel": {
+                "Default": "Warning",
+                "Microsoft.AspNetCore": "Warning"
+              }
+            },
+            "AllowedHosts": "kirkhawley.org;www.kirkhawley.org",
+            "Api": {
+              "BaseUrl": "https://kirkhawley.org"
+            },
+            "Kocr": {
+              "BaseDirectory": "/kirkhawley.org/KOCRBase"
+            },
+            "AzureCognitiveServicesKey":      base.get("AzureCognitiveServicesKey"),
+            "AzureCognitiveServicesEndpoint": base.get("AzureCognitiveServicesEndpoint"),
+            "OCRProvider":                    base.get("OCRProvider", "Azure"),
+            "MaxConcurrentRequests":          base.get("MaxConcurrentRequests", 3),
+            "MinConfidenceThreshold":         base.get("MinConfidenceThreshold", 0.8),
+            "Database": {
+              "IdentityConnectionString": "Data Source=/kirkhawley.org/KOCRBase/kocr.db",
+              "UseWalMode": False,
+              "EnableSensitiveDataLogging": False,
+              "EnableDetailedErrors": False
+            }
+          }
+
+          with open('./publish/appsettings.json', 'w') as f:
+              json.dump(prod, f, indent=2)
+
+          print("Production appsettings.json written.")
+          EOF
+
+      # Set ASPNETCORE_ENVIRONMENT=Production in web.config so ASP.NET Core
+      # runs in Production mode on the IIS host.
+      - name: Set ASPNETCORE_ENVIRONMENT in web.config
+        run: |
+          python3 << 'EOF'
+          import xml.etree.ElementTree as ET
+
+          ET.register_namespace('', '')
+          tree = ET.parse('./publish/web.config')
+          root = tree.getroot()
+
+          for el in root.iter():
+              if el.tag.endswith('aspNetCore') or el.tag == 'aspNetCore':
+                  env_vars = el.find('environmentVariables')
+                  if env_vars is None:
+                      env_vars = ET.SubElement(el, 'environmentVariables')
+                  env = ET.SubElement(env_vars, 'environmentVariable')
+                  env.set('name', 'ASPNETCORE_ENVIRONMENT')
+                  env.set('value', 'Production')
+                  break
+
+          tree.write('./publish/web.config', xml_declaration=True, encoding='unicode')
+          print("web.config updated.")
+          EOF
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: 209.58.148.243
+          username: kirkhawley
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./publish/
+          server-dir: /kirkhawley.org/wwwroot/
+          # Only upload changed files; does NOT wipe the server directory
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/appsettings.development.user.json
+            **/appsettings.Development.json
