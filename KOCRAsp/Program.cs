@@ -3,15 +3,14 @@ using K_OCR.Data;
 using K_OCR.Security;
 using K_OCR.Services;
 using KOCRAsp.Data;
-
-// TEMPORARY STARTUP DIAGNOSTIC — remove after debugging
-try { File.WriteAllText("startup-diag.txt", $"Managed code started at {DateTime.UtcNow:O}"); } catch { }
-
 using KOCRAsp.Identity;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+
+// TEMPORARY STARTUP DIAGNOSTIC — remove after debugging
+try { File.WriteAllText("startup-diag.txt", $"Managed code started at {DateTime.UtcNow:O}"); } catch { }
 
 var builder = WebApplication.CreateBuilder(args);
 
