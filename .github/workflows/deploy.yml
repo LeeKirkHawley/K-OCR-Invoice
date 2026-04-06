@@ -69,29 +69,32 @@ jobs:
           print("Production appsettings.json written.")
           EOF
 
-      # Set ASPNETCORE_ENVIRONMENT=Production in web.config so ASP.NET Core
-      # runs in Production mode on the IIS host.
-      - name: Set ASPNETCORE_ENVIRONMENT in web.config
+      # Write web.config from scratch with outofprocess hosting and Production environment.
+      # outofprocess works with ANCM alone; inprocess requires the full hosting bundle.
+      - name: Write web.config
         run: |
           python3 << 'EOF'
-          import xml.etree.ElementTree as ET
-
-          ET.register_namespace('', '')
-          tree = ET.parse('./publish/web.config')
-          root = tree.getroot()
-
-          for el in root.iter():
-              if el.tag.endswith('aspNetCore') or el.tag == 'aspNetCore':
-                  env_vars = el.find('environmentVariables')
-                  if env_vars is None:
-                      env_vars = ET.SubElement(el, 'environmentVariables')
-                  env = ET.SubElement(env_vars, 'environmentVariable')
-                  env.set('name', 'ASPNETCORE_ENVIRONMENT')
-                  env.set('value', 'Production')
-                  break
-
-          tree.write('./publish/web.config', xml_declaration=True, encoding='unicode')
-          print("web.config updated.")
+          content = '''<?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <location path="." inheritInChildApplications="false">
+              <system.webServer>
+                <handlers>
+                  <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
+                </handlers>
+                <aspNetCore processPath=".\\KOCRAsp.exe"
+                            stdoutLogEnabled="true"
+                            stdoutLogFile=".\\logs\\stdout"
+                            hostingModel="outofprocess">
+                  <environmentVariables>
+                    <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
+                  </environmentVariables>
+                </aspNetCore>
+              </system.webServer>
+            </location>
+          </configuration>'''
+          with open('./publish/web.config', 'w') as f:
+              f.write(content)
+          print("web.config written.")
           EOF
 
       - name: Deploy via FTP
