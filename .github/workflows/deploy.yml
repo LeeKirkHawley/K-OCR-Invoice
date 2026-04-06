@@ -104,9 +104,10 @@ jobs:
           username: kirkhawley
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./publish/
-          server-dir: /kirkhawley.org/wwwroot/
-          # Wipe server directory before uploading for a clean deployment
-          dangerous-clean-slate: true
+          server-dir: /kirkhawley.org/
+          # Only upload changed files; does NOT wipe the server directory
+          # dangerous-clean-slate would also delete KOCRBase data — keep false
+          dangerous-clean-slate: false
           exclude: |
             **/.git*
             **/.git*/**
