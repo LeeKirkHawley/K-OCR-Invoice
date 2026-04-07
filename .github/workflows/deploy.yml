@@ -101,6 +101,16 @@ jobs:
           print("web.config written.")
           EOF
 
+      # Upload app_offline.htm first to signal ANCM to shut down the running app,
+      # freeing file locks before the main deploy overwrites KOCRAsp.exe/dlls.
+      - name: Take app offline
+        run: |
+          echo "<h1>Site is being updated, please check back shortly.</h1>" > app_offline.htm
+          curl -s -T app_offline.htm ftp://209.58.148.243/kirkhawley.org/app_offline.htm \
+            --user "kirkhawley:${{ secrets.FTP_PASSWORD }}" --ftp-create-dirs
+          echo "app_offline.htm uploaded, waiting for app to shut down..."
+          sleep 10
+
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -117,3 +127,10 @@ jobs:
             **/.git*/**
             **/appsettings.development.user.json
             **/appsettings.Development.json
+
+      - name: Bring app back online
+        run: |
+          curl -s ftp://209.58.148.243/ \
+            --user "kirkhawley:${{ secrets.FTP_PASSWORD }}" \
+            -Q "DELE /kirkhawley.org/app_offline.htm"
+          echo "app_offline.htm removed, app is back online."
