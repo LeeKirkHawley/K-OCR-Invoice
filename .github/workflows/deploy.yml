@@ -48,7 +48,7 @@ jobs:
               "BaseUrl": "https://kirkhawley.org"
             },
             "Kocr": {
-              "BaseDirectory": "../kirkhawley.org/KOCRBase"
+              "BaseDirectory": "KOCRBase"
             },
             "AzureCognitiveServicesKey":      base.get("AzureCognitiveServicesKey"),
             "AzureCognitiveServicesEndpoint": base.get("AzureCognitiveServicesEndpoint"),
@@ -56,7 +56,7 @@ jobs:
             "MaxConcurrentRequests":          base.get("MaxConcurrentRequests", 3),
             "MinConfidenceThreshold":         base.get("MinConfidenceThreshold", 0.8),
             "Database": {
-              "IdentityConnectionString": "Data Source=../kirkhawley.org/KOCRBase/kocr.db",
+              "IdentityConnectionString": "Data Source=KOCRBase/kocr.db",
               "UseWalMode": False,
               "EnableSensitiveDataLogging": False,
               "EnableDetailedErrors": False
