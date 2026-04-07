@@ -109,7 +109,19 @@ jobs:
           curl -s -T app_offline.htm ftp://209.58.148.243/kirkhawley.org/app_offline.htm \
             --user "kirkhawley:${{ secrets.FTP_PASSWORD }}" --ftp-create-dirs
           echo "app_offline.htm uploaded, waiting for app to shut down..."
-          sleep 10
+          sleep 30
+
+      # Explicitly delete DLLs that IIS/ANCM may have locked in a crash-restart loop.
+      # curl DELE returns non-zero if file doesn't exist; || true prevents workflow failure.
+      - name: Delete locked DLLs
+        run: |
+          for f in KOCRAsp.exe KOCRAsp.dll K-OCRLib.dll KOCRAsp.pdb K-OCRLib.pdb; do
+            curl -s ftp://209.58.148.243/ \
+              --user "kirkhawley:${{ secrets.FTP_PASSWORD }}" \
+              -Q "DELE /kirkhawley.org/$f" || true
+            echo "Deleted (or skipped) $f"
+          done
+          sleep 5
 
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
