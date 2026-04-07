@@ -5,6 +5,7 @@ using K_OCR.Services;
 using KOCRAsp.Data;
 using KOCRAsp.Identity;
 using KOCRAsp.Services;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -85,6 +86,15 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.SlidingExpiration = true;
     options.ExpireTimeSpan = TimeSpan.FromHours(8);
 });
+
+// ── Data Protection ───────────────────────────────────────────────────────────
+// Persist keys to a local folder so anti-forgery tokens survive app restarts.
+// %LOCALAPPDATA% is not accessible on shared hosting; use a subfolder instead.
+var keysFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DataProtection-Keys");
+Directory.CreateDirectory(keysFolder);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keysFolder))
+    .SetApplicationName("KOCRAsp");
 
 // ── MVC ───────────────────────────────────────────────────────────────────────
 builder.Services.AddControllersWithViews();
