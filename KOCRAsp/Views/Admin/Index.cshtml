@@ -43,7 +43,7 @@
                     <th>Description</th>
                     <th>Users</th>
                     <th>Created</th>
-                    <th>Active</th>
+                    <th>Status</th>
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
@@ -64,18 +64,24 @@
                             <td>@org.UserCount</td>
                             <td>@org.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy")</td>
                             <td>
+                                <span id="org-badge-@org.OrganizationId"
+                                      class="badge @(org.IsActive ? "bg-success" : "bg-secondary")">
+                                    @(org.IsActive ? "Active" : "Revoked")
+                                </span>
+                            </td>
+                            <td class="text-end" id="org-actions-@org.OrganizationId">
                                 @if (org.IsActive)
                                 {
-                                    <span class="badge bg-success">Active</span>
+                                    <button class="btn btn-sm btn-outline-warning"
+                                            onclick="revokeOrg('@org.OrganizationId', this)">Revoke</button>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-secondary">Inactive</span>
+                                    <button class="btn btn-sm btn-outline-success me-1"
+                                            onclick="reEnableOrg('@org.OrganizationId', this)">Re-enable</button>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            onclick="deleteOrg('@org.OrganizationId', this)">Delete</button>
                                 }
-                            </td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-outline-danger"
-                                        onclick="deleteOrg('@org.OrganizationId', this)">Delete</button>
                             </td>
                         </tr>
                     }
@@ -189,6 +195,49 @@
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
         } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function revokeOrg(orgId, btn) {
+        if (!confirm('Revoke this organization? All its users will be locked out.')) return;
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/revokeorganization', { orgId });
+            if (result.success) {
+                document.getElementById('org-badge-' + orgId).className = 'badge bg-secondary';
+                document.getElementById('org-badge-' + orgId).textContent = 'Revoked';
+                document.getElementById('org-actions-' + orgId).innerHTML =
+                    `<button class="btn btn-sm btn-outline-success me-1" onclick="reEnableOrg('${orgId}', this)">Re-enable</button>` +
+                    `<button class="btn btn-sm btn-outline-danger" onclick="deleteOrg('${orgId}', this)">Delete</button>`;
+                showToast('Organization revoked.');
+            } else {
+                showToast(result.error ?? 'Revoke failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function reEnableOrg(orgId, btn) {
+        if (!confirm('Re-enable this organization? Its users will be able to log in again.')) return;
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/reenableorganization', { orgId });
+            if (result.success) {
+                document.getElementById('org-badge-' + orgId).className = 'badge bg-success';
+                document.getElementById('org-badge-' + orgId).textContent = 'Active';
+                document.getElementById('org-actions-' + orgId).innerHTML =
+                    `<button class="btn btn-sm btn-outline-warning" onclick="revokeOrg('${orgId}', this)">Revoke</button>`;
+                showToast('Organization re-enabled.');
+            } else {
+                showToast(result.error ?? 'Re-enable failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
             setButtonLoading(btn, false);
         }
     }

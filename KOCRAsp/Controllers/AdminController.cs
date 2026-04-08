@@ -56,7 +56,39 @@ public class AdminController : Controller
 
     [HttpPost]
     [IgnoreAntiforgeryToken]
-    public async Task<IActionResult> DeleteOrganization([FromBody] DeleteOrgRequest request)
+    public async Task<IActionResult> RevokeOrganization([FromBody] OrgIdRequest request)
+    {
+        try
+        {
+            await _superAdminSvc.RevokeOrganizationAsync(request.OrgId);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "RevokeOrganization failed for {OrgId}", request.OrgId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> ReEnableOrganization([FromBody] OrgIdRequest request)
+    {
+        try
+        {
+            await _superAdminSvc.ReEnableOrganizationAsync(request.OrgId);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ReEnableOrganization failed for {OrgId}", request.OrgId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> DeleteOrganization([FromBody] OrgIdRequest request)
     {
         try
         {
@@ -122,7 +154,7 @@ public class AdminController : Controller
 }
 
 // Local request DTOs
-public sealed class DeleteOrgRequest
+public sealed class OrgIdRequest
 {
     public string OrgId { get; set; } = string.Empty;
 }
