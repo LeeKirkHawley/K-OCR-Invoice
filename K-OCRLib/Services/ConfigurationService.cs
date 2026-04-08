@@ -1,13 +1,15 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using K_OCR.Configuration;
 using Serilog;
 
-// The configuration service works with a roaming JSON file by default but
-// provides a development override to avoid touching the real file during
-// local runs.  The override lives in the current directory and is
-// automatically used for saves when ASPNETCORE_ENVIRONMENT is
-// Development.
+// The configuration service reads/writes a JSON settings file.
+// In Development: reads a local override file (appsettings.development.user.json)
+//   if it exists, otherwise the roaming %AppData%\K-OCR\appsettings.json.
+// In Production: reads/writes the deployed appsettings.json in the app base
+//   directory (AppDomain.CurrentDomain.BaseDirectory). Saves use a JSON merge
+//   so that ASP.NET Core fields (AllowedHosts, Logging, etc.) are preserved.
 
 namespace K_OCR.Services;
 
@@ -27,17 +29,21 @@ public class ConfigurationService : IConfigurationService
     }
 
     /// <summary>
-    /// Path to the *canonical* settings file – always the roaming AppData
-    /// location.  We never write to this file when running in development;
-    /// instead a separate override file is used so that the roaming file
-    /// remains untouched.
+    /// Path to the settings file used at runtime.
+    /// Development: roaming %AppData%\K-OCR\appsettings.json.
+    /// Production: appsettings.json in the app's own base directory.
     /// </summary>
     public string GetDefaultSettingsPath()
     {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var dir = Path.Combine(appData, "K-OCR");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, DefaultSettingsFileName);
+        if (IsDevelopment())
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var dir = Path.Combine(appData, "K-OCR");
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, DefaultSettingsFileName);
+        }
+
+        return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DefaultSettingsFileName);
     }
 
     public async Task<AppSettings> LoadSettingsAsync(string? path = null)
@@ -83,16 +89,37 @@ public class ConfigurationService : IConfigurationService
     public async Task SaveSettingsAsync(AppSettings settings, string? path = null)
     {
         if (IsDevelopment())
-            path = GetDevelopmentOverridePath();
-        else
-            path ??= GetDefaultSettingsPath();
-
-        var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions
         {
-            WriteIndented = true
-        });
+            path = GetDevelopmentOverridePath();
+            var devJson = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(path, devJson);
+            return;
+        }
 
-        await File.WriteAllTextAsync(path, json);
+        path ??= GetDefaultSettingsPath();
+
+        // In Production, merge AppSettings fields into the existing file so
+        // that ASP.NET Core fields (AllowedHosts, Logging, Kocr, etc.) are preserved.
+        JsonObject root;
+        if (File.Exists(path))
+        {
+            var existingJson = await File.ReadAllTextAsync(path);
+            root = JsonNode.Parse(existingJson)?.AsObject() ?? new JsonObject();
+        }
+        else
+        {
+            root = new JsonObject();
+        }
+
+        var settingsJson = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+        var updates = JsonNode.Parse(settingsJson)!.AsObject();
+
+        foreach (var kvp in updates)
+        {
+            root[kvp.Key] = kvp.Value?.DeepClone();
+        }
+
+        await File.WriteAllTextAsync(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
     private string GetDevelopmentOverridePath()

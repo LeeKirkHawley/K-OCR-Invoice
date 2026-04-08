@@ -35,6 +35,7 @@ jobs:
           with open('./KOCRAsp/appsettings.json') as f:
               base = json.load(f)
 
+          email = base.get("Email", {})
           prod = {
             "AllowDuplicateEmails": True,
             "Logging": {
@@ -55,6 +56,16 @@ jobs:
             "OCRProvider":                    base.get("OCRProvider", "Azure"),
             "MaxConcurrentRequests":          base.get("MaxConcurrentRequests", 3),
             "MinConfidenceThreshold":         base.get("MinConfidenceThreshold", 0.8),
+            "Email": {
+              "SmtpHost":                  email.get("SmtpHost"),
+              "Port":                      email.get("Port", 587),
+              "EnableSsl":                 email.get("EnableSsl", True),
+              "SkipCertificateValidation": email.get("SkipCertificateValidation", True),
+              "Username":                  email.get("Username"),
+              "Password":                  email.get("Password"),
+              "FromAddress":               email.get("FromAddress"),
+              "FromName":                  email.get("FromName", "K-OCR")
+            },
             "Database": {
               "IdentityConnectionString": "Data Source=KOCRBase/kocr.db",
               "UseWalMode": False,
