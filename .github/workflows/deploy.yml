@@ -122,11 +122,13 @@ jobs:
           echo "app_offline.htm uploaded, waiting for app to shut down..."
           sleep 30
 
-      # Explicitly delete DLLs that IIS/ANCM may have locked in a crash-restart loop.
+      # Explicitly delete DLLs that IIS/ANCM may have locked in a crash-restart loop,
+      # and remove the FTP sync-state file so the deploy action re-evaluates all hashes
+      # (prevents stale sync state from skipping a file after concurrent workflow runs).
       # curl DELE returns non-zero if file doesn't exist; || true prevents workflow failure.
       - name: Delete locked DLLs
         run: |
-          for f in KOCRAsp.exe KOCRAsp.dll K-OCRLib.dll KOCRAsp.pdb K-OCRLib.pdb; do
+          for f in KOCRAsp.exe KOCRAsp.dll K-OCRLib.dll KOCRAsp.pdb K-OCRLib.pdb .ftp-deploy-sync-state.json; do
             curl -s ftp://209.58.148.243/ \
               --user "kirkhawley:${{ secrets.FTP_PASSWORD }}" \
               -Q "DELE /kirkhawley.org/$f" || true
