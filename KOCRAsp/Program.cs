@@ -88,9 +88,8 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 
 // ── Data Protection ───────────────────────────────────────────────────────────
-// Persist keys to a local folder so anti-forgery tokens survive app restarts.
-// %LOCALAPPDATA% is not accessible on shared hosting; use a subfolder instead.
-var keysFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DataProtection-Keys");
+// Persist keys to the project root so they survive app restarts and TFM changes.
+var keysFolder = Path.Combine(builder.Environment.ContentRootPath, "DataProtection-Keys");
 Directory.CreateDirectory(keysFolder);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(keysFolder))

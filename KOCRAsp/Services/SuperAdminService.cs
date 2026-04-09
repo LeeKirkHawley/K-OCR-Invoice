@@ -286,7 +286,7 @@ public class SuperAdminService : ISuperAdminService
         if (organization.IsActive)
             throw new InvalidOperationException("Organization must be revoked before it can be deleted.");
 
-        foreach (var user in organization.Users)
+        foreach (var user in organization.Users.ToList())
             await _userManager.DeleteAsync(user);
 
         _dbContext.Organizations.Remove(organization);
