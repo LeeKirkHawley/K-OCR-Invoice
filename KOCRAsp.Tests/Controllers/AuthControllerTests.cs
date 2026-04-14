@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 using KOCRAsp.Controllers;
 using KOCRAsp.Identity;
 using KOCRAsp.Models;
@@ -19,6 +20,8 @@ public class AuthControllerTests
     private readonly Mock<UserManager<ApplicationUser>> _mockUserManager;
     private readonly Mock<SignInManager<ApplicationUser>> _mockSignInManager;
     private readonly Mock<IAuthService> _mockAuthSvc;
+    private readonly Mock<IEmailService> _mockEmailSvc;
+    private readonly Mock<ISuperAdminService> _mockSuperAdminSvc;
     private readonly Mock<ILogger<AuthController>> _mockLogger;
     private readonly AuthController _controller;
 
@@ -35,12 +38,16 @@ public class AuthControllerTests
             null, null, null, null);
 
         _mockAuthSvc = new Mock<IAuthService>();
+        _mockEmailSvc = new Mock<IEmailService>();
+        _mockSuperAdminSvc = new Mock<ISuperAdminService>();
         _mockLogger = new Mock<ILogger<AuthController>>();
 
         _controller = new AuthController(
             _mockSignInManager.Object,
             _mockUserManager.Object,
             _mockAuthSvc.Object,
+            _mockEmailSvc.Object,
+            _mockSuperAdminSvc.Object,
             _mockLogger.Object);
 
         _controller.ControllerContext = ControllerTestHelper.CreateControllerContext();
@@ -105,5 +112,34 @@ public class AuthControllerTests
         _mockSignInManager.Verify(s => s.SignOutAsync(), Times.Once);
         var redirect = Assert.IsType<RedirectToActionResult>(result);
         Assert.Equal(nameof(AuthController.Login), redirect.ActionName);
+    }
+
+    [Theory]
+    [InlineData("user@test.com")]
+    [InlineData("Guest1")]
+    [InlineData("guest27")]
+    public void LoginViewModel_AllowsEmailOrGuestUserName(string identifier)
+    {
+        var model = new LoginViewModel { Email = identifier, Password = "Pass123!" };
+
+        var validationResults = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(model, new ValidationContext(model), validationResults, validateAllProperties: true);
+
+        Assert.True(isValid);
+    }
+
+    [Theory]
+    [InlineData("Guest")]
+    [InlineData("GuestABC")]
+    [InlineData("not-an-email")]
+    public void LoginViewModel_RejectsNonGuestNonEmailIdentifiers(string identifier)
+    {
+        var model = new LoginViewModel { Email = identifier, Password = "Pass123!" };
+
+        var validationResults = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(model, new ValidationContext(model), validationResults, validateAllProperties: true);
+
+        Assert.False(isValid);
+        Assert.Contains(validationResults, result => result.MemberNames.Contains(nameof(LoginViewModel.Email)));
     }
 }

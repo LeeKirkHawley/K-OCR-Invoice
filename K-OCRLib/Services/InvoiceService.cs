@@ -241,16 +241,31 @@ namespace K_OCR.Services
             string endpoint = "https://parsedocimage.cognitiveservices.azure.com/";
             string key = "8DfAO78fFo48z5mMerbuJ6dLGvUFLS7CcF9qUvsrCVfWPGGno5O6JQQJ99CAACrJL3JXJ3w3AAALACOGJQx4";
 
-            var client = new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(key));
+            var clientOptions = new DocumentIntelligenceClientOptions
+            {
+                Retry =
+                {
+                    MaxRetries     = 1,
+                    NetworkTimeout = TimeSpan.FromSeconds(90)
+                }
+            };
+            var client = new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(key), clientOptions);
 
             using var stream = File.OpenRead(imagePath);
             var options = new AnalyzeDocumentOptions("prebuilt-invoice", BinaryData.FromStream(stream));
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
 
             Azure.Operation<AnalyzeResult>? operation = null;
             try
             {
                 _logger.LogInformation("[Azure OCR] Sending file: {FileName}.", Path.GetFileName(imagePath));
-                operation = await client.AnalyzeDocumentAsync(WaitUntil.Completed, options);
+                operation = await client.AnalyzeDocumentAsync(WaitUntil.Completed, options, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogError("[Azure OCR] Timed out analysing document {FileName} after 3 minutes.", Path.GetFileName(imagePath));
+                return new List<InvoiceDto>();
             }
             catch (Exception ex)
             {

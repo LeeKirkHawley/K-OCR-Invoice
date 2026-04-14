@@ -303,6 +303,132 @@ public class SuperAdminService : ISuperAdminService
             Directory.Delete(orgPath, recursive: true);
     }
 
+    private static readonly SemaphoreSlim _guestLock = new(1, 1);
+
+    private string GuestNoFilePath =>
+        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CurrentGuestNo.txt");
+
+    public async Task<int> PeekNextGuestNumberAsync()
+    {
+        await _guestLock.WaitAsync();
+        try
+        {
+            return ReadGuestNo() + 1;
+        }
+        finally
+        {
+            _guestLock.Release();
+        }
+    }
+
+    public async Task<GuestLoginResult> CreateGuestAsync(string email)
+    {
+        await EnsureRolesAsync();
+
+        await _guestLock.WaitAsync();
+        int guestNo;
+        try
+        {
+            guestNo = ReadGuestNo() + 1;
+            await File.WriteAllTextAsync(GuestNoFilePath, guestNo.ToString());
+        }
+        finally
+        {
+            _guestLock.Release();
+        }
+
+        var userName = $"Guest{guestNo}";
+        var orgName  = $"Guest{guestNo}Organization";
+
+        var organization = new Organization
+        {
+            Name        = orgName,
+            Description = $"Guest organization for {userName}",
+            IsActive    = true
+        };
+
+        await _dbContext.Organizations.AddAsync(organization);
+        await _dbContext.SaveChangesAsync();
+
+        var password = GenerateTemporaryPassword();
+        var user = new ApplicationUser
+        {
+            UserName             = userName,
+            Email                = email,
+            FullName             = userName,
+            EmailConfirmed       = true,
+            OrganizationId       = organization.Id,
+            IsOrganizationAdmin  = true,
+            LockoutEnabled       = false
+        };
+
+        var result = await _userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+        {
+            _dbContext.Organizations.Remove(organization);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException(
+                $"Unable to create guest user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+        }
+
+        await _userManager.AddToRoleAsync(user, RoleNames.OrganizationAdmin);
+
+        var orgPath = _pathService.GetOrgFolderPath(organization.Name);
+        try
+        {
+            Directory.CreateDirectory(orgPath);
+        }
+        catch (Exception ex)
+        {
+            await _userManager.DeleteAsync(user);
+            _dbContext.Organizations.Remove(organization);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException($"Could not create org folder: {ex.Message}");
+        }
+
+        try
+        {
+            await _orgConfigSvc.SaveAsync(organization.Name, new K_OCR.Configuration.OrgConfig());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write OrgConfig.json for guest org {OrgName}", orgName);
+        }
+
+        var orgDbPath = _pathService.GetOrgDbPath(organization.Name);
+        try
+        {
+            var dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
+                .UseSqlite($"Data Source={orgDbPath}")
+                .Options;
+            await using var orgDb = new KOCRDbContext(dbOptions);
+            await orgDb.Database.MigrateAsync();
+        }
+        catch (Exception ex)
+        {
+            if (Directory.Exists(orgPath)) Directory.Delete(orgPath, recursive: true);
+            await _userManager.DeleteAsync(user);
+            _dbContext.Organizations.Remove(organization);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException($"Could not migrate guest org database: {ex.Message}");
+        }
+
+        return new GuestLoginResult
+        {
+            UserName = userName,
+            OrgName  = orgName,
+            UserId   = user.Id,
+            Password = password
+        };
+    }
+
+    private int ReadGuestNo()
+    {
+        if (!File.Exists(GuestNoFilePath)) return 0;
+        var text = File.ReadAllText(GuestNoFilePath).Trim();
+        return int.TryParse(text, out var n) ? n : 0;
+    }
+
     private string BuildBaseUrl()
     {
         var ctx = _httpContextAccessor.HttpContext;

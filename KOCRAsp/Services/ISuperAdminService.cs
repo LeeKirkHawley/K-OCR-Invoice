@@ -9,4 +9,6 @@ public interface ISuperAdminService
     Task RevokeOrganizationAsync(string organizationId);
     Task ReEnableOrganizationAsync(string organizationId);
     Task DeleteOrganizationAsync(string organizationId);
+    Task<int> PeekNextGuestNumberAsync();
+    Task<GuestLoginResult> CreateGuestAsync(string email);
 }
