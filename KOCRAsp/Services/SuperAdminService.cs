@@ -303,6 +303,184 @@ public class SuperAdminService : ISuperAdminService
             Directory.Delete(orgPath, recursive: true);
     }
 
+    public async Task<int> CleanupExpiredGuestAccountsAsync(TimeSpan retention, CancellationToken cancellationToken = default)
+    {
+        if (retention <= TimeSpan.Zero)
+            return 0;
+
+        // Phase 2: Delete orgs already marked as pending from a previous cycle.
+        // This runs first so we don't immediately delete what we just marked.
+        // Orgs are already revoked from Phase 1, but guard with IsActive in case of
+        // an unexpected state (e.g. app crashed between mark and revoke).
+        var pendingOrgs = await _dbContext.Organizations
+            .AsNoTracking()
+            .Where(o => o.IsGuestOrganization && o.IsPendingDeletion)
+            .Select(o => new { o.Id, o.IsActive })
+            .ToArrayAsync(cancellationToken);
+
+        var deletedCount = 0;
+        foreach (var org in pendingOrgs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (org.IsActive)
+                await RevokeOrganizationAsync(org.Id);
+            await DeleteOrganizationAsync(org.Id);
+            deletedCount++;
+        }
+
+        // Phase 1: Mark newly-expired orgs as pending and immediately revoke them
+        // (locks user accounts) so users cannot log back in after dismissing the dialog.
+        var cutoff = DateTime.UtcNow - retention;
+        var newlyExpired = await _dbContext.Organizations
+            .Where(o => o.IsGuestOrganization && !o.IsPendingDeletion && o.CreatedAtUtc <= cutoff)
+            .ToListAsync(cancellationToken);
+
+        foreach (var org in newlyExpired)
+        {
+            org.IsPendingDeletion = true;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await RevokeOrganizationAsync(org.Id);
+        }
+
+        return deletedCount;
+    }
+
+    public async Task<bool> IsGuestOrgPendingDeletionAsync(string organizationId, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Organizations
+            .AsNoTracking()
+            .Where(o => o.Id == organizationId && o.IsGuestOrganization)
+            .Select(o => o.IsPendingDeletion)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private static readonly SemaphoreSlim _guestLock = new(1, 1);
+
+    private string GuestNoFilePath =>
+        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "CurrentGuestNo.txt");
+
+    public async Task<int> PeekNextGuestNumberAsync()
+    {
+        await _guestLock.WaitAsync();
+        try
+        {
+            return ReadGuestNo() + 1;
+        }
+        finally
+        {
+            _guestLock.Release();
+        }
+    }
+
+    public async Task<GuestLoginResult> CreateGuestAsync(string email)
+    {
+        await EnsureRolesAsync();
+
+        await _guestLock.WaitAsync();
+        int guestNo;
+        try
+        {
+            guestNo = ReadGuestNo() + 1;
+            await File.WriteAllTextAsync(GuestNoFilePath, guestNo.ToString());
+        }
+        finally
+        {
+            _guestLock.Release();
+        }
+
+        var userName = $"Guest{guestNo}";
+        var orgName  = $"Guest{guestNo}Organization";
+
+        var organization = new Organization
+        {
+            Name               = orgName,
+            Description        = $"Guest organization for {userName}",
+            IsActive           = true,
+            IsGuestOrganization = true
+        };
+
+        await _dbContext.Organizations.AddAsync(organization);
+        await _dbContext.SaveChangesAsync();
+
+        var password = GenerateTemporaryPassword();
+        var user = new ApplicationUser
+        {
+            UserName             = userName,
+            Email                = email,
+            FullName             = userName,
+            EmailConfirmed       = true,
+            OrganizationId       = organization.Id,
+            IsOrganizationAdmin  = true,
+            LockoutEnabled       = false
+        };
+
+        var result = await _userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+        {
+            _dbContext.Organizations.Remove(organization);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException(
+                $"Unable to create guest user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+        }
+
+        await _userManager.AddToRoleAsync(user, RoleNames.OrganizationAdmin);
+
+        var orgPath = _pathService.GetOrgFolderPath(organization.Name);
+        try
+        {
+            Directory.CreateDirectory(orgPath);
+        }
+        catch (Exception ex)
+        {
+            await _userManager.DeleteAsync(user);
+            _dbContext.Organizations.Remove(organization);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException($"Could not create org folder: {ex.Message}");
+        }
+
+        try
+        {
+            await _orgConfigSvc.SaveAsync(organization.Name, new K_OCR.Configuration.OrgConfig());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write OrgConfig.json for guest org {OrgName}", orgName);
+        }
+
+        var orgDbPath = _pathService.GetOrgDbPath(organization.Name);
+        try
+        {
+            var dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
+                .UseSqlite($"Data Source={orgDbPath}")
+                .Options;
+            await using var orgDb = new KOCRDbContext(dbOptions);
+            await orgDb.Database.MigrateAsync();
+        }
+        catch (Exception ex)
+        {
+            if (Directory.Exists(orgPath)) Directory.Delete(orgPath, recursive: true);
+            await _userManager.DeleteAsync(user);
+            _dbContext.Organizations.Remove(organization);
+            await _dbContext.SaveChangesAsync();
+            throw new InvalidOperationException($"Could not migrate guest org database: {ex.Message}");
+        }
+
+        return new GuestLoginResult
+        {
+            UserName = userName,
+            OrgName  = orgName,
+            UserId   = user.Id,
+            Password = password
+        };
+    }
+
+    private int ReadGuestNo()
+    {
+        if (!File.Exists(GuestNoFilePath)) return 0;
+        var text = File.ReadAllText(GuestNoFilePath).Trim();
+        return int.TryParse(text, out var n) ? n : 0;
+    }
+
     private string BuildBaseUrl()
     {
         var ctx = _httpContextAccessor.HttpContext;

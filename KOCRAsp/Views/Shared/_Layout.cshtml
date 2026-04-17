@@ -167,5 +167,73 @@
     </script>
 
     @await RenderSectionAsync("Scripts", required: false)
+
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <!-- Guest account expiry modal - non-dismissable, shown when IsPendingDeletion is true -->
+        <div class="modal fade" id="guestExpiryModal" tabindex="-1"
+             data-bs-backdrop="static" data-bs-keyboard="false"
+             aria-labelledby="guestExpiryModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title" id="guestExpiryModalLabel">⏰ Guest Account Expired</h5>
+                    </div>
+                    <div class="modal-body pt-2">
+                        Your guest account lifetime has expired and will now be deleted.
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="button" class="btn btn-primary">OK</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <form id="guestExpiryLogoutForm" method="post" action="/auth/logout" style="display:none">
+            @Html.AntiForgeryToken()
+        </form>
+        <script>
+            (function () {
+                let pollTimer = null;
+                let autoLogoutTimer = null;
+
+                function triggerLogout() {
+                    document.getElementById('guestExpiryLogoutForm').submit();
+                }
+
+                function showExpiryModal() {
+                    clearInterval(pollTimer);
+
+                    bootstrap.Modal.getOrCreateInstance(
+                        document.getElementById('guestExpiryModal')
+                    ).show();
+
+                    // Auto-logout after 30 seconds if the user does not click OK.
+                    autoLogoutTimer = setTimeout(triggerLogout, 30000);
+                }
+
+                async function checkGuestExpiry() {
+                    try {
+                        const resp = await fetch('/auth/guestexpirystatus');
+                        if (!resp.ok) return;
+                        const data = await resp.json();
+                        if (data.isPendingDeletion) {
+                            showExpiryModal();
+                        }
+                    } catch (e) { /* ignore transient network errors */ }
+                }
+
+                document.getElementById('guestExpiryModal')
+                    .querySelector('.btn-primary')
+                    .addEventListener('click', function () {
+                        clearTimeout(autoLogoutTimer);
+                        triggerLogout();
+                    });
+
+                // Poll every 30 seconds; also check shortly after page load.
+                pollTimer = setInterval(checkGuestExpiry, 30000);
+                setTimeout(checkGuestExpiry, 3000);
+            })();
+        </script>
+    }
 </body>
 </html>

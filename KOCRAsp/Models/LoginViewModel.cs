@@ -1,11 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using KOCRAsp.Models.Validation;
 
 namespace KOCRAsp.Models;
 
 public class LoginViewModel
 {
     [Required]
-    [EmailAddress]
+    [EmailOrGuestUserName]
     public string Email { get; set; } = string.Empty;
 
     [Required]

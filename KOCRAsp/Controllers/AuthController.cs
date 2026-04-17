@@ -12,6 +12,7 @@ public class AuthController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IAuthService _authSvc;
     private readonly IEmailService _emailSvc;
+    private readonly ISuperAdminService _superAdminSvc;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -19,13 +20,27 @@ public class AuthController : Controller
         UserManager<ApplicationUser> userManager,
         IAuthService authSvc,
         IEmailService emailSvc,
+        ISuperAdminService superAdminSvc,
         ILogger<AuthController> logger)
     {
         _signInManager = signInManager;
         _userManager = userManager;
         _authSvc = authSvc;
         _emailSvc = emailSvc;
+        _superAdminSvc = superAdminSvc;
         _logger = logger;
+    }
+
+    [HttpGet]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public async Task<IActionResult> GuestExpiryStatus()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user?.OrganizationId == null)
+            return Json(new { isPendingDeletion = false });
+
+        var isPending = await _superAdminSvc.IsGuestOrgPendingDeletionAsync(user.OrganizationId);
+        return Json(new { isPendingDeletion = isPending });
     }
 
     [HttpGet]
@@ -156,4 +171,38 @@ public class AuthController : Controller
             return View(model);
         }
     }
+
+    [HttpGet]
+    public async Task<IActionResult> NextGuestNo()
+    {
+        var next = await _superAdminSvc.PeekNextGuestNumberAsync();
+        return Json(new { nextNo = next });
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> GuestLogin([FromBody] GuestLoginRequest request)
+    {
+        try
+        {
+            var guest = await _superAdminSvc.CreateGuestAsync(request.Email);
+            var user = await _userManager.FindByIdAsync(guest.UserId);
+            if (user is null)
+                return Json(new { success = false, error = "Guest user not found after creation." });
+
+            await _signInManager.SignInAsync(user, isPersistent: false);
+            _logger.LogInformation("Guest {UserName} created and signed in.", guest.UserName);
+            return Json(new { success = true, userName = guest.UserName, password = guest.Password });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GuestLogin failed for {Email}", request.Email);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+}
+
+public sealed class GuestLoginRequest
+{
+    public string Email { get; set; } = string.Empty;
 }
