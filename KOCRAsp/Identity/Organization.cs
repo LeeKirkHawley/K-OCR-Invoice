@@ -15,7 +15,7 @@ public class Organization
 
     public bool IsGuestOrganization { get; set; }
 
-    public bool IsPendingDeletion { get; set; }
+    public DateTime? MarkedForDeletionAtUtc { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 

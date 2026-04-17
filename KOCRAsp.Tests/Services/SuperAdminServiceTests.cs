@@ -15,7 +15,7 @@ namespace KOCRAsp.Tests.Services;
 public class SuperAdminServiceTests
 {
     [Fact]
-    public async Task CleanupExpiredGuestAccountsAsync_DeletesOnlyGuestOrganizations()
+    public async Task CleanupExpiredGuestAccountsAsync_MarksOnlyGuestOrganizationsForDeletion()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -84,23 +84,29 @@ public class SuperAdminServiceTests
                 Mock.Of<IOrgConfigService>(),
                 Mock.Of<ILogger<SuperAdminService>>());
 
-            // Cycle 1: expired org gets marked as pending, nothing deleted yet.
-            var firstCycleCount = await service.CleanupExpiredGuestAccountsAsync(TimeSpan.FromMinutes(30));
+            // Phase 1: expired guest org gets marked for deletion; regular org is untouched.
+            var markedCount = await service.CleanupExpiredGuestAccountsAsync(TimeSpan.FromMinutes(30));
 
             await using var midContext = new ApplicationDbContext(options);
-            Assert.Equal(0, firstCycleCount);
+            Assert.Equal(1, markedCount);
             Assert.True(await midContext.Organizations.AnyAsync(o => o.Id == guestOrg.Id));
-            Assert.True(await midContext.Organizations
+            Assert.NotNull(await midContext.Organizations
                 .Where(o => o.Id == guestOrg.Id)
-                .Select(o => o.IsPendingDeletion)
+                .Select(o => o.MarkedForDeletionAtUtc)
                 .FirstAsync());
+            Assert.True(await midContext.Organizations.AnyAsync(o => o.Id == regularOrg.Id));
 
-            // Cycle 2: pending org is deleted; regular org is untouched throughout.
-            var secondCycleCount = await service.CleanupExpiredGuestAccountsAsync(TimeSpan.FromMinutes(30));
+            // Backdate the mark so the sweep considers it expired.
+            var toExpire = await midContext.Organizations.FirstAsync(o => o.Id == guestOrg.Id);
+            toExpire.MarkedForDeletionAtUtc = DateTime.UtcNow.AddHours(-2);
+            await midContext.SaveChangesAsync();
+
+            // Phase 2: sweep hard-deletes the expired marked org; regular org survives.
+            var deletedCount = await service.CleanupExpiredSoftDeletesAsync(TimeSpan.FromMinutes(30));
 
             await using var verifyContext = new ApplicationDbContext(options);
 
-            Assert.Equal(1, secondCycleCount);
+            Assert.Equal(1, deletedCount);
             Assert.False(await verifyContext.Organizations.AnyAsync(org => org.Id == guestOrg.Id));
             Assert.True(await verifyContext.Organizations.AnyAsync(org => org.Id == regularOrg.Id));
             Assert.False(Directory.Exists(guestFolder));

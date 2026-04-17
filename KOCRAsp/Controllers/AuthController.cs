@@ -39,7 +39,7 @@ public class AuthController : Controller
         if (user?.OrganizationId == null)
             return Json(new { isPendingDeletion = false });
 
-        var isPending = await _superAdminSvc.IsGuestOrgPendingDeletionAsync(user.OrganizationId);
+        var isPending = await _superAdminSvc.IsOrgMarkedForDeletionAsync(user.OrganizationId);
         return Json(new { isPendingDeletion = isPending });
     }
 

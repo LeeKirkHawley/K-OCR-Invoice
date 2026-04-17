@@ -332,6 +332,7 @@ public class BatchService : IBatchService, IAsyncDisposable
                     Directory.CreateDirectory(invoicesFolder);
 
                     var uploaded = 0;
+                    var uploadedFiles = new List<(string ClientFileName, string ClientPath, string ServerFileName, string ServerPath)>();
                     foreach (var file in files)
                     {
                         var destPath = Path.Combine(invoicesFolder, file.FileName);
@@ -344,11 +345,29 @@ public class BatchService : IBatchService, IAsyncDisposable
                             FilePath      = destPath,
                             UploadedAtUtc = DateTime.UtcNow,
                         });
+                        uploadedFiles.Add((
+                            file.FileName,
+                            file.ClientPath,
+                            Path.GetFileName(destPath),
+                            destPath));
                         uploaded++;
                     }
 
                     await Db.SaveChangesAsync();
                     await tx.CommitAsync();
+
+                    foreach (var uploadedFile in uploadedFiles)
+                    {
+                        _logger.LogInformation(
+                            "Invoice uploaded: BatchId={BatchId}, UserId={UserId}, ClientFileName={ClientFileName}, ClientPath={ClientPath}, ServerFileName={ServerFileName}, ServerPath={ServerPath}.",
+                            batchId,
+                            userId,
+                            uploadedFile.ClientFileName,
+                            uploadedFile.ClientPath,
+                            uploadedFile.ServerFileName,
+                            uploadedFile.ServerPath);
+                    }
+
                     return UploadResult.Ok(uploaded);
                 }
                 catch (Exception ex)

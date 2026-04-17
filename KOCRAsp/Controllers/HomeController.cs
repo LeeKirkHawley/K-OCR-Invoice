@@ -89,7 +89,7 @@ public class HomeController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UploadFiles(List<IFormFile> files)
+    public async Task<IActionResult> UploadFiles(List<IFormFile> files, List<string>? clientPaths)
     {
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { success = false, error = "Super-admin does not have org batch access." });
@@ -100,7 +100,12 @@ public class HomeController : Controller
             return Json(new { success = false, error = "No batch selected." });
 
         var uploads = files
-            .Select(f => new FileUpload(f.FileName, f.OpenReadStream()))
+            .Select((f, index) =>
+            {
+                var clientPath = clientPaths?.ElementAtOrDefault(index);
+                clientPath = string.IsNullOrWhiteSpace(clientPath) ? f.FileName : clientPath;
+                return new FileUpload(f.FileName, clientPath, f.OpenReadStream());
+            })
             .ToList();
 
         var result = await _batchSvc.UploadFilesToBatchAsync(batchId, uploads, userId);

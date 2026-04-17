@@ -116,6 +116,14 @@ public class OrganizationAdminService : IOrganizationAdminService
             _logger.LogWarning(ex, "Could not send invite email to {Email}; returning setup link instead.", user.Email);
         }
 
+        _logger.LogInformation(
+            "User created: UserId={UserId}, Email={Email}, FullName={FullName}, OrganizationId={OrgId}, Role={Role}.",
+            user.Id,
+            user.Email,
+            user.FullName,
+            organizationId,
+            roleName);
+
         return new InviteUserResult
         {
             UserId          = user.Id,
@@ -138,6 +146,14 @@ public class OrganizationAdminService : IOrganizationAdminService
         if (!deleteResult.Succeeded)
             throw new InvalidOperationException(
                 $"Unable to delete user: {string.Join("; ", deleteResult.Errors.Select(e => e.Description))}");
+
+        _logger.LogInformation(
+            "User deleted: UserId={UserId}, Email={Email}, FullName={FullName}, OrganizationId={OrgId}, Reason={Reason}.",
+            user.Id,
+            user.Email,
+            user.FullName,
+            user.OrganizationId,
+            "organization admin removal");
     }
 
     private string BuildSetupLink(string userId, string encodedToken)

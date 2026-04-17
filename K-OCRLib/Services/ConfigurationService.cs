@@ -25,7 +25,7 @@ public class ConfigurationService : IConfigurationService
             AzureCognitiveServicesEndpoint = "https://parsedocimage.cognitiveservices.azure.com/",
             OCRProvider = "Azure",
             MaxConcurrentRequests = 3,
-            GuestAccountRetentionMinutes = 60
+            GuestAccountRetentionDays = 7
         };
     }
 

@@ -86,7 +86,7 @@ namespace K_OCR.Services
                 }
 
                 await Context.SaveChangesAsync();
-                _logger.LogInformation($"Invoice saved with ID: {invoice.Id}");
+                _logger.LogInformation($"Invoice {invoice.FilePath} saved to database with ID: {invoice.Id}");
                 return invoice;
             }
             catch (Exception ex)

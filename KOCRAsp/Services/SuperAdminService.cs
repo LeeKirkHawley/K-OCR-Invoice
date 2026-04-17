@@ -57,6 +57,8 @@ public class SuperAdminService : ISuperAdminService
                 Name = org.Name,
                 Description = org.Description,
                 IsActive = org.IsActive,
+                IsGuestOrganization = org.IsGuestOrganization,
+                MarkedForDeletionAtUtc = org.MarkedForDeletionAtUtc,
                 CreatedAtUtc = org.CreatedAtUtc,
                 UserCount = org.Users.Count
             })
@@ -177,7 +179,7 @@ public class SuperAdminService : ISuperAdminService
             _logger.LogError(ex, "Failed to create org folder {OrgPath} for organization {OrgId}.", orgPath, organization.Id);
             // Roll back: delete user and org
             if (!reusingExistingUser)
-                await _userManager.DeleteAsync(user);
+                await DeleteUserAndLogAsync(user, $"rollback after failed org folder creation for organization {organization.Id}");
             _dbContext.Organizations.Remove(organization);
             await _dbContext.SaveChangesAsync();
             throw new InvalidOperationException(
@@ -213,11 +215,30 @@ public class SuperAdminService : ISuperAdminService
             if (Directory.Exists(orgPath))
                 Directory.Delete(orgPath, recursive: true);
             if (!reusingExistingUser)
-                await _userManager.DeleteAsync(user);
+                await DeleteUserAndLogAsync(user, $"rollback after failed organization database migration for organization {organization.Id}");
             _dbContext.Organizations.Remove(organization);
             await _dbContext.SaveChangesAsync();
             throw new InvalidOperationException(
                 $"Organization folder was created but the database could not be migrated at \"{orgDbPath}\": {ex.Message}");
+        }
+
+        _logger.LogInformation(
+            "Organization created: OrgId={OrgId}, OrgName={OrgName}, IsGuestOrganization={IsGuestOrganization}, AdminUserId={AdminUserId}, AdminEmail={AdminEmail}.",
+            organization.Id,
+            organization.Name,
+            organization.IsGuestOrganization,
+            user.Id,
+            user.Email);
+
+        if (!reusingExistingUser)
+        {
+            _logger.LogInformation(
+                "User created: UserId={UserId}, Email={Email}, FullName={FullName}, OrganizationId={OrgId}, Role={Role}.",
+                user.Id,
+                user.Email,
+                user.FullName,
+                organization.Id,
+                RoleNames.OrganizationAdmin);
         }
 
         return new CreateOrganizationResult
@@ -287,7 +308,7 @@ public class SuperAdminService : ISuperAdminService
             throw new InvalidOperationException("Organization must be revoked before it can be deleted.");
 
         foreach (var user in organization.Users.ToList())
-            await _userManager.DeleteAsync(user);
+            await DeleteUserAndLogAsync(user, $"organization deletion ({organization.Id})");
 
         _dbContext.Organizations.Remove(organization);
         await _dbContext.SaveChangesAsync();
@@ -301,6 +322,85 @@ public class SuperAdminService : ISuperAdminService
         var orgPath = _pathService.GetOrgFolderPath(organization.Name);
         if (Directory.Exists(orgPath))
             Directory.Delete(orgPath, recursive: true);
+
+        _logger.LogInformation(
+            "Organization deleted: OrgId={OrgId}, OrgName={OrgName}, IsGuestOrganization={IsGuestOrganization}.",
+            organization.Id,
+            organization.Name,
+            organization.IsGuestOrganization);
+    }
+
+    public async Task MarkOrganizationForDeletionAsync(string organizationId)
+    {
+        var organization = await _dbContext.Organizations
+            .FirstOrDefaultAsync(o => o.Id == organizationId);
+
+        if (organization is null)
+            throw new KeyNotFoundException("Organization not found.");
+
+        if (organization.IsActive)
+            throw new InvalidOperationException("Organization must be revoked before it can be marked for deletion.");
+
+        organization.MarkedForDeletionAtUtc = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Organization marked for deletion: OrgId={OrgId}, OrgName={OrgName}, MarkedForDeletionAtUtc={MarkedForDeletionAtUtc}, IsGuestOrganization={IsGuestOrganization}.",
+            organization.Id,
+            organization.Name,
+            organization.MarkedForDeletionAtUtc,
+            organization.IsGuestOrganization);
+
+        // Ensure users are fully locked (revoke may have been called already, but be defensive).
+        var org = await _dbContext.Organizations
+            .Include(o => o.Users)
+            .FirstAsync(o => o.Id == organizationId);
+        foreach (var user in org.Users)
+        {
+            await _userManager.SetLockoutEnabledAsync(user, true);
+            await _userManager.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
+            await _userManager.UpdateSecurityStampAsync(user);
+        }
+    }
+
+    public async Task ReinstateMarkedOrganizationAsync(string organizationId)
+    {
+        var organization = await _dbContext.Organizations
+            .FirstOrDefaultAsync(o => o.Id == organizationId);
+
+        if (organization is null)
+            throw new KeyNotFoundException("Organization not found.");
+
+        if (organization.MarkedForDeletionAtUtc is null)
+            throw new InvalidOperationException("Organization is not marked for deletion.");
+
+        organization.MarkedForDeletionAtUtc = null;
+        await _dbContext.SaveChangesAsync();
+
+        await ReEnableOrganizationAsync(organizationId);
+    }
+
+    public async Task<int> CleanupExpiredSoftDeletesAsync(TimeSpan retention, CancellationToken cancellationToken = default)
+    {
+        if (retention <= TimeSpan.Zero)
+            return 0;
+
+        var cutoff = DateTime.UtcNow - retention;
+        var expired = await _dbContext.Organizations
+            .AsNoTracking()
+            .Where(o => o.MarkedForDeletionAtUtc != null && o.MarkedForDeletionAtUtc <= cutoff)
+            .Select(o => o.Id)
+            .ToArrayAsync(cancellationToken);
+
+        var deletedCount = 0;
+        foreach (var orgId in expired)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await DeleteOrganizationAsync(orgId);
+            deletedCount++;
+        }
+
+        return deletedCount;
     }
 
     public async Task<int> CleanupExpiredGuestAccountsAsync(TimeSpan retention, CancellationToken cancellationToken = default)
@@ -308,49 +408,32 @@ public class SuperAdminService : ISuperAdminService
         if (retention <= TimeSpan.Zero)
             return 0;
 
-        // Phase 2: Delete orgs already marked as pending from a previous cycle.
-        // This runs first so we don't immediately delete what we just marked.
-        // Orgs are already revoked from Phase 1, but guard with IsActive in case of
-        // an unexpected state (e.g. app crashed between mark and revoke).
-        var pendingOrgs = await _dbContext.Organizations
-            .AsNoTracking()
-            .Where(o => o.IsGuestOrganization && o.IsPendingDeletion)
-            .Select(o => new { o.Id, o.IsActive })
-            .ToArrayAsync(cancellationToken);
-
-        var deletedCount = 0;
-        foreach (var org in pendingOrgs)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (org.IsActive)
-                await RevokeOrganizationAsync(org.Id);
-            await DeleteOrganizationAsync(org.Id);
-            deletedCount++;
-        }
-
-        // Phase 1: Mark newly-expired orgs as pending and immediately revoke them
-        // (locks user accounts) so users cannot log back in after dismissing the dialog.
+        // Find guest orgs whose lifetime has expired and are not yet marked for deletion.
         var cutoff = DateTime.UtcNow - retention;
         var newlyExpired = await _dbContext.Organizations
-            .Where(o => o.IsGuestOrganization && !o.IsPendingDeletion && o.CreatedAtUtc <= cutoff)
+            .Where(o => o.IsGuestOrganization
+                     && o.MarkedForDeletionAtUtc == null
+                     && o.CreatedAtUtc <= cutoff)
+            .Select(o => new { o.Id, o.IsActive })
             .ToListAsync(cancellationToken);
 
         foreach (var org in newlyExpired)
         {
-            org.IsPendingDeletion = true;
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            await RevokeOrganizationAsync(org.Id);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (org.IsActive)
+                await RevokeOrganizationAsync(org.Id);
+            await MarkOrganizationForDeletionAsync(org.Id);
         }
 
-        return deletedCount;
+        return newlyExpired.Count;
     }
 
-    public async Task<bool> IsGuestOrgPendingDeletionAsync(string organizationId, CancellationToken cancellationToken = default)
+    public async Task<bool> IsOrgMarkedForDeletionAsync(string organizationId, CancellationToken cancellationToken = default)
     {
         return await _dbContext.Organizations
             .AsNoTracking()
-            .Where(o => o.Id == organizationId && o.IsGuestOrganization)
-            .Select(o => o.IsPendingDeletion)
+            .Where(o => o.Id == organizationId)
+            .Select(o => o.MarkedForDeletionAtUtc != null)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -432,7 +515,7 @@ public class SuperAdminService : ISuperAdminService
         }
         catch (Exception ex)
         {
-            await _userManager.DeleteAsync(user);
+            await DeleteUserAndLogAsync(user, $"rollback after failed guest org folder creation for organization {organization.Id}");
             _dbContext.Organizations.Remove(organization);
             await _dbContext.SaveChangesAsync();
             throw new InvalidOperationException($"Could not create org folder: {ex.Message}");
@@ -459,11 +542,26 @@ public class SuperAdminService : ISuperAdminService
         catch (Exception ex)
         {
             if (Directory.Exists(orgPath)) Directory.Delete(orgPath, recursive: true);
-            await _userManager.DeleteAsync(user);
+            await DeleteUserAndLogAsync(user, $"rollback after failed guest organization database migration for organization {organization.Id}");
             _dbContext.Organizations.Remove(organization);
             await _dbContext.SaveChangesAsync();
             throw new InvalidOperationException($"Could not migrate guest org database: {ex.Message}");
         }
+
+        _logger.LogInformation(
+            "Organization created: OrgId={OrgId}, OrgName={OrgName}, IsGuestOrganization={IsGuestOrganization}, AdminUserId={AdminUserId}, AdminEmail={AdminEmail}.",
+            organization.Id,
+            organization.Name,
+            organization.IsGuestOrganization,
+            user.Id,
+            user.Email);
+        _logger.LogInformation(
+            "User created: UserId={UserId}, Email={Email}, FullName={FullName}, OrganizationId={OrgId}, Role={Role}.",
+            user.Id,
+            user.Email,
+            user.FullName,
+            organization.Id,
+            RoleNames.OrganizationAdmin);
 
         return new GuestLoginResult
         {
@@ -500,5 +598,21 @@ public class SuperAdminService : ISuperAdminService
     {
         var segment = Guid.NewGuid().ToString("N")[..6];
         return $"Kocr!{segment}";
+    }
+
+    private async Task DeleteUserAndLogAsync(ApplicationUser user, string reason)
+    {
+        var result = await _userManager.DeleteAsync(user);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(
+                $"Unable to delete user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+
+        _logger.LogInformation(
+            "User deleted: UserId={UserId}, Email={Email}, FullName={FullName}, OrganizationId={OrgId}, Reason={Reason}.",
+            user.Id,
+            user.Email,
+            user.FullName,
+            user.OrganizationId,
+            reason);
     }
 }

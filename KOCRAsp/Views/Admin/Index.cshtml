@@ -58,19 +58,45 @@
                 {
                     foreach (var org in Model)
                     {
+                        var isPendingDeletion = org.MarkedForDeletionAtUtc.HasValue;
                         <tr id="org-row-@org.OrganizationId">
-                            <td>@org.Name</td>
+                            <td>
+                                @org.Name
+                                @if (org.IsGuestOrganization)
+                                {
+                                    <span class="badge bg-info text-dark ms-1">Guest</span>
+                                }
+                            </td>
                             <td class="text-muted small">@org.Description</td>
                             <td>@org.UserCount</td>
                             <td>@org.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy")</td>
                             <td>
-                                <span id="org-badge-@org.OrganizationId"
-                                      class="badge @(org.IsActive ? "bg-success" : "bg-secondary")">
-                                    @(org.IsActive ? "Active" : "Revoked")
-                                </span>
+                                @if (isPendingDeletion)
+                                {
+                                    <span id="org-badge-@org.OrganizationId" class="badge bg-danger">
+                                        Pending Deletion
+                                    </span>
+                                    <div class="small text-muted">
+                                        deletes @org.MarkedForDeletionAtUtc!.Value.ToLocalTime().ToString("dd MMM yyyy HH:mm")
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span id="org-badge-@org.OrganizationId"
+                                          class="badge @(org.IsActive ? "bg-success" : "bg-secondary")">
+                                        @(org.IsActive ? "Active" : "Revoked")
+                                    </span>
+                                }
                             </td>
                             <td class="text-end" id="org-actions-@org.OrganizationId">
-                                @if (org.IsActive)
+                                @if (isPendingDeletion)
+                                {
+                                    <button class="btn btn-sm btn-outline-success me-1"
+                                            onclick="reinstateOrg('@org.OrganizationId', this)">Reinstate</button>
+                                    <button class="btn btn-sm btn-danger"
+                                            onclick="hardDeleteOrg('@org.OrganizationId', this)">Delete Now</button>
+                                }
+                                else if (org.IsActive)
                                 {
                                     <button class="btn btn-sm btn-outline-warning"
                                             onclick="revokeOrg('@org.OrganizationId', this)">Revoke</button>
@@ -80,7 +106,7 @@
                                     <button class="btn btn-sm btn-outline-success me-1"
                                             onclick="reEnableOrg('@org.OrganizationId', this)">Re-enable</button>
                                     <button class="btn btn-sm btn-outline-danger"
-                                            onclick="deleteOrg('@org.OrganizationId', this)">Delete</button>
+                                            onclick="markForDeletionOrg('@org.OrganizationId', this)">Mark for Deletion</button>
                                 }
                             </td>
                         </tr>
@@ -119,7 +145,7 @@
                     foreach (var b in batches.OrderByDescending(x => x.CreatedAtUtc))
                     {
                         <tr>
-                            <td class="small text-muted">@b.OrganizationId</td>
+                            <td class="small">@b.OrganizationName</td>
                             <td>@b.BatchNumber</td>
                             <td>@b.Name</td>
                             <td>@b.FileCount</td>
@@ -209,7 +235,7 @@
                 document.getElementById('org-badge-' + orgId).textContent = 'Revoked';
                 document.getElementById('org-actions-' + orgId).innerHTML =
                     `<button class="btn btn-sm btn-outline-success me-1" onclick="reEnableOrg('${orgId}', this)">Re-enable</button>` +
-                    `<button class="btn btn-sm btn-outline-danger" onclick="deleteOrg('${orgId}', this)">Delete</button>`;
+                    `<button class="btn btn-sm btn-outline-danger" onclick="markForDeletionOrg('${orgId}', this)">Mark for Deletion</button>`;
                 showToast('Organization revoked.');
             } else {
                 showToast(result.error ?? 'Revoke failed.', 'error');
@@ -242,14 +268,57 @@
         }
     }
 
-    async function deleteOrg(orgId, btn) {
-        if (!confirm('Delete this organization and all its data? This cannot be undone.')) return;
+    async function markForDeletionOrg(orgId, btn) {
+        if (!confirm('Mark this organization for deletion? It will be permanently deleted after the retention period.')) return;
         setButtonLoading(btn, true);
         try {
             const result = await postJson('/admin/deleteorganization', { orgId });
             if (result.success) {
+                document.getElementById('org-badge-' + orgId).outerHTML =
+                    `<span id="org-badge-${orgId}" class="badge bg-danger">Pending Deletion</span>`;
+                document.getElementById('org-actions-' + orgId).innerHTML =
+                    `<button class="btn btn-sm btn-outline-success me-1" onclick="reinstateOrg('${orgId}', this)">Reinstate</button>` +
+                    `<button class="btn btn-sm btn-danger" onclick="hardDeleteOrg('${orgId}', this)">Delete Now</button>`;
+                showToast('Organization marked for deletion.');
+            } else {
+                showToast(result.error ?? 'Mark for deletion failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function reinstateOrg(orgId, btn) {
+        if (!confirm('Reinstate this organization? It will become active again.')) return;
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/reinstateorganization', { orgId });
+            if (result.success) {
+                document.getElementById('org-badge-' + orgId).className = 'badge bg-success';
+                document.getElementById('org-badge-' + orgId).textContent = 'Active';
+                document.getElementById('org-actions-' + orgId).innerHTML =
+                    `<button class="btn btn-sm btn-outline-warning" onclick="revokeOrg('${orgId}', this)">Revoke</button>`;
+                showToast('Organization reinstated.');
+            } else {
+                showToast(result.error ?? 'Reinstate failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function hardDeleteOrg(orgId, btn) {
+        if (!confirm('Permanently delete this organization and ALL its data? This cannot be undone.')) return;
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/harddeleteorganization', { orgId });
+            if (result.success) {
                 document.getElementById('org-row-' + orgId)?.remove();
-                showToast('Organization deleted.');
+                showToast('Organization permanently deleted.');
             } else {
                 showToast(result.error ?? 'Delete failed.', 'error');
                 setButtonLoading(btn, false);

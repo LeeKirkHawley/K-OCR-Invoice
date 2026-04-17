@@ -92,12 +92,44 @@ public class AdminController : Controller
     {
         try
         {
+            await _superAdminSvc.MarkOrganizationForDeletionAsync(request.OrgId);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MarkOrganizationForDeletion failed for {OrgId}", request.OrgId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> ReinstateOrganization([FromBody] OrgIdRequest request)
+    {
+        try
+        {
+            await _superAdminSvc.ReinstateMarkedOrganizationAsync(request.OrgId);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ReinstateOrganization failed for {OrgId}", request.OrgId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> HardDeleteOrganization([FromBody] OrgIdRequest request)
+    {
+        try
+        {
             await _superAdminSvc.DeleteOrganizationAsync(request.OrgId);
             return Json(new { success = true });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "DeleteOrganization failed for {OrgId}", request.OrgId);
+            _logger.LogError(ex, "HardDeleteOrganization failed for {OrgId}", request.OrgId);
             return Json(new { success = false, error = ex.Message });
         }
     }

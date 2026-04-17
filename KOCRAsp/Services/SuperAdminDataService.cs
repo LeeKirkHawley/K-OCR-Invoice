@@ -60,6 +60,7 @@ internal sealed class SuperAdminDataService : ISuperAdminDataService
                     {
                         BatchId           = b.BatchId,
                         OrganizationId    = org.Id,
+                        OrganizationName  = org.Name,
                         Name              = b.Name,
                         BatchNumber       = b.BatchNumber,
                         FolderPath        = b.FolderPath,

@@ -161,7 +161,10 @@
     document.getElementById('uploadInput').addEventListener('change', async function () {
         if (!this.files.length) return;
         const fd = new FormData();
-        for (const f of this.files) fd.append('files', f);
+        for (const f of this.files) {
+            fd.append('files', f);
+            fd.append('clientPaths', f.webkitRelativePath || f.name);
+        }
         try {
             const result = await postForm('/home/uploadfiles', fd);
             if (result.success) {

@@ -4,7 +4,7 @@ namespace KOCRAsp.Services;
 
 public sealed class GuestAccountCleanupService : BackgroundService
 {
-    private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan CleanupInterval = TimeSpan.FromHours(1);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
@@ -31,24 +31,37 @@ public sealed class GuestAccountCleanupService : BackgroundService
 
     public async Task<int> RunCleanupCycleAsync(CancellationToken cancellationToken)
     {
-        var retentionMinutes = _configuration.GetValue<int>("GuestAccountRetentionMinutes");
-        if (retentionMinutes <= 0)
-            return 0;
-
         await using var scope = _scopeFactory.CreateAsyncScope();
         var superAdminService = scope.ServiceProvider.GetRequiredService<ISuperAdminService>();
-        var deletedCount = await superAdminService.CleanupExpiredGuestAccountsAsync(
-            TimeSpan.FromMinutes(retentionMinutes),
-            cancellationToken);
 
-        if (deletedCount > 0)
+        var markedCount = 0;
+        var retentionDays = _configuration.GetValue<int>("GuestAccountRetentionDays");
+        if (retentionDays > 0)
         {
-            _logger.LogInformation(
-                "Deleted {DeletedCount} expired guest account(s) using retention period of {RetentionMinutes} minute(s).",
-                deletedCount,
-                retentionMinutes);
+            markedCount = await superAdminService.CleanupExpiredGuestAccountsAsync(
+                TimeSpan.FromDays(retentionDays),
+                cancellationToken);
+
+            if (markedCount > 0)
+                _logger.LogInformation(
+                    "Marked {Count} expired guest account(s) for deletion (retention: {Days} day(s)).",
+                    markedCount, retentionDays);
         }
 
-        return deletedCount;
+        var hardDeletedCount = 0;
+        var softDeleteRetentionDays = _configuration.GetValue<int>("DeletedOrgRetentionDays");
+        if (softDeleteRetentionDays > 0)
+        {
+            hardDeletedCount = await superAdminService.CleanupExpiredSoftDeletesAsync(
+                TimeSpan.FromDays(softDeleteRetentionDays),
+                cancellationToken);
+
+            if (hardDeletedCount > 0)
+                _logger.LogInformation(
+                    "Hard-deleted {Count} soft-deleted org(s) (retention: {Days} day(s)).",
+                    hardDeletedCount, softDeleteRetentionDays);
+        }
+
+        return markedCount + hardDeletedCount;
     }
 }

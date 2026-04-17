@@ -16,6 +16,7 @@ public class BatchSummary
 
 public class BatchDetail : BatchSummary
 {
+    public string OrganizationName { get; set; } = string.Empty;
     public int FileCount { get; set; }
     public int ValidatedCount { get; set; }
     public bool AllValidated => FileCount > 0 && ValidatedCount == FileCount;
@@ -67,4 +68,4 @@ public class UploadResult
 }
 
 /// <summary>Framework-neutral file upload payload. Replaces IBrowserFile at the service boundary.</summary>
-public sealed record FileUpload(string FileName, Stream Content);
+public sealed record FileUpload(string FileName, string ClientPath, Stream Content);
