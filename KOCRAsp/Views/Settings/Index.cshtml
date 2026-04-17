@@ -60,6 +60,12 @@
                     <input asp-for="MaxConcurrentRequests" type="number"
                            class="form-control" min="1" max="20" />
                 </div>
+                <div class="col-md-4">
+                    <label asp-for="GuestAccountRetentionMinutes" class="form-label">Guest Account Retention (Minutes)</label>
+                    <input asp-for="GuestAccountRetentionMinutes" type="number"
+                           class="form-control" min="0" />
+                    <div class="form-text">Expired guest accounts are revoked and deleted automatically. Set to 0 to disable cleanup.</div>
+                </div>
             </div>
         </div>
     </div>

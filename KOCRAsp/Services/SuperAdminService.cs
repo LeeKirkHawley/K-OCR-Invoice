@@ -303,6 +303,57 @@ public class SuperAdminService : ISuperAdminService
             Directory.Delete(orgPath, recursive: true);
     }
 
+    public async Task<int> CleanupExpiredGuestAccountsAsync(TimeSpan retention, CancellationToken cancellationToken = default)
+    {
+        if (retention <= TimeSpan.Zero)
+            return 0;
+
+        // Phase 2: Delete orgs already marked as pending from a previous cycle.
+        // This runs first so we don't immediately delete what we just marked.
+        // Orgs are already revoked from Phase 1, but guard with IsActive in case of
+        // an unexpected state (e.g. app crashed between mark and revoke).
+        var pendingOrgs = await _dbContext.Organizations
+            .AsNoTracking()
+            .Where(o => o.IsGuestOrganization && o.IsPendingDeletion)
+            .Select(o => new { o.Id, o.IsActive })
+            .ToArrayAsync(cancellationToken);
+
+        var deletedCount = 0;
+        foreach (var org in pendingOrgs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (org.IsActive)
+                await RevokeOrganizationAsync(org.Id);
+            await DeleteOrganizationAsync(org.Id);
+            deletedCount++;
+        }
+
+        // Phase 1: Mark newly-expired orgs as pending and immediately revoke them
+        // (locks user accounts) so users cannot log back in after dismissing the dialog.
+        var cutoff = DateTime.UtcNow - retention;
+        var newlyExpired = await _dbContext.Organizations
+            .Where(o => o.IsGuestOrganization && !o.IsPendingDeletion && o.CreatedAtUtc <= cutoff)
+            .ToListAsync(cancellationToken);
+
+        foreach (var org in newlyExpired)
+        {
+            org.IsPendingDeletion = true;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await RevokeOrganizationAsync(org.Id);
+        }
+
+        return deletedCount;
+    }
+
+    public async Task<bool> IsGuestOrgPendingDeletionAsync(string organizationId, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Organizations
+            .AsNoTracking()
+            .Where(o => o.Id == organizationId && o.IsGuestOrganization)
+            .Select(o => o.IsPendingDeletion)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     private static readonly SemaphoreSlim _guestLock = new(1, 1);
 
     private string GuestNoFilePath =>
@@ -342,9 +393,10 @@ public class SuperAdminService : ISuperAdminService
 
         var organization = new Organization
         {
-            Name        = orgName,
-            Description = $"Guest organization for {userName}",
-            IsActive    = true
+            Name               = orgName,
+            Description        = $"Guest organization for {userName}",
+            IsActive           = true,
+            IsGuestOrganization = true
         };
 
         await _dbContext.Organizations.AddAsync(organization);

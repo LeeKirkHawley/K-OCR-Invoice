@@ -8,6 +8,7 @@ public class AppSettings
     public string? ProjectArtifacts { get; set; }
     public string? DefaultStartFolder { get; set; }
     public int MaxConcurrentRequests { get; set; } = 3;
+    public int GuestAccountRetentionMinutes { get; set; } = 60;
     public double? SplitterLeftPaneWidth { get; set; }
     public double? SplitterCenterPaneWidth { get; set; }
     public double? SplitterRightPaneWidth { get; set; }

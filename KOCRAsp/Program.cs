@@ -112,6 +112,7 @@ builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
 builder.Services.AddScoped<ISuperAdminDataService, SuperAdminDataService>();
 builder.Services.AddScoped<IOrganizationAdminService, OrganizationAdminService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddHostedService<GuestAccountCleanupService>();
 
 // Singletons: no DB dependency
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();

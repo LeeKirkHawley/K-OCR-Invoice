@@ -9,6 +9,8 @@ public interface ISuperAdminService
     Task RevokeOrganizationAsync(string organizationId);
     Task ReEnableOrganizationAsync(string organizationId);
     Task DeleteOrganizationAsync(string organizationId);
+    Task<int> CleanupExpiredGuestAccountsAsync(TimeSpan retention, CancellationToken cancellationToken = default);
+    Task<bool> IsGuestOrgPendingDeletionAsync(string organizationId, CancellationToken cancellationToken = default);
     Task<int> PeekNextGuestNumberAsync();
     Task<GuestLoginResult> CreateGuestAsync(string email);
 }

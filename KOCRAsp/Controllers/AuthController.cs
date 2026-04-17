@@ -32,6 +32,18 @@ public class AuthController : Controller
     }
 
     [HttpGet]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public async Task<IActionResult> GuestExpiryStatus()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user?.OrganizationId == null)
+            return Json(new { isPendingDeletion = false });
+
+        var isPending = await _superAdminSvc.IsGuestOrgPendingDeletionAsync(user.OrganizationId);
+        return Json(new { isPendingDeletion = isPending });
+    }
+
+    [HttpGet]
     public IActionResult Login(string? returnUrl = null)
     {
         if (User.Identity?.IsAuthenticated == true)

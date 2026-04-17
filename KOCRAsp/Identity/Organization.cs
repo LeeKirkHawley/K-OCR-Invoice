@@ -13,6 +13,10 @@ public class Organization
 
     public bool IsActive { get; set; } = true;
 
+    public bool IsGuestOrganization { get; set; }
+
+    public bool IsPendingDeletion { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public ICollection<ApplicationUser> Users { get; set; } = new List<ApplicationUser>();
