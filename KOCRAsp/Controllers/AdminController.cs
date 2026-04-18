@@ -10,15 +10,18 @@ public class AdminController : Controller
 {
     private readonly ISuperAdminService _superAdminSvc;
     private readonly ISuperAdminDataService _dataSvc;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<AdminController> _logger;
 
     public AdminController(
         ISuperAdminService superAdminSvc,
         ISuperAdminDataService dataSvc,
+        IConfiguration configuration,
         ILogger<AdminController> logger)
     {
         _superAdminSvc = superAdminSvc;
         _dataSvc = dataSvc;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -28,6 +31,7 @@ public class AdminController : Controller
         var orgs = await _superAdminSvc.ListOrganizationsAsync();
         var batches = await _dataSvc.GetAllBatchesAcrossOrgsAsync();
         ViewBag.Batches = batches;
+        ViewBag.DeletedOrgRetentionDays = _configuration.GetValue<int>("DeletedOrgRetentionDays", 14);
         return View(orgs);
     }
 

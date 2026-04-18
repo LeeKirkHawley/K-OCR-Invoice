@@ -4,6 +4,7 @@
 @{
     ViewData["Title"] = "Admin Console";
     var batches = (ViewBag.Batches as BatchDetail[]) ?? Array.Empty<BatchDetail>();
+    var deletedOrgRetentionDays = (int)(ViewBag.DeletedOrgRetentionDays ?? 14);
 }
 
 <h4 class="mb-4">Admin Console</h4>
@@ -77,7 +78,11 @@
                                         Pending Deletion
                                     </span>
                                     <div class="small text-muted">
-                                        deletes @org.MarkedForDeletionAtUtc!.Value.ToLocalTime().ToString("dd MMM yyyy HH:mm")
+                                        @{
+                                            var markedDate = org.MarkedForDeletionAtUtc!.Value;
+                                            var deletionDate = markedDate.AddDays(deletedOrgRetentionDays);
+                                            <text>deletes @deletionDate.ToLocalTime().ToString("dd MMM yyyy HH:mm")</text>
+                                        }
                                     </div>
                                 }
                                 else
