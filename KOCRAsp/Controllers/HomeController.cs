@@ -213,6 +213,24 @@ public class HomeController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> GetBatches()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new List<object>());
+
+        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
+        
+        var result = batches.Select(b => new
+        {
+            batchId = b.BatchId,
+            name = $"{b.Name} (#{b.BatchNumber})"
+        }).ToList();
+        
+        return Json(result);
+    }
+
+    [HttpGet]
     public async Task<IActionResult> GetFiles()
     {
         if (User.IsInRole(RoleNames.SuperAdmin))

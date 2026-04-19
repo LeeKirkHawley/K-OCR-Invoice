@@ -129,6 +129,9 @@ builder.Services.AddSingleton<ITesseractValidationService>(sp =>
 builder.Services.AddSingleton<StartupErrorState>();
 builder.Services.AddSingleton<IPathService, PathService>();
 
+// ── Batch change notifications (Rx.NET) ──────────────────────────────────────
+builder.Services.AddSingleton<IBatchChangeNotifier, BatchChangeNotifier>();
+
 // Scoped: transitively depend on DatabaseService
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IAzureService, AzureService>();

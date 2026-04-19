@@ -170,6 +170,7 @@
             if (result.success) {
                 showToast(`Uploaded ${result.filesUploaded} file(s).`);
                 await refreshFileList();
+                await refreshBatchDropdown();
             } else {
                 showToast(result.error ?? 'Upload failed.', 'error');
             }
@@ -180,7 +181,10 @@
     });
 
     // ── Refresh ─────────────────────────────────────────────────
-    document.getElementById('refreshBtn').addEventListener('click', () => refreshFileList());
+    document.getElementById('refreshBtn').addEventListener('click', async () => {
+        await refreshFileList();
+        await refreshBatchDropdown();
+    });
 
     // ── Batch OCR ───────────────────────────────────────────────
     document.getElementById('batchOcrBtn').addEventListener('click', async function () {
@@ -877,6 +881,24 @@
             </div>`;
         }
         container.innerHTML = html;
+    }
+
+    async function refreshBatchDropdown() {
+        try {
+            const resp = await fetch('/home/getbatches');
+            const batches = await resp.json();
+            const selector = document.getElementById('batchSelector');
+            const currentValue = selector.value;
+            
+            let html = '<option value="">— Select Batch —</option>';
+            for (const batch of batches) {
+                const selected = batch.batchId == currentValue ? ' selected' : '';
+                html += `<option value="${batch.batchId}"${selected}>${escapeHtml(batch.name)}</option>`;
+            }
+            selector.innerHTML = html;
+        } catch (err) {
+            console.error('Failed to refresh batch dropdown:', err);
+        }
     }
 
     function startOcrPolling() {

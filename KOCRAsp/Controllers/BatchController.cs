@@ -2,6 +2,7 @@ using System.Security.Claims;
 using K_OCR.Models;
 using K_OCR.Services;
 using KOCRAsp.Security;
+using KOCRAsp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,11 +12,16 @@ namespace KOCRAsp.Controllers;
 public class BatchController : Controller
 {
     private readonly IBatchService _batchSvc;
+    private readonly IBatchChangeNotifier _batchNotifier;
     private readonly ILogger<BatchController> _logger;
 
-    public BatchController(IBatchService batchSvc, ILogger<BatchController> logger)
+    public BatchController(
+        IBatchService batchSvc,
+        IBatchChangeNotifier batchNotifier,
+        ILogger<BatchController> logger)
     {
         _batchSvc = batchSvc;
+        _batchNotifier = batchNotifier;
         _logger = logger;
     }
 
@@ -50,7 +56,10 @@ public class BatchController : Controller
             if (!result.Success)
                 TempData["Error"] = result.ErrorMessage ?? "Failed to create batch.";
             else
+            {
                 TempData["Success"] = $"Batch '{name}' created.";
+                _batchNotifier.Notify(User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty);
+            }
         }
         catch (Exception ex)
         {
@@ -88,6 +97,8 @@ public class BatchController : Controller
             var result = await _batchSvc.CreateBatchAsync(request);
             if (!result.Success)
                 return Json(new { success = false, error = result.ErrorMessage ?? "Failed to create batch." });
+
+            _batchNotifier.Notify(User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty);
             return Json(new { success = true, batchId = result.BatchId });
         }
         catch (Exception ex)
@@ -101,10 +112,12 @@ public class BatchController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int batchId)
     {
+        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         try
         {
             await _batchSvc.DeleteBatchAsync(batchId, userId);
+            _batchNotifier.Notify(orgId);
             return Json(new { success = true });
         }
         catch (Exception ex)

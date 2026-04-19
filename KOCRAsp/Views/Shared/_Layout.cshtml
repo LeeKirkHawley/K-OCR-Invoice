@@ -142,6 +142,8 @@
                         showToast(`Batch '${escapeHtml(name)}' created.`);
                         // Refresh the batch table if we're on the Batch/Index page
                         if (typeof refreshBatchList === 'function') refreshBatchList();
+                        // Refresh the batch dropdown if we're on the Home page
+                        if (typeof refreshBatchDropdown === 'function') refreshBatchDropdown();
                     } else {
                         showToast(result.error ?? 'Failed to create batch.', 'error');
                     }
