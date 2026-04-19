@@ -189,6 +189,7 @@
     // ── Batch OCR ───────────────────────────────────────────────
     document.getElementById('batchOcrBtn').addEventListener('click', async function () {
         setButtonLoading(this, true);
+        showOcrOverlay();
         const btn = this;
         try {
             const fd = new FormData();
@@ -197,9 +198,11 @@
                 showToast('Batch OCR started.');
                 startOcrPolling();
             } else {
+                hideOcrOverlay();
                 showToast(result.error ?? 'OCR failed.', 'error');
             }
         } catch (err) {
+            hideOcrOverlay();
             showToast('Batch OCR error: ' + err.message, 'error');
         } finally {
             setButtonLoading(btn, false);
@@ -903,7 +906,6 @@
 
     function startOcrPolling() {
         if (_ocrPollInterval) return;
-        showOcrOverlay();
         _ocrPollInterval = setInterval(async () => {
             try {
                 const resp = await fetch('/home/getocrstatus');
