@@ -64,15 +64,21 @@ public class HomeController : Controller
         if (int.TryParse(currentBatchIdStr, out int currentBatchId))
             currentBatch = batches.FirstOrDefault(b => b.BatchId == currentBatchId);
 
+        const int defaultPageSize = 25;
         var files = new List<FileListEntry>();
+        int totalFiles = 0, currentPage = 1, totalPages = 0;
         if (currentBatch != null)
-            files = await BuildFileListAsync(currentBatch);
+            (files, totalFiles, currentPage, totalPages) = await BuildPagedFileListAsync(currentBatch, 1, defaultPageSize);
 
         return View(new HomeIndexViewModel
         {
             AvailableBatches = batches,
             CurrentBatch = currentBatch,
-            Files = files
+            Files = files,
+            TotalFiles = totalFiles,
+            CurrentPage = currentPage,
+            PageSize = defaultPageSize,
+            TotalPages = totalPages
         });
     }
 
@@ -231,22 +237,25 @@ public class HomeController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetFiles()
+    public async Task<IActionResult> GetFiles(int page = 1, int pageSize = 25)
     {
+        static object EmptyResult(int ps) =>
+            new { items = Array.Empty<FileListEntry>(), total = 0, page = 1, pageSize = ps, totalPages = 0 };
+
         if (User.IsInRole(RoleNames.SuperAdmin))
-            return Json(new List<FileListEntry>());
+            return Json(EmptyResult(pageSize));
 
         var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
         var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
         if (!int.TryParse(currentBatchIdStr, out int batchId))
-            return Json(new List<FileListEntry>());
+            return Json(EmptyResult(pageSize));
 
         var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
         var batch = batches.FirstOrDefault(b => b.BatchId == batchId);
-        if (batch == null) return Json(new List<FileListEntry>());
+        if (batch == null) return Json(EmptyResult(pageSize));
 
-        var files = await BuildFileListAsync(batch);
-        return Json(files);
+        var (files, total, actualPage, totalPages) = await BuildPagedFileListAsync(batch, page, pageSize);
+        return Json(new { items = files, total, page = actualPage, pageSize, totalPages });
     }
 
     [HttpGet]
@@ -378,15 +387,28 @@ public class HomeController : Controller
         return jObj;
     }
 
-    private async Task<List<FileListEntry>> BuildFileListAsync(BatchSummary batch)
+    private async Task<(List<FileListEntry> Items, int Total, int Page, int TotalPages)> BuildPagedFileListAsync(
+        BatchSummary batch, int page, int pageSize)
     {
         var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
         if (!Directory.Exists(invoicesFolder))
-            return new List<FileListEntry>();
+            return (new List<FileListEntry>(), 0, 1, 0);
 
-        var filePaths = _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions);
+        var allFilePaths = _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions).ToList();
+        var total = allFilePaths.Count;
+
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        int totalPages = total == 0 ? 0 : (int)Math.Ceiling((double)total / pageSize);
+        page = Math.Clamp(page, 1, Math.Max(1, totalPages));
+
+        var pagePaths = allFilePaths.Skip((page - 1) * pageSize).Take(pageSize);
+        var items = await BuildFileListForPathsAsync(pagePaths);
+        return (items, total, page, totalPages);
+    }
+
+    private async Task<List<FileListEntry>> BuildFileListForPathsAsync(IEnumerable<string> filePaths)
+    {
         var entries = new List<FileListEntry>();
-
         foreach (var fp in filePaths)
         {
             var entry = new FileListEntry { FilePath = fp, FileName = Path.GetFileName(fp) };
@@ -421,7 +443,6 @@ public class HomeController : Controller
             }
             entries.Add(entry);
         }
-
         return entries;
     }
 

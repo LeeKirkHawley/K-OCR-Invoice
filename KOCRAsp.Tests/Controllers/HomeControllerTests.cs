@@ -88,16 +88,22 @@ public class HomeControllerTests
     }
 
     [Fact]
-    public async Task GetFiles_ReturnsBatchFiles()
+    public async Task GetFiles_ReturnsPaginatedShape()
     {
-        // No current batch in session → returns empty list immediately
+        // No current batch in session → returns empty paginated result
         SetControllerContext(currentBatchId: null);
 
         var result = await _controller.GetFiles();
 
         var json = Assert.IsType<JsonResult>(result);
-        var list = Assert.IsAssignableFrom<IEnumerable<FileListEntry>>(json.Value);
-        Assert.Empty(list);
+        var value = json.Value!;
+        var type = value.GetType();
+        Assert.NotNull(type.GetProperty("items"));
+        Assert.NotNull(type.GetProperty("total"));
+        Assert.NotNull(type.GetProperty("page"));
+        Assert.NotNull(type.GetProperty("pageSize"));
+        Assert.NotNull(type.GetProperty("totalPages"));
+        Assert.Equal(0, (int)type.GetProperty("total")!.GetValue(value)!);
     }
 
     [Fact]

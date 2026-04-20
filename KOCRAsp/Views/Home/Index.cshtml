@@ -53,6 +53,22 @@
                 }
             }
         </div>
+        <div class="kocr-file-list-footer">
+            <div class="pg-size-row">
+                <label for="pgSize" class="pg-size-label">Show</label>
+                <select id="pgSize" class="form-select form-select-sm pg-size-select">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div class="pg-nav-row" id="pgNavRow" style="display:none;">
+                <button id="pgPrev" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Previous page" disabled>&lsaquo;</button>
+                <span id="pgLabel" class="pg-label small"></span>
+                <button id="pgNext" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Next page" disabled>&rsaquo;</button>
+            </div>
+        </div>
     </div>
 
     <!-- ── Left splitter ─────────────────────────────────────────── -->
@@ -145,6 +161,9 @@
     let _currentInvoice   = null;
     let _ocrPollInterval  = null;
     let _selectedFieldKey = null;
+    let _currentPage      = @Model.CurrentPage;
+    let _pageSize         = @Model.PageSize;
+    let _refreshAbort     = null;
 
     // ── Batch selector ──────────────────────────────────────────
     document.getElementById('batchSelector').addEventListener('change', function () {
@@ -855,13 +874,26 @@
         }
     };
 
-    async function refreshFileList() {
+    async function refreshFileList(page) {
+        if (_refreshAbort) _refreshAbort.abort();
+        _refreshAbort = new AbortController();
+        const pgPrev = document.getElementById('pgPrev');
+        const pgNext = document.getElementById('pgNext');
+        pgPrev.disabled = true;
+        pgNext.disabled = true;
         try {
-            const resp = await fetch('/home/getfiles');
-            const files = await resp.json();
-            renderFileList(files);
+            const p = page ?? _currentPage;
+            const resp = await fetch(`/home/getfiles?page=${p}&pageSize=${_pageSize}`, { signal: _refreshAbort.signal });
+            const data = await resp.json();
+            _currentPage = data.page;
+            renderFileList(data.items);
+            renderPagination(data.total, data.page, data.pageSize, data.totalPages);
+            document.getElementById('fileListContainer').scrollTop = 0;
         } catch (err) {
+            if (err.name === 'AbortError') return;
             showToast('Refresh failed: ' + err.message, 'error');
+        } finally {
+            _refreshAbort = null;
         }
     }
 
@@ -884,6 +916,25 @@
             </div>`;
         }
         container.innerHTML = html;
+    }
+
+    function renderPagination(total, page, pageSize, totalPages) {
+        const pgNavRow = document.getElementById('pgNavRow');
+        const pgPrev   = document.getElementById('pgPrev');
+        const pgNext   = document.getElementById('pgNext');
+        const pgLabel  = document.getElementById('pgLabel');
+        const pgSizeEl = document.getElementById('pgSize');
+        pgSizeEl.value = String(pageSize);
+        if (!totalPages || totalPages <= 1) {
+            pgNavRow.style.display = 'none';
+        } else {
+            pgNavRow.style.display = '';
+            const start = (page - 1) * pageSize + 1;
+            const end   = Math.min(page * pageSize, total);
+            pgLabel.textContent = `${start}–${end} of ${total}`;
+            pgPrev.disabled = page <= 1;
+            pgNext.disabled = page >= totalPages;
+        }
     }
 
     async function refreshBatchDropdown() {
@@ -933,6 +984,13 @@
     }
 
     // ── Init ────────────────────────────────────────────────────
+    document.getElementById('pgPrev').addEventListener('click', () => refreshFileList(_currentPage - 1));
+    document.getElementById('pgNext').addEventListener('click', () => refreshFileList(_currentPage + 1));
+    document.getElementById('pgSize').addEventListener('change', function () {
+        _pageSize = parseInt(this.value, 10);
+        refreshFileList(1);
+    });
+    renderPagination(@Model.TotalFiles, @Model.CurrentPage, @Model.PageSize, @Model.TotalPages);
     initKocrSplitters();
     initKocrZoom();
     initVtip();
