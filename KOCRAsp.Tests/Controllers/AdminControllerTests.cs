@@ -4,6 +4,7 @@ using KOCRAsp.Models.Api.SuperAdmin;
 using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -14,6 +15,7 @@ public class AdminControllerTests
     private readonly Mock<ISuperAdminService> _mockSuperAdminSvc;
     private readonly Mock<ISuperAdminDataService> _mockDataSvc;
     private readonly Mock<ILogger<AdminController>> _mockLogger;
+    private readonly Mock<IConfiguration> _mockConfig;
     private readonly AdminController _controller;
 
     public AdminControllerTests()
@@ -21,10 +23,12 @@ public class AdminControllerTests
         _mockSuperAdminSvc = new Mock<ISuperAdminService>();
         _mockDataSvc = new Mock<ISuperAdminDataService>();
         _mockLogger = new Mock<ILogger<AdminController>>();
+        _mockConfig = new Mock<IConfiguration>();   
 
         _controller = new AdminController(
             _mockSuperAdminSvc.Object,
             _mockDataSvc.Object,
+            _mockConfig.Object,
             _mockLogger.Object);
 
         _controller.ControllerContext = ControllerTestHelper.CreateControllerContext(role: "SuperAdmin");

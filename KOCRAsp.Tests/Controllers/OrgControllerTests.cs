@@ -35,7 +35,7 @@ public class OrgConfigControllerTests
         _mockOrgAdminSvc   = new Mock<IOrganizationAdminService>();
         _mockUserManager   = new Mock<UserManager<ApplicationUser>>(
             Mock.Of<IUserStore<ApplicationUser>>(),
-            null, null, null, null, null, null, null, null);
+            null!, null!, null!, null!, null!, null!, null!, null!);
         _mockLogger = new Mock<ILogger<OrgConfigController>>();
 
         _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);

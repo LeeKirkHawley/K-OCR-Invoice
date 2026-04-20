@@ -69,9 +69,9 @@ public class SuperAdminServiceTests
 
             var userStore = new Mock<IUserStore<ApplicationUser>>();
             var userManager = new Mock<UserManager<ApplicationUser>>(
-                userStore.Object, null, null, null, null, null, null, null, null);
+                userStore.Object, null!, null!, null!, null!, null!, null!, null!, null!);
             var roleManager = new Mock<RoleManager<IdentityRole>>(
-                Mock.Of<IRoleStore<IdentityRole>>(), null, null, null, null);
+                Mock.Of<IRoleStore<IdentityRole>>(), null!, null!, null!, null!);
 
             var service = new SuperAdminService(
                 dbContext,

@@ -174,6 +174,35 @@ public class EmailService : IEmailService
         _logger.LogInformation("Invite email sent to {Email} for org '{Org}' with role '{Role}'.", toEmail, organizationName, role);
     }
 
+    public async Task SendOrgDeletionNotificationAsync(
+        string toEmail,
+        string toName,
+        string organizationName)
+    {
+        var settings = await _configService.LoadSettingsAsync();
+        var email = settings.Email ?? new EmailSettings();
+
+        if (string.IsNullOrWhiteSpace(email.SmtpHost))
+            throw new InvalidOperationException("SMTP host is not configured.");
+
+        var subject = $"K-OCR — {WebUtility.HtmlEncode(organizationName)} marked for deletion";
+        var body = $"""
+            <html><body style="font-family:sans-serif;color:#222">
+              <h2>Organization Marked for Deletion</h2>
+              <p>Hi {WebUtility.HtmlEncode(toName)},</p>
+              <p>Your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been marked for deletion on K-OCR.</p>
+              <p>If you would like to reactivate this organization, please contact Hardscrabble at <strong>leekirkhawley@gmail.com</strong>.</p>
+              <p style="color:#666;font-size:0.9em;margin-top:24px">
+                This organization will be permanently deleted after the configured retention period expires.
+              </p>
+            </body></html>
+            """;
+
+        var message = BuildMessage(email, toEmail, toName, subject, body);
+        await SendAsync(email, message);
+        _logger.LogInformation("Organization deletion notification sent to {Email} for org '{Org}'.", toEmail, organizationName);
+    }
+
     private async Task SendAsync(EmailSettings email, MimeMessage message)
     {
         // SecureSocketOptions.Auto: port 465 → SslOnConnect, port 587/25 → StartTls

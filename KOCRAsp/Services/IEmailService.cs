@@ -30,4 +30,12 @@ public interface IEmailService
     /// Sends a password reset email containing a link to set a new password.
     /// </summary>
     Task SendPasswordResetAsync(string toEmail, string toName, string resetLink);
+
+    /// <summary>
+    /// Sends an organization deletion notification email to an organization admin.
+    /// </summary>
+    Task SendOrgDeletionNotificationAsync(
+        string toEmail,
+        string toName,
+        string organizationName);
 }

@@ -361,6 +361,29 @@ public class SuperAdminService : ISuperAdminService
             await _userManager.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
             await _userManager.UpdateSecurityStampAsync(user);
         }
+
+        // Send deletion notification emails to organization admins
+        foreach (var admin in org.Users.Where(u => u.IsOrganizationAdmin))
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(admin.Email))
+                {
+                    await _emailService.SendOrgDeletionNotificationAsync(
+                        admin.Email,
+                        admin.FullName ?? admin.UserName ?? "User",
+                        organization.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to send deletion notification email to admin {AdminEmail} for org {OrgId}.",
+                    admin.Email,
+                    organizationId);
+            }
+        }
     }
 
     public async Task ReinstateMarkedOrganizationAsync(string organizationId)

@@ -1,6 +1,7 @@
 using K_OCR.Models;
 using K_OCR.Services;
 using KOCRAsp.Controllers;
+using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +16,7 @@ public class BatchControllerTests
     private readonly Mock<IBatchService> _mockBatchSvc;
     private readonly Mock<ILogger<BatchController>> _mockLogger;
     private readonly BatchController _controller;
+    private readonly IBatchChangeNotifier _notifier = new BatchChangeNotifier();
 
     private const string UserId = "user-id-123";
     private const string OrgId = "org-id-123";
@@ -24,7 +26,8 @@ public class BatchControllerTests
     {
         _mockBatchSvc = new Mock<IBatchService>();
         _mockLogger = new Mock<ILogger<BatchController>>();
-        _controller = new BatchController(_mockBatchSvc.Object, _mockLogger.Object);
+        _notifier = new BatchChangeNotifier();
+        _controller = new BatchController(_mockBatchSvc.Object, _notifier, _mockLogger.Object);
         _controller.ControllerContext = ControllerTestHelper.CreateControllerContext(
             userId: UserId, orgId: OrgId, orgName: OrgName);
         _controller.TempData = new TempDataDictionary(
