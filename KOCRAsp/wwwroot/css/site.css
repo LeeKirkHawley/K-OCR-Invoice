@@ -286,7 +286,7 @@
 
 .bbox-ok       { stroke: #50c878; }
 .bbox-suspect  { stroke: #e05050; opacity: 0.55; }
-.bbox-selected { stroke: #ffaa00; fill: rgba(255,170,0,0.18); opacity: 1; stroke-width: 2.5; }
+.bbox-selected { stroke: #ffaa00; fill: rgba(255,170,0,0.18); opacity: 1; stroke-width: 4; filter: drop-shadow(0 0 2px rgba(255,170,0,0.3)); }
 
 /* ── Invoice field rows (clickable) ───────────────────────────── */
 .inv-field-row { cursor: pointer; }
@@ -327,6 +327,10 @@
 .li-table { table-layout: fixed; width: 100%; }
 .li-table td, .li-table th { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .li-table td input.inv-field { width: 100%; }
+
+/* Line-item input highlighting when row is selected */
+.inv-field-row.inv-field-selected input.inv-field { background-color: #fff3cd !important; }
+.inv-suspect-row.inv-field-selected input.inv-field { background-color: #ffe4c8 !important; }
 
 .li-th { position: relative; white-space: nowrap; overflow: hidden; user-select: none; }
 

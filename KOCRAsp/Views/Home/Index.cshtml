@@ -428,7 +428,7 @@
 
                 const vtip = t => `data-vtip="${escapeHtml(t.value)}" data-vtip-errors="${escapeHtml(t.errors.join('\n'))}"`;
                 const sc = f => f ? ' inv-suspect-input' : '';
-                html += `<tr class="inv-field-row" data-fieldkey="${fk}">
+                html += `<tr class="inv-field-row${(dSusp || qSusp || uSusp || aSusp) ? ' inv-suspect-row' : ''}" data-fieldkey="${fk}">
                              <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${item.unitPrice ?? ''}" /></td>
