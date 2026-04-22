@@ -8,7 +8,7 @@
 
     <!-- ── Left pane: file list ──────────────────────────────────── -->
     <div class="kocr-pane kocr-pane-left">
-        <div class="kocr-file-list-header p-1">
+        <div class="kocr-panel-header kocr-file-list-header p-1">
             <select id="batchSelector" class="form-select form-select-sm mb-1">
                 <option value="">— Select Batch —</option>
                 @foreach (var batch in Model.AvailableBatches)
@@ -76,7 +76,7 @@
 
     <!-- ── Center pane: document viewer ─────────────────────────── -->
     <div class="kocr-pane kocr-pane-center">
-        <div class="viewer-toolbar" id="viewerToolbar" style="display:none;">
+        <div class="kocr-panel-header viewer-toolbar" id="viewerToolbar" style="display:none;">
             <button class="viewer-btn" id="zoomOutBtn"  title="Zoom out">−</button>
             <span   class="viewer-zoom-label" id="zoomLabel">100%</span>
             <button class="viewer-btn" id="zoomInBtn"   title="Zoom in">+</button>
@@ -94,7 +94,7 @@
 
     <!-- ── Right pane: invoice/validation ────────────────────────── -->
     <div class="kocr-pane kocr-pane-right">
-        <div class="kocr-invoice-header">
+        <div class="kocr-panel-header kocr-invoice-header">
             <ul class="nav nav-tabs px-2 pt-1" id="invoiceTabs" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active py-1 px-2 small" data-bs-toggle="tab"

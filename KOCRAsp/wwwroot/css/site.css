@@ -75,11 +75,22 @@
 .splitter:hover, .splitter.dragging { background: #0d6efd; }
 
 /* ── File list ────────────────────────────────────────────────── */
-.kocr-file-list-header {
+/* ── Shared panel header styles ───────────────────────────────── */
+.kocr-panel-header {
     flex-shrink: 0;
     background: #f8f9fa;
     border-bottom: 1px solid #dee2e6;
-    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 8px;
+    user-select: none;
+}
+
+.kocr-file-list-header {
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
 }
 
 .kocr-file-items {
@@ -121,36 +132,30 @@
 
 /* ── Document viewer ──────────────────────────────────────────── */
 .viewer-toolbar {
-    display: flex;
-    align-items: center;
     gap: 6px;
-    padding: 5px 8px;
-    background: #343a40;
-    border-bottom: 1px solid #495057;
-    flex-shrink: 0;
-    user-select: none;
 }
 
 .viewer-btn {
-    padding: 2px 8px;
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1;
-    border: 1px solid #6c757d;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    border: 1px solid #0d6efd;
     border-radius: 4px;
-    background: #495057;
-    color: #f8f9fa;
+    background: #fff;
+    color: #0d6efd;
     cursor: pointer;
-    transition: background 0.12s;
+    transition: background 0.12s, color 0.12s;
 }
-.viewer-btn:hover { background: #6c757d; color: #fff; }
-.viewer-btn-fit   { font-size: 12px; font-weight: 400; padding: 2px 7px; }
+.viewer-btn:hover { background: #0d6efd; color: #fff; }
+.viewer-btn-fit   { font-size: 12px; font-weight: 500; padding: 4px 8px; }
 
 .viewer-zoom-label {
     font-size: 12px;
-    color: #adb5bd;
+    color: #6c757d;
     min-width: 42px;
     text-align: center;
+    font-weight: 500;
 }
 
 .viewer-scroll {
@@ -207,24 +212,40 @@
 
 /* ── Invoice panel ────────────────────────────────────────────── */
 .kocr-invoice-header {
-    flex-shrink: 0;
-    background: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-    display: flex;
-    align-items: flex-end;
+    padding: 0 8px;
 }
 
 .kocr-invoice-header .nav-tabs {
     flex: 1;
     border-bottom: none;
+    margin: 0;
+}
+.kocr-invoice-header .nav-tabs .nav-link {
+    padding: 8px 12px;
+    color: #6c757d;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    border-bottom: 2px solid transparent;
+    transition: color 0.12s, border-color 0.12s;
+}
+.kocr-invoice-header .nav-tabs .nav-link:hover {
+    color: #212529;
+    border-bottom-color: #dee2e6;
+}
+.kocr-invoice-header .nav-tabs .nav-link.active {
+    color: #0d6efd;
+    border-bottom-color: #0d6efd;
+    background-color: transparent;
 }
 
 .validation-status-label {
     flex-shrink: 0;
-    font-size: 0.72rem;
-    font-weight: 600;
-    padding: 0 10px 6px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 0 10px;
     white-space: nowrap;
+    margin-left: auto;
 }
 
 .validation-status-label.is-validated    { color: #28a745; }
