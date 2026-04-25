@@ -108,6 +108,12 @@ namespace K_OCR.Models
 
         /// <summary>Free-text notes entered by the user for this invoice.</summary>
         public string? Notes { get; set; }
+
+        /// <summary>Detected vendor country of origin (e.g. "United States").</summary>
+        public string? VendorCountry { get; set; }
+
+        /// <summary>ISO 4217 currency code detected for this invoice (e.g. "USD", "EUR").</summary>
+        public string? CurrencyCode { get; set; }
         
     }
 }

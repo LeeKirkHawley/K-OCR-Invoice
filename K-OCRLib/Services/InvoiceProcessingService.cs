@@ -12,6 +12,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     private readonly IInvoiceValidationService _invoiceValidation;
     private readonly ILineItemValidationService _lineItemValidation;
     private readonly IConfidenceValidationService _confidenceValidation;
+    private readonly IInvoiceEnrichmentService _enrichment;
     private readonly IConfiguration _configuration;
     private readonly ILogger<InvoiceProcessingService> _logger;
     
@@ -22,6 +23,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         IInvoiceValidationService invoiceValidation,
         ILineItemValidationService lineItemValidation,
         IConfidenceValidationService confidenceValidation,
+        IInvoiceEnrichmentService enrichment,
         IConfiguration configuration,
         ILogger<InvoiceProcessingService> logger)
     {
@@ -31,6 +33,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         _invoiceValidation = invoiceValidation;
         _lineItemValidation = lineItemValidation;
         _confidenceValidation = confidenceValidation;
+        _enrichment = enrichment;
         _configuration = configuration;
         _logger = logger;
     }
@@ -198,6 +201,10 @@ public class InvoiceProcessingService : IInvoiceProcessingService
 
             var minConfidence = minConfidenceThreshold ?? _configuration.GetValue<double>("MinConfidenceThreshold", 0.8);
             _confidenceValidation.ValidateConfidence(invoice, minConfidence);
+
+            // Enrich with country of origin and currency code.
+            // Tesseract text is preferred; the method also falls back to structured DTO fields.
+            _enrichment.DetectCountryAndCurrency(invoice, tesseractText);
         }
     }
 }

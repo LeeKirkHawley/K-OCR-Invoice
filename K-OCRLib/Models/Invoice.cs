@@ -63,6 +63,12 @@ namespace K_OCR.Models
 
         public string? Notes { get; set; }
 
+        [MaxLength(200)]
+        public string? VendorCountry { get; set; }
+
+        [MaxLength(10)]
+        public string? CurrencyCode { get; set; }
+
         // Navigation properties
         public virtual Batch? Batch { get; set; }
         public virtual ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();

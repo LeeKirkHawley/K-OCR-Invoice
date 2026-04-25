@@ -142,8 +142,19 @@
                         showToast(`Batch '${escapeHtml(name)}' created.`);
                         // Refresh the batch table if we're on the Batch/Index page
                         if (typeof refreshBatchList === 'function') refreshBatchList();
-                        // Refresh the batch dropdown if we're on the Home page
-                        if (typeof refreshBatchDropdown === 'function') refreshBatchDropdown();
+                        // Auto-select the new batch on Home page and load invoice names
+                        const selector = document.getElementById('batchSelector');
+                        if (selector) {
+                            // First refresh the dropdown
+                            if (typeof refreshBatchDropdown === 'function') {
+                                await refreshBatchDropdown();
+                            }
+                            // Then select the new batch
+                            if (result.batchId) {
+                                selector.value = result.batchId;
+                                selector.dispatchEvent(new Event('change'));
+                            }
+                        }
                     } else {
                         showToast(result.error ?? 'Failed to create batch.', 'error');
                     }

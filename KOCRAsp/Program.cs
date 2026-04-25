@@ -137,6 +137,7 @@ builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IAzureService, AzureService>();
 //builder.Services.AddScoped<IOCRService, OCRService>();
 builder.Services.AddScoped<IInvoiceProcessingService, InvoiceProcessingService>();
+builder.Services.AddScoped<IInvoiceEnrichmentService, InvoiceEnrichmentService>();
 builder.Services.AddScoped<IBatchService, BatchService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 

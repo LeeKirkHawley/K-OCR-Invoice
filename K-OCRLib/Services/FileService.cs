@@ -129,6 +129,8 @@ namespace K_OCR.Services
                 existing.InvoiceDate          = DateTime.TryParse(invoice.InvoiceDate, out var invDate) ? invDate : null;
                 existing.DueDate              = DateTime.TryParse(invoice.DueDate,     out var dueDate) ? dueDate : null;
                 existing.Notes                = invoice.Notes;
+                existing.VendorCountry        = invoice.VendorCountry;
+                existing.CurrencyCode         = invoice.CurrencyCode;
 
                 // Preserve the caller's validation state — AcceptValidation sets
                 // IsValidationAccepted = true on the DTO before calling here;

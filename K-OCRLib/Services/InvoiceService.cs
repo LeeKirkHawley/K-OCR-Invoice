@@ -289,8 +289,9 @@ namespace K_OCR.Services
         {
             return result.Documents.Select(doc =>
             {
-                var fieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>();
-                var fieldConfidences   = new Dictionary<string, double>();
+                var fieldBoundingBoxes   = new Dictionary<string, List<BoundingBoxDto>>();
+                var fieldConfidences     = new Dictionary<string, double>();
+                string? detectedCurrencyCode = null;
                 
                 // Get page dimensions from the first page (Azure provides dimensions in inches)
                 double pageWidth = 8.5;  // Default letter size
@@ -401,9 +402,16 @@ namespace K_OCR.Services
                         if (field.Confidence.HasValue)
                             fieldConfidences[name] = field.Confidence.Value;
 
+                        // Capture the ISO 4217 code reported by Azure (first non-null wins).
+                        detectedCurrencyCode ??= field.ValueCurrency?.CurrencyCode;
+
                         if (field.ValueCurrency?.Amount is double a) return (decimal)a;
                         if (field.ValueDouble is double d) return (decimal)d;
                         if (field.ValueInt64 is long l) return l;
+
+                        // Last-resort: parse raw OCR content if it looks like a money string.
+                        var parsed = CurrencyAmountParser.Parse(field.Content);
+                        if (parsed.HasValue) return parsed;
                     }
                     
                     // Fallback for Total field if not found by Azure
@@ -516,6 +524,7 @@ namespace K_OCR.Services
                     TotalTax      = GetDecimal("TotalTax"),
                     Shipping      = GetDecimal("Shipping"),
                     Total         = GetDecimal("Total"),
+                    CurrencyCode       = detectedCurrencyCode,
                     Items             = items,
                     FieldBoundingBoxes = fieldBoundingBoxes,
                     FieldConfidences   = fieldConfidences,
