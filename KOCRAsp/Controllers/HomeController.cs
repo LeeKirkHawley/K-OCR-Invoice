@@ -237,6 +237,33 @@ public class HomeController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> GetBatchExportStatus()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { requiresValidation = false });
+
+        var orgConfig = await _orgConfigSvc.LoadAsync(_tenantContext.OrganizationName ?? string.Empty);
+        if (!orgConfig.RequireBatchValidationForExport)
+            return Json(new { requiresValidation = false });
+
+        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        if (!int.TryParse(currentBatchIdStr, out int batchId))
+            return Json(new { requiresValidation = true, allValidated = false, fileCount = 0, validatedCount = 0 });
+
+        var detail = await _batchSvc.GetBatchDetailAsync(batchId);
+        if (detail == null)
+            return Json(new { requiresValidation = true, allValidated = false, fileCount = 0, validatedCount = 0 });
+
+        return Json(new
+        {
+            requiresValidation = true,
+            allValidated       = detail.AllValidated,
+            fileCount          = detail.FileCount,
+            validatedCount     = detail.ValidatedCount,
+        });
+    }
+
+    [HttpGet]
     public async Task<IActionResult> GetFiles(int page = 1, int pageSize = 25)
     {
         static object EmptyResult(int ps) =>

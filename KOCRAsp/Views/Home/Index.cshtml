@@ -31,6 +31,13 @@
                 </label>
                 <button id="batchOcrBtn" class="btn btn-sm btn-outline-success py-0" title="Run OCR on all files">▶ OCR All</button>
                 <button id="refreshBtn"  class="btn btn-sm btn-outline-secondary py-0" title="Refresh">🔄</button>
+                <div class="dropdown">
+                    <button id="exportDropdownBtn" class="btn btn-sm btn-outline-secondary py-0 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Export batch">📥</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" onclick="exportBatchJson(); return false;">Export to JSON</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="exportBatchExcel(); return false;">Export to Excel</a></li>
+                    </ul>
+                </div>
             </div>
         </div>
         <div class="kocr-file-items" id="fileListContainer">
@@ -191,6 +198,7 @@
                 showToast(`Uploaded ${result.filesUploaded} file(s).`);
                 await refreshFileList();
                 await refreshBatchDropdown();
+                await updateExportButtonState();
             } else {
                 showToast(result.error ?? 'Upload failed.', 'error');
             }
@@ -807,6 +815,7 @@
                         JSON.stringify(stripBboxFields(_currentInvoice), null, 2);
                 }
                 await refreshFileList();
+                await updateExportButtonState();
             } else {
                 showToast(result.error ?? 'Accept failed.', 'error');
             }
@@ -874,6 +883,24 @@
             showToast('Export failed: ' + err.message, 'error');
         }
     };
+
+    async function updateExportButtonState() {
+        const btn = document.getElementById('exportDropdownBtn');
+        if (!btn) return;
+        try {
+            const resp = await fetch('/home/getbatchexportstatus');
+            const data = await resp.json();
+            if (!data.requiresValidation || data.allValidated) {
+                btn.disabled = false;
+                btn.title = 'Export batch';
+            } else {
+                btn.disabled = true;
+                btn.title = `Export disabled: ${data.validatedCount} of ${data.fileCount} invoice(s) validated`;
+            }
+        } catch {
+            // leave button in its current state on network error
+        }
+    }
 
     async function refreshFileList(page) {
         if (_refreshAbort) _refreshAbort.abort();
@@ -992,6 +1019,7 @@
         refreshFileList(1);
     });
     renderPagination(@Model.TotalFiles, @Model.CurrentPage, @Model.PageSize, @Model.TotalPages);
+    updateExportButtonState();
     initKocrSplitters();
     initKocrZoom();
     initVtip();

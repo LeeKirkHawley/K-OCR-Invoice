@@ -10,4 +10,10 @@ public class OrgConfig
     /// for a field to pass confidence validation.
     /// </summary>
     public double MinConfidenceThreshold { get; set; } = 0.8;
+
+    /// <summary>
+    /// When true, the Export button is disabled until every invoice in the batch
+    /// has been validated (IsValidationAccepted = true).
+    /// </summary>
+    public bool RequireBatchValidationForExport { get; set; } = true;
 }
