@@ -15,6 +15,7 @@ namespace K_OCR.Data
         public DbSet<DocumentField> DocumentFields { get; set; }
         public DbSet<Batch> Batches { get; set; }
         public DbSet<UserBatchSession> UserBatchSessions { get; set; }
+        public DbSet<BatchAction> BatchActions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -58,6 +59,9 @@ namespace K_OCR.Data
                 .WithMany()
                 .HasForeignKey(s => s.BatchId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<BatchAction>()
+                .HasIndex(b => b.TimestampUtc);
         }
     }
 }

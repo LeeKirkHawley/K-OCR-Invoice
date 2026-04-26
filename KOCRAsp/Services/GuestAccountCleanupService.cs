@@ -38,14 +38,15 @@ public sealed class GuestAccountCleanupService : BackgroundService
         var retentionDays = _configuration.GetValue<int>("GuestAccountRetentionDays");
         if (retentionDays > 0)
         {
-            markedCount = await superAdminService.CleanupExpiredGuestAccountsAsync(
+            var markedAccounts = await superAdminService.CleanupExpiredGuestAccountsAsync(
                 TimeSpan.FromDays(retentionDays),
                 cancellationToken);
+            markedCount = markedAccounts.Count;
 
             if (markedCount > 0)
                 _logger.LogInformation(
-                    "Marked {Count} expired guest account(s) for deletion (retention: {Days} day(s)).",
-                    markedCount, retentionDays);
+                    "Marked {Count} expired guest account(s) for deletion (retention: {Days} day(s)): {Accounts}",
+                    markedCount, retentionDays, string.Join(", ", markedAccounts));
         }
 
         var hardDeletedCount = 0;

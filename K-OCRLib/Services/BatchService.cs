@@ -151,13 +151,15 @@ public class BatchService : IBatchService, IAsyncDisposable
         });
     }
 
-    public async Task DeleteBatchAsync(int batchId, string requestingUserId)
+    public async Task<string> DeleteBatchAsync(int batchId, string requestingUserId)
     {
         var batch = await Db.Batches.FindAsync(batchId)
                     ?? throw new InvalidOperationException($"Batch {batchId} not found.");
 
         if (batch.LockedByUserId is not null && batch.LockedByUserId != requestingUserId)
             throw new InvalidOperationException("Cannot delete a batch locked by another user.");
+
+        var batchName = batch.Name;
 
         // Delete files from disk
         var invoicesPath  = Path.Combine(batch.FolderPath, "Invoices");
@@ -178,6 +180,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         Db.Batches.Remove(batch);
 
         await Db.SaveChangesAsync();
+        return batchName;
     }
 
     public async Task<AcquireLockResult> TryAcquireBatchLockAsync(int batchId, string userId)

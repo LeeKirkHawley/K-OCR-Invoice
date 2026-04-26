@@ -426,10 +426,10 @@ public class SuperAdminService : ISuperAdminService
         return deletedCount;
     }
 
-    public async Task<int> CleanupExpiredGuestAccountsAsync(TimeSpan retention, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> CleanupExpiredGuestAccountsAsync(TimeSpan retention, CancellationToken cancellationToken = default)
     {
         if (retention <= TimeSpan.Zero)
-            return 0;
+            return [];
 
         // Find guest orgs whose lifetime has expired and are not yet marked for deletion.
         var cutoff = DateTime.UtcNow - retention;
@@ -437,7 +437,7 @@ public class SuperAdminService : ISuperAdminService
             .Where(o => o.IsGuestOrganization
                      && o.MarkedForDeletionAtUtc == null
                      && o.CreatedAtUtc <= cutoff)
-            .Select(o => new { o.Id, o.IsActive })
+            .Select(o => new { o.Id, o.Name, o.IsActive })
             .ToListAsync(cancellationToken);
 
         foreach (var org in newlyExpired)
@@ -448,7 +448,7 @@ public class SuperAdminService : ISuperAdminService
             await MarkOrganizationForDeletionAsync(org.Id);
         }
 
-        return newlyExpired.Count;
+        return newlyExpired.Select(o => o.Name).ToList();
     }
 
     public async Task<bool> IsOrgMarkedForDeletionAsync(string organizationId, CancellationToken cancellationToken = default)

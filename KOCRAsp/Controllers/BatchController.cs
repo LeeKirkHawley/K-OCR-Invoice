@@ -13,16 +13,19 @@ public class BatchController : Controller
 {
     private readonly IBatchService _batchSvc;
     private readonly IBatchChangeNotifier _batchNotifier;
+    private readonly IBatchActionService _batchActionSvc;
     private readonly ILogger<BatchController> _logger;
 
     public BatchController(
         IBatchService batchSvc,
         IBatchChangeNotifier batchNotifier,
+        IBatchActionService batchActionSvc,
         ILogger<BatchController> logger)
     {
-        _batchSvc = batchSvc;
-        _batchNotifier = batchNotifier;
-        _logger = logger;
+        _batchSvc       = batchSvc;
+        _batchNotifier  = batchNotifier;
+        _batchActionSvc = batchActionSvc;
+        _logger         = logger;
     }
 
     [HttpGet]
@@ -59,6 +62,10 @@ public class BatchController : Controller
             {
                 TempData["Success"] = $"Batch '{name}' created.";
                 _batchNotifier.Notify(User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty);
+                await _batchActionSvc.LogAsync(
+                    BatchActionTypes.Created, name,
+                    User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                    User.Identity?.Name ?? string.Empty);
             }
         }
         catch (Exception ex)
@@ -99,6 +106,10 @@ public class BatchController : Controller
                 return Json(new { success = false, error = result.ErrorMessage ?? "Failed to create batch." });
 
             _batchNotifier.Notify(User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty);
+            await _batchActionSvc.LogAsync(
+                BatchActionTypes.Created, name,
+                User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                User.Identity?.Name ?? string.Empty);
             return Json(new { success = true, batchId = result.BatchId });
         }
         catch (Exception ex)
@@ -116,8 +127,12 @@ public class BatchController : Controller
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         try
         {
-            await _batchSvc.DeleteBatchAsync(batchId, userId);
+            var batchName = await _batchSvc.DeleteBatchAsync(batchId, userId);
             _batchNotifier.Notify(orgId);
+            await _batchActionSvc.LogAsync(
+                BatchActionTypes.Deleted, batchName,
+                User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                User.Identity?.Name ?? string.Empty);
             return Json(new { success = true });
         }
         catch (Exception ex)

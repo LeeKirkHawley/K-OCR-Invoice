@@ -14,7 +14,7 @@ public class GuestAccountCleanupServiceTests
         var superAdminService = new Mock<ISuperAdminService>();
         superAdminService
             .Setup(service => service.CleanupExpiredGuestAccountsAsync(TimeSpan.FromDays(15), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(2);
+            .ReturnsAsync((IReadOnlyList<string>)new List<string> { "Guest-1", "Guest-2" });
 
         using var provider = new ServiceCollection()
             .AddScoped(_ => superAdminService.Object)

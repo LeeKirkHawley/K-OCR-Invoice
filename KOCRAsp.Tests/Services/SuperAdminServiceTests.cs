@@ -85,10 +85,10 @@ public class SuperAdminServiceTests
                 Mock.Of<ILogger<SuperAdminService>>());
 
             // Phase 1: expired guest org gets marked for deletion; regular org is untouched.
-            var markedCount = await service.CleanupExpiredGuestAccountsAsync(TimeSpan.FromMinutes(30));
+            var markedAccounts = await service.CleanupExpiredGuestAccountsAsync(TimeSpan.FromMinutes(30));
 
             await using var midContext = new ApplicationDbContext(options);
-            Assert.Equal(1, markedCount);
+            Assert.Equal(1, markedAccounts.Count);
             Assert.True(await midContext.Organizations.AnyAsync(o => o.Id == guestOrg.Id));
             Assert.NotNull(await midContext.Organizations
                 .Where(o => o.Id == guestOrg.Id)

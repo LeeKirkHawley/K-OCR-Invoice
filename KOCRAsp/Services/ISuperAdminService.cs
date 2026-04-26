@@ -16,7 +16,7 @@ public interface ISuperAdminService
     Task ReinstateMarkedOrganizationAsync(string organizationId);
     /// <summary>Hard-deletes all orgs whose MarkedForDeletionAtUtc has passed the retention window.</summary>
     Task<int> CleanupExpiredSoftDeletesAsync(TimeSpan retention, CancellationToken cancellationToken = default);
-    Task<int> CleanupExpiredGuestAccountsAsync(TimeSpan retention, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<string>> CleanupExpiredGuestAccountsAsync(TimeSpan retention, CancellationToken cancellationToken = default);
     Task<bool> IsOrgMarkedForDeletionAsync(string organizationId, CancellationToken cancellationToken = default);
     Task<int> PeekNextGuestNumberAsync();
     Task<GuestLoginResult> CreateGuestAsync(string email);
