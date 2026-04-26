@@ -109,6 +109,7 @@ builder.Services.AddMemoryCache();
 // ── Application services ─────────────────────────────────────────────────────
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IBatchActionService, BatchActionService>();
+builder.Services.AddScoped<IInvoiceActionService, InvoiceActionService>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
 builder.Services.AddScoped<ISuperAdminDataService, SuperAdminDataService>();
 builder.Services.AddScoped<IOrganizationAdminService, OrganizationAdminService>();

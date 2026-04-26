@@ -16,6 +16,7 @@ namespace K_OCR.Data
         public DbSet<Batch> Batches { get; set; }
         public DbSet<UserBatchSession> UserBatchSessions { get; set; }
         public DbSet<BatchAction> BatchActions { get; set; }
+        public DbSet<InvoiceAction> InvoiceActions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -62,6 +63,9 @@ namespace K_OCR.Data
 
             modelBuilder.Entity<BatchAction>()
                 .HasIndex(b => b.TimestampUtc);
+
+            modelBuilder.Entity<InvoiceAction>()
+                .HasIndex(i => i.TimestampUtc);
         }
     }
 }

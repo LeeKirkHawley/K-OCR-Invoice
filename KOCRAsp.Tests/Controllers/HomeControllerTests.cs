@@ -4,6 +4,7 @@ using K_OCR.Models;
 using K_OCR.Services;
 using KOCRAsp.Controllers;
 using KOCRAsp.Models;
+using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -21,6 +22,7 @@ public class HomeControllerTests
     private readonly Mock<IDocumentExportService> _mockExportSvc;
     private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
     private readonly Mock<ITenantContext> _mockTenantContext;
+    private readonly Mock<IInvoiceActionService> _mockInvoiceActionSvc;
     private readonly Mock<ILogger<HomeController>> _mockLogger;
     private readonly DatabaseService _dbSvc;
     private readonly HomeController _controller;
@@ -31,13 +33,14 @@ public class HomeControllerTests
 
     public HomeControllerTests()
     {
-        _mockOcrSvc        = new Mock<IInvoiceProcessingService>();
-        _mockBatchSvc      = new Mock<IBatchService>();
-        _mockFileSvc       = new Mock<IFileService>();
-        _mockExportSvc     = new Mock<IDocumentExportService>();
-        _mockOrgConfigSvc  = new Mock<IOrgConfigService>();
-        _mockTenantContext = new Mock<ITenantContext>();
-        _mockLogger        = new Mock<ILogger<HomeController>>();
+        _mockOcrSvc            = new Mock<IInvoiceProcessingService>();
+        _mockBatchSvc          = new Mock<IBatchService>();
+        _mockFileSvc           = new Mock<IFileService>();
+        _mockExportSvc         = new Mock<IDocumentExportService>();
+        _mockOrgConfigSvc      = new Mock<IOrgConfigService>();
+        _mockTenantContext     = new Mock<ITenantContext>();
+        _mockInvoiceActionSvc  = new Mock<IInvoiceActionService>();
+        _mockLogger            = new Mock<ILogger<HomeController>>();
 
         _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
         _mockOrgConfigSvc.Setup(s => s.LoadAsync(OrgName))
@@ -55,6 +58,7 @@ public class HomeControllerTests
             _dbSvc,
             _mockOrgConfigSvc.Object,
             _mockTenantContext.Object,
+            _mockInvoiceActionSvc.Object,
             _mockLogger.Object);
     }
 

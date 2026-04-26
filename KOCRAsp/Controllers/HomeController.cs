@@ -7,6 +7,7 @@ using K_OCR.Security;
 using K_OCR.Services;
 using KOCRAsp.Models;
 using KOCRAsp.Security;
+using KOCRAsp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
@@ -24,6 +25,7 @@ public class HomeController : Controller
     private readonly DatabaseService _dbSvc;
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly ITenantContext _tenantContext;
+    private readonly IInvoiceActionService _invoiceActionSvc;
     private readonly ILogger<HomeController> _logger;
 
     private static readonly string[] InvoiceExtensions =
@@ -37,16 +39,18 @@ public class HomeController : Controller
         DatabaseService dbSvc,
         IOrgConfigService orgConfigSvc,
         ITenantContext tenantContext,
+        IInvoiceActionService invoiceActionSvc,
         ILogger<HomeController> logger)
     {
-        _ocrSvc        = ocrSvc;
-        _batchSvc      = batchSvc;
-        _fileSvc       = fileSvc;
-        _exportSvc     = exportSvc;
-        _dbSvc         = dbSvc;
-        _orgConfigSvc  = orgConfigSvc;
-        _tenantContext = tenantContext;
-        _logger        = logger;
+        _ocrSvc           = ocrSvc;
+        _batchSvc         = batchSvc;
+        _fileSvc          = fileSvc;
+        _exportSvc        = exportSvc;
+        _dbSvc            = dbSvc;
+        _orgConfigSvc     = orgConfigSvc;
+        _tenantContext    = tenantContext;
+        _invoiceActionSvc = invoiceActionSvc;
+        _logger           = logger;
     }
 
     [HttpGet]
@@ -115,6 +119,20 @@ public class HomeController : Controller
             .ToList();
 
         var result = await _batchSvc.UploadFilesToBatchAsync(batchId, uploads, userId);
+
+        if (result.Success && result.FilesUploaded > 0)
+        {
+            var batch = await GetCurrentBatchAsync();
+            var batchName = batch?.Name ?? string.Empty;
+            var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? userId;
+            var conflicts = result.ConflictingFileNames?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+            foreach (var upload in uploads)
+            {
+                if (!conflicts.Contains(upload.FileName))
+                    await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Added, upload.FileName, batchName, orgUser);
+            }
+        }
+
         return Json(new
         {
             success = result.Success,
@@ -155,6 +173,10 @@ public class HomeController : Controller
                 return Json(new { success = false, error = result.Error?.Message ?? "Processing failed." });
 
             var invoice = await _ocrSvc.LoadCachedInvoiceAsync(filePath);
+            var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            var batch   = await GetCurrentBatchAsync();
+            await _invoiceActionSvc.LogAsync(InvoiceActionTypes.OCRed, Path.GetFileName(filePath), batch?.Name ?? string.Empty, orgUser, invoice?.PageCount ?? 1);
+
             return Json(new { success = true, invoice });
         }
         catch (Exception ex)
@@ -185,6 +207,20 @@ public class HomeController : Controller
             }
 
             await _batchSvc.TriggerOcrAsync(batchId, minConfidence);
+
+            var batch = await GetCurrentBatchAsync();
+            if (batch != null)
+            {
+                var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
+                var files = _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions);
+                var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+                foreach (var fp in files)
+                {
+                    var inv = await _ocrSvc.LoadCachedInvoiceAsync(fp);
+                    await _invoiceActionSvc.LogAsync(InvoiceActionTypes.OCRed, Path.GetFileName(fp), batch.Name, orgUser, inv?.PageCount ?? 1);
+                }
+            }
+
             return Json(new { success = true });
         }
         catch (Exception ex)
@@ -354,6 +390,11 @@ public class HomeController : Controller
 
             invoice.IsValidationAccepted = true;
             await _ocrSvc.SaveInvoiceAsync(filePath, invoice);
+
+            var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            var batch   = await GetCurrentBatchAsync();
+            await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Validated, Path.GetFileName(filePath), batch?.Name ?? string.Empty, orgUser);
+
             return Json(new { success = true });
         }
         catch (Exception ex)
@@ -510,6 +551,11 @@ public class HomeController : Controller
         var json = JsonConvert.SerializeObject(payload, Formatting.Indented);
         var bytes = Encoding.UTF8.GetBytes(json);
         var name = Path.GetFileName(batch.FolderPath.TrimEnd(Path.DirectorySeparatorChar));
+
+        var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        foreach (var (fn, _) in invoices)
+            await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Exported, fn, batch.Name, orgUser);
+
         return File(bytes, "application/json", $"{name}.json");
     }
 
@@ -583,6 +629,11 @@ public class HomeController : Controller
         using var ms = new MemoryStream();
         wb.SaveAs(ms);
         var name = Path.GetFileName(batch.FolderPath.TrimEnd(Path.DirectorySeparatorChar));
+
+        var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        foreach (var (fn, _) in invoices)
+            await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Exported, fn, batch.Name, orgUser);
+
         return File(ms.ToArray(),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"{name}.xlsx");

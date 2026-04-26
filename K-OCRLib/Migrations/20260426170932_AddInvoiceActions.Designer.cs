@@ -3,6 +3,7 @@ using System;
 using K_OCR.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace K_OCRLib.Migrations
 {
     [DbContext(typeof(KOCRDbContext))]
-    partial class KOCRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260426170932_AddInvoiceActions")]
+    partial class AddInvoiceActions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.15");
@@ -251,9 +254,6 @@ namespace K_OCRLib.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("PageCount")
-                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("TimestampUtc")
                         .HasColumnType("TEXT");
