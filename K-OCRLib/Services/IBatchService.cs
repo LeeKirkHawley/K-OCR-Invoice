@@ -9,6 +9,7 @@ public interface IBatchService
     Task<BatchDetail?> GetBatchDetailAsync(int batchId);
     Task<CreateBatchResult> CreateBatchAsync(CreateBatchRequest request);
     Task<string> DeleteBatchAsync(int batchId, string requestingUserId);
+    Task<int> CleanupExpiredBatchesAsync(TimeSpan retention);
     Task<AcquireLockResult> TryAcquireBatchLockAsync(int batchId, string userId);
     Task ReleaseBatchLockAsync(int batchId, string userId);
     Task SetUserLastBatchAsync(string userId, string organizationId, int? batchId);

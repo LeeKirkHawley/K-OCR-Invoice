@@ -13,7 +13,14 @@
                 <option value="">— Select Batch —</option>
                 @foreach (var batch in Model.AvailableBatches)
                 {
-                    if (Model.CurrentBatch?.BatchId == batch.BatchId)
+                    if (batch.IsMarkedForDeletion)
+                    {
+                        <option value="@batch.BatchId" disabled
+                                style="text-decoration: line-through; color: gray;">
+                            🗑️ @batch.Name (#@batch.BatchNumber)
+                        </option>
+                    }
+                    else if (Model.CurrentBatch?.BatchId == batch.BatchId)
                     {
                         <option value="@batch.BatchId" selected>@batch.Name (#@batch.BatchNumber)</option>
                     }
@@ -833,7 +840,11 @@
     }
 
     async function _savePickerDownload(url, suggestedName, mimeType, extensions) {
-        const response = await fetch(url, { credentials: 'include' });
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'RequestVerificationToken': _antiforgeryToken },
+            credentials: 'include'
+        });
         if (!response.ok) {
             const msg = await response.text().catch(() => response.statusText);
             throw new Error(msg || response.statusText);
@@ -865,6 +876,7 @@
         try {
             await _savePickerDownload('/home/exportbatchjson', 'batch.json', 'application/json', ['.json']);
             showToast('Exported to JSON.');
+            location.reload();
         } catch (err) {
             showToast('Export failed: ' + err.message, 'error');
         }
@@ -879,6 +891,7 @@
                 ['.xlsx']
             );
             showToast('Exported to Excel.');
+            location.reload();
         } catch (err) {
             showToast('Export failed: ' + err.message, 'error');
         }

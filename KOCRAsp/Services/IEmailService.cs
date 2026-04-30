@@ -38,4 +38,23 @@ public interface IEmailService
         string toEmail,
         string toName,
         string organizationName);
+
+    /// <summary>
+    /// Sends a notification to an org admin that a batch has been soft-deleted (marked for deletion).
+    /// </summary>
+    Task SendBatchSoftDeletedNotificationAsync(
+        string toEmail,
+        string toName,
+        string organizationName,
+        string batchName,
+        int retentionDays);
+
+    /// <summary>
+    /// Sends a notification to an org admin that a batch has been permanently (hard) deleted.
+    /// </summary>
+    Task SendBatchHardDeletedNotificationAsync(
+        string toEmail,
+        string toName,
+        string organizationName,
+        string batchName);
 }

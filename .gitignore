@@ -373,3 +373,6 @@ FodyWeavers.xsd
 *.db-shm
 *.db-wal
 K-OCR/kocr.db
+
+# User-specific settings overrides (may contain credentials)
+appsettings.*.user.json

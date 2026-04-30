@@ -23,8 +23,11 @@ public class HomeControllerTests
     private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
     private readonly Mock<ITenantContext> _mockTenantContext;
     private readonly Mock<IInvoiceActionService> _mockInvoiceActionSvc;
+    private readonly Mock<IConfigurationService> _mockConfigSvc;
+    private readonly Mock<IBatchActionService> _mockBatchActionSvc;
     private readonly Mock<ILogger<HomeController>> _mockLogger;
     private readonly DatabaseService _dbSvc;
+    private readonly IBatchChangeNotifier _batchNotifier;
     private readonly HomeController _controller;
 
     private const string UserId = "user-id-123";
@@ -40,11 +43,16 @@ public class HomeControllerTests
         _mockOrgConfigSvc      = new Mock<IOrgConfigService>();
         _mockTenantContext     = new Mock<ITenantContext>();
         _mockInvoiceActionSvc  = new Mock<IInvoiceActionService>();
+        _mockConfigSvc         = new Mock<IConfigurationService>();
+        _mockBatchActionSvc    = new Mock<IBatchActionService>();
         _mockLogger            = new Mock<ILogger<HomeController>>();
+        _batchNotifier         = new BatchChangeNotifier();
 
         _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
         _mockOrgConfigSvc.Setup(s => s.LoadAsync(OrgName))
                          .ReturnsAsync(new OrgConfig { MinConfidenceThreshold = 0.8 });
+        _mockConfigSvc.Setup(s => s.LoadSettingsAsync(null))
+                      .ReturnsAsync(new AppSettings());
 
         // DatabaseService is a concrete class; construct it with a mock factory.
         var mockContextFactory = new Mock<IDbContextFactory<KOCRDbContext>>();
@@ -59,6 +67,9 @@ public class HomeControllerTests
             _mockOrgConfigSvc.Object,
             _mockTenantContext.Object,
             _mockInvoiceActionSvc.Object,
+            _mockConfigSvc.Object,
+            _mockBatchActionSvc.Object,
+            _batchNotifier,
             _mockLogger.Object);
     }
 

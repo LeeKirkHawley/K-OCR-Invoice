@@ -203,6 +203,66 @@ public class EmailService : IEmailService
         _logger.LogInformation("Organization deletion notification sent to {Email} for org '{Org}'.", toEmail, organizationName);
     }
 
+    public async Task SendBatchSoftDeletedNotificationAsync(
+        string toEmail,
+        string toName,
+        string organizationName,
+        string batchName,
+        int retentionDays)
+    {
+        var settings = await _configService.LoadSettingsAsync();
+        var email = settings.Email ?? new EmailSettings();
+
+        if (string.IsNullOrWhiteSpace(email.SmtpHost))
+            throw new InvalidOperationException("SMTP host is not configured.");
+
+        var subject = $"K-OCR — Batch '{WebUtility.HtmlEncode(batchName)}' marked for deletion";
+        var body = $"""
+            <html><body style="font-family:sans-serif;color:#222">
+              <h2>Batch Marked for Deletion</h2>
+              <p>Hi {WebUtility.HtmlEncode(toName)},</p>
+              <p>The batch <strong>{WebUtility.HtmlEncode(batchName)}</strong> in your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been marked for deletion.</p>
+              <p>The batch and all its associated files will be permanently deleted in <strong>{retentionDays} day(s)</strong>.</p>
+              <p style="color:#666;font-size:0.9em;margin-top:24px">
+                If this was a mistake, please contact your system administrator before the retention period expires.
+              </p>
+            </body></html>
+            """;
+
+        var message = BuildMessage(email, toEmail, toName, subject, body);
+        await SendAsync(email, message);
+        _logger.LogInformation("Batch soft-delete notification sent to {Email} for batch '{Batch}' in org '{Org}'.", toEmail, batchName, organizationName);
+    }
+
+    public async Task SendBatchHardDeletedNotificationAsync(
+        string toEmail,
+        string toName,
+        string organizationName,
+        string batchName)
+    {
+        var settings = await _configService.LoadSettingsAsync();
+        var email = settings.Email ?? new EmailSettings();
+
+        if (string.IsNullOrWhiteSpace(email.SmtpHost))
+            throw new InvalidOperationException("SMTP host is not configured.");
+
+        var subject = $"K-OCR — Batch '{WebUtility.HtmlEncode(batchName)}' permanently deleted";
+        var body = $"""
+            <html><body style="font-family:sans-serif;color:#222">
+              <h2>Batch Permanently Deleted</h2>
+              <p>Hi {WebUtility.HtmlEncode(toName)},</p>
+              <p>The batch <strong>{WebUtility.HtmlEncode(batchName)}</strong> in your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been permanently deleted, including all associated files and data.</p>
+              <p style="color:#666;font-size:0.9em;margin-top:24px">
+                If you did not expect this, please contact your system administrator.
+              </p>
+            </body></html>
+            """;
+
+        var message = BuildMessage(email, toEmail, toName, subject, body);
+        await SendAsync(email, message);
+        _logger.LogInformation("Batch hard-delete notification sent to {Email} for batch '{Batch}' in org '{Org}'.", toEmail, batchName, organizationName);
+    }
+
     private async Task SendAsync(EmailSettings email, MimeMessage message)
     {
         // SecureSocketOptions.Auto: port 465 → SslOnConnect, port 587/25 → StartTls

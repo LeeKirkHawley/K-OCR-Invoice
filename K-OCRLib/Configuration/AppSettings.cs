@@ -9,6 +9,14 @@ public class AppSettings
     public string? DefaultStartFolder { get; set; }
     public int MaxConcurrentRequests { get; set; } = 3;
     public int GuestAccountRetentionDays { get; set; } = 7;
+    public int DeletedBatchRetentionDays { get; set; } = 14;
+
+    /// <summary>
+    /// When true, a batch is soft-deleted automatically after it is successfully exported
+    /// (JSON or Excel). The batch is moved to the deleted queue and purged after
+    /// <see cref="DeletedBatchRetentionDays"/> days.
+    /// </summary>
+    public bool SoftDeleteBatchOnExport { get; set; } = true;
     public double? SplitterLeftPaneWidth { get; set; }
     public double? SplitterCenterPaneWidth { get; set; }
     public double? SplitterRightPaneWidth { get; set; }

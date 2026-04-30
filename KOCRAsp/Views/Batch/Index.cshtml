@@ -64,13 +64,27 @@
                 {
                     foreach (var batch in Model.OrderByDescending(b => b.CreatedAtUtc))
                     {
-                        var isLocked = batch.LockedByUserId != null;
-                        <tr id="row-@batch.BatchId">
+                        var isLocked  = batch.LockedByUserId != null;
+                        var isDeleted = batch.IsMarkedForDeletion;
+                        <tr id="row-@batch.BatchId" class="@(isDeleted ? "text-muted" : "")">
                             <td>@batch.BatchNumber</td>
-                            <td>@batch.Name</td>
+                            <td>
+                                @if (isDeleted)
+                                {
+                                    <s>@batch.Name</s>
+                                }
+                                else
+                                {
+                                    @batch.Name
+                                }
+                            </td>
                             <td>@batch.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
                             <td>
-                                @if (isLocked)
+                                @if (isDeleted)
+                                {
+                                    <span class="badge bg-secondary">🗑️ Pending Deletion</span>
+                                }
+                                else if (isLocked)
                                 {
                                     <span class="badge bg-warning text-dark">🔒 Locked</span>
                                 }
@@ -80,25 +94,28 @@
                                 }
                             </td>
                             <td class="text-end">
-                                <div class="btn-group btn-group-sm" role="group">
-                                    @if (isLocked)
-                                    {
-                                        <button class="btn btn-outline-secondary"
-                                                onclick="unlockBatch(@batch.BatchId, this)"
-                                                title="Release lock">🔓 Unlock</button>
-                                    }
-                                    else
-                                    {
-                                        <button class="btn btn-outline-warning"
-                                                onclick="lockBatch(@batch.BatchId, this)"
-                                                title="Acquire lock">🔒 Lock</button>
-                                    }
-                                    <a class="btn btn-outline-primary"
-                                       href="/?batchId=@batch.BatchId" title="Open in viewer">Open</a>
-                                    <button class="btn btn-outline-danger"
-                                            onclick="deleteBatch(@batch.BatchId, this)"
-                                            title="Delete batch">Delete</button>
-                                </div>
+                                @if (!isDeleted)
+                                {
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        @if (isLocked)
+                                        {
+                                            <button class="btn btn-outline-secondary"
+                                                    onclick="unlockBatch(@batch.BatchId, this)"
+                                                    title="Release lock">🔓 Unlock</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-outline-warning"
+                                                    onclick="lockBatch(@batch.BatchId, this)"
+                                                    title="Acquire lock">🔒 Lock</button>
+                                        }
+                                        <a class="btn btn-outline-primary"
+                                           href="/?batchId=@batch.BatchId" title="Open in viewer">Open</a>
+                                        <button class="btn btn-outline-danger"
+                                                onclick="deleteBatch(@batch.BatchId, this)"
+                                                title="Delete batch">Delete</button>
+                                    </div>
+                                }
                             </td>
                         </tr>
                     }

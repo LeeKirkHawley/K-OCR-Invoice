@@ -33,6 +33,7 @@ public sealed class GuestAccountCleanupService : BackgroundService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var superAdminService = scope.ServiceProvider.GetRequiredService<ISuperAdminService>();
+        var batchCleanupService = scope.ServiceProvider.GetRequiredService<IBatchCleanupService>();
 
         var markedCount = 0;
         var retentionDays = _configuration.GetValue<int>("GuestAccountRetentionDays");
@@ -49,20 +50,34 @@ public sealed class GuestAccountCleanupService : BackgroundService
                     markedCount, retentionDays, string.Join(", ", markedAccounts));
         }
 
-        var hardDeletedCount = 0;
+        var hardDeletedOrgCount = 0;
         var softDeleteRetentionDays = _configuration.GetValue<int>("DeletedOrgRetentionDays");
         if (softDeleteRetentionDays > 0)
         {
-            hardDeletedCount = await superAdminService.CleanupExpiredSoftDeletesAsync(
+            hardDeletedOrgCount = await superAdminService.CleanupExpiredSoftDeletesAsync(
                 TimeSpan.FromDays(softDeleteRetentionDays),
                 cancellationToken);
 
-            if (hardDeletedCount > 0)
+            if (hardDeletedOrgCount > 0)
                 _logger.LogInformation(
                     "Hard-deleted {Count} soft-deleted org(s) (retention: {Days} day(s)).",
-                    hardDeletedCount, softDeleteRetentionDays);
+                    hardDeletedOrgCount, softDeleteRetentionDays);
         }
 
-        return markedCount + hardDeletedCount;
+        var hardDeletedBatchCount = 0;
+        var batchRetentionDays = _configuration.GetValue<int>("DeletedBatchRetentionDays");
+        if (batchRetentionDays > 0)
+        {
+            hardDeletedBatchCount = await batchCleanupService.CleanupExpiredBatchesAsync(
+                TimeSpan.FromDays(batchRetentionDays),
+                cancellationToken);
+
+            if (hardDeletedBatchCount > 0)
+                _logger.LogInformation(
+                    "Hard-deleted {Count} soft-deleted batch(es) (retention: {Days} day(s)).",
+                    hardDeletedBatchCount, batchRetentionDays);
+        }
+
+        return markedCount + hardDeletedOrgCount + hardDeletedBatchCount;
     }
 }

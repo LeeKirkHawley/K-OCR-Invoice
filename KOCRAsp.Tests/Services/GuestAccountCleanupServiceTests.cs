@@ -15,15 +15,26 @@ public class GuestAccountCleanupServiceTests
         superAdminService
             .Setup(service => service.CleanupExpiredGuestAccountsAsync(TimeSpan.FromDays(15), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IReadOnlyList<string>)new List<string> { "Guest-1", "Guest-2" });
+        superAdminService
+            .Setup(service => service.CleanupExpiredSoftDeletesAsync(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
+
+        var batchCleanupService = new Mock<IBatchCleanupService>();
+        batchCleanupService
+            .Setup(service => service.CleanupExpiredBatchesAsync(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
 
         using var provider = new ServiceCollection()
             .AddScoped(_ => superAdminService.Object)
+            .AddScoped(_ => batchCleanupService.Object)
             .BuildServiceProvider();
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["GuestAccountRetentionDays"] = "15"
+                ["GuestAccountRetentionDays"] = "15",
+                ["DeletedOrgRetentionDays"] = "14",
+                ["DeletedBatchRetentionDays"] = "14"
             })
             .Build();
 
@@ -45,14 +56,19 @@ public class GuestAccountCleanupServiceTests
     {
         var superAdminService = new Mock<ISuperAdminService>();
 
+        var batchCleanupService = new Mock<IBatchCleanupService>();
+
         using var provider = new ServiceCollection()
             .AddScoped(_ => superAdminService.Object)
+            .AddScoped(_ => batchCleanupService.Object)
             .BuildServiceProvider();
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["GuestAccountRetentionDays"] = "0"
+                ["GuestAccountRetentionDays"] = "0",
+                ["DeletedOrgRetentionDays"] = "0",
+                ["DeletedBatchRetentionDays"] = "0"
             })
             .Build();
 
@@ -66,6 +82,9 @@ public class GuestAccountCleanupServiceTests
         Assert.Equal(0, count);
         superAdminService.Verify(
             service => service.CleanupExpiredGuestAccountsAsync(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        batchCleanupService.Verify(
+            service => service.CleanupExpiredBatchesAsync(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 }

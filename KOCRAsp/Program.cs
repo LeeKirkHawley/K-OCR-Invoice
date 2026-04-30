@@ -114,6 +114,13 @@ builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
 builder.Services.AddScoped<ISuperAdminDataService, SuperAdminDataService>();
 builder.Services.AddScoped<IOrganizationAdminService, OrganizationAdminService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IBatchNotificationService, BatchNotificationService>();
+builder.Services.AddScoped<IBatchCleanupService>(sp =>
+    new BatchCleanupService(
+        sp.GetRequiredService<IPathService>(),
+        databaseSettings,
+        sp.GetRequiredService<IBatchNotificationService>(),
+        sp.GetRequiredService<ILogger<BatchCleanupService>>()));
 builder.Services.AddHostedService<GuestAccountCleanupService>();
 
 // Singletons: no DB dependency

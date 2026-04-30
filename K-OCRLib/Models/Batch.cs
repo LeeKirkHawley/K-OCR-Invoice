@@ -27,5 +27,8 @@ namespace K_OCR.Models
 
         [Required, MaxLength(450)]
         public string CreatedByUserId { get; set; } = string.Empty;
+
+        /// <summary>When the batch was marked for deletion (soft-delete). Null if not deleted.</summary>
+        public DateTime? MarkedForDeletionAtUtc { get; set; }
     }
 }

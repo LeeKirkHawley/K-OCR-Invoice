@@ -14,18 +14,21 @@ public class BatchController : Controller
     private readonly IBatchService _batchSvc;
     private readonly IBatchChangeNotifier _batchNotifier;
     private readonly IBatchActionService _batchActionSvc;
+    private readonly IBatchNotificationService _batchNotificationSvc;
     private readonly ILogger<BatchController> _logger;
 
     public BatchController(
         IBatchService batchSvc,
         IBatchChangeNotifier batchNotifier,
         IBatchActionService batchActionSvc,
+        IBatchNotificationService batchNotificationSvc,
         ILogger<BatchController> logger)
     {
-        _batchSvc       = batchSvc;
-        _batchNotifier  = batchNotifier;
-        _batchActionSvc = batchActionSvc;
-        _logger         = logger;
+        _batchSvc             = batchSvc;
+        _batchNotifier        = batchNotifier;
+        _batchActionSvc       = batchActionSvc;
+        _batchNotificationSvc = batchNotificationSvc;
+        _logger               = logger;
     }
 
     [HttpGet]
@@ -133,6 +136,14 @@ public class BatchController : Controller
                 BatchActionTypes.Deleted, batchName,
                 User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
                 User.Identity?.Name ?? string.Empty);
+            try
+            {
+                await _batchNotificationSvc.NotifyBatchSoftDeletedAsync(orgId, batchName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send soft-delete notification for batch '{Batch}' in org {OrgId}", batchName, orgId);
+            }
             return Json(new { success = true });
         }
         catch (Exception ex)

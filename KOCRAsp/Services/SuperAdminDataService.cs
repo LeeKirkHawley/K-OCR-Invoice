@@ -49,6 +49,7 @@ internal sealed class SuperAdminDataService : ISuperAdminDataService
                     .Options;
 
                 await using var db = new KOCRDbContext(opts);
+                await db.Database.MigrateAsync();
 
                 var batches = await db.Batches.ToListAsync();
                 foreach (var b in batches)

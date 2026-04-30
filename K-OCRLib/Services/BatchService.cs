@@ -52,14 +52,15 @@ public class BatchService : IBatchService, IAsyncDisposable
             .OrderBy(b => b.BatchNumber)
             .Select(b => new BatchSummary
             {
-                BatchId           = b.BatchId,
-                Name              = b.Name,
-                BatchNumber       = b.BatchNumber,
-                FolderPath        = b.FolderPath,
-                LockedByUserId    = b.LockedByUserId,
-                LockAcquiredAtUtc = b.LockAcquiredAtUtc,
-                CreatedAtUtc      = b.CreatedAtUtc,
-                CreatedByUserId   = b.CreatedByUserId,
+                BatchId                = b.BatchId,
+                Name                   = b.Name,
+                BatchNumber            = b.BatchNumber,
+                FolderPath             = b.FolderPath,
+                LockedByUserId         = b.LockedByUserId,
+                LockAcquiredAtUtc      = b.LockAcquiredAtUtc,
+                CreatedAtUtc           = b.CreatedAtUtc,
+                CreatedByUserId        = b.CreatedByUserId,
+                MarkedForDeletionAtUtc = b.MarkedForDeletionAtUtc,
             })
             .ToArrayAsync();
     }
@@ -161,26 +162,56 @@ public class BatchService : IBatchService, IAsyncDisposable
 
         var batchName = batch.Name;
 
-        // Delete files from disk
-        var invoicesPath  = Path.Combine(batch.FolderPath, "Invoices");
-        var artifactsPath = Path.Combine(batch.FolderPath, "Artifacts");
-        if (Directory.Exists(invoicesPath))
-            Directory.Delete(invoicesPath, recursive: true);
-        if (Directory.Exists(artifactsPath))
-            Directory.Delete(artifactsPath, recursive: true);
-        if (Directory.Exists(batch.FolderPath)
-            && !Directory.EnumerateFileSystemEntries(batch.FolderPath).Any())
-            Directory.Delete(batch.FolderPath, recursive: false);
+        // Mark for deletion (soft delete) instead of hard delete
+        batch.MarkedForDeletionAtUtc = DateTime.UtcNow;
+        Db.Batches.Update(batch);
+        await Db.SaveChangesAsync();
 
-        // Delete invoice rows (cascade will handle items/fields)
-        var invoiceRows = await Db.Invoices.Where(i => i.BatchId == batchId).ToListAsync();
-        Db.Invoices.RemoveRange(invoiceRows);
+        return batchName;
+    }
 
-        // Remove the batch row (UserBatchSession.BatchId SET NULL by FK)
-        Db.Batches.Remove(batch);
+    /// <summary>
+    /// Hard-deletes all batches whose MarkedForDeletionAtUtc has passed the retention window.
+    /// Returns count of batches hard-deleted.
+    /// </summary>
+    public async Task<int> CleanupExpiredBatchesAsync(TimeSpan retention)
+    {
+        var cutoff = DateTime.UtcNow - retention;
+        var expiredBatches = await Db.Batches
+            .Where(b => b.MarkedForDeletionAtUtc != null && b.MarkedForDeletionAtUtc <= cutoff)
+            .ToListAsync();
+
+        foreach (var batch in expiredBatches)
+        {
+            // Delete files from disk
+            var invoicesPath = Path.Combine(batch.FolderPath, "Invoices");
+            var artifactsPath = Path.Combine(batch.FolderPath, "Artifacts");
+            try
+            {
+                if (Directory.Exists(invoicesPath))
+                    Directory.Delete(invoicesPath, recursive: true);
+                if (Directory.Exists(artifactsPath))
+                    Directory.Delete(artifactsPath, recursive: true);
+                if (Directory.Exists(batch.FolderPath)
+                    && !Directory.EnumerateFileSystemEntries(batch.FolderPath).Any())
+                    Directory.Delete(batch.FolderPath, recursive: false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete batch files for {BatchId} ({BatchName}) at {FolderPath}",
+                    batch.BatchId, batch.Name, batch.FolderPath);
+            }
+
+            // Delete invoice rows (cascade will handle items/fields)
+            var invoiceRows = await Db.Invoices.Where(i => i.BatchId == batch.BatchId).ToListAsync();
+            Db.Invoices.RemoveRange(invoiceRows);
+
+            // Remove the batch row (UserBatchSession.BatchId SET NULL by FK)
+            Db.Batches.Remove(batch);
+        }
 
         await Db.SaveChangesAsync();
-        return batchName;
+        return expiredBatches.Count;
     }
 
     public async Task<AcquireLockResult> TryAcquireBatchLockAsync(int batchId, string userId)

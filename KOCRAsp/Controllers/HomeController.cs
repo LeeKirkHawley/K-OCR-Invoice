@@ -26,6 +26,10 @@ public class HomeController : Controller
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly ITenantContext _tenantContext;
     private readonly IInvoiceActionService _invoiceActionSvc;
+    private readonly IConfigurationService _configSvc;
+    private readonly IBatchActionService _batchActionSvc;
+    private readonly IBatchChangeNotifier _batchNotifier;
+    private readonly IBatchNotificationService _batchNotificationSvc;
     private readonly ILogger<HomeController> _logger;
 
     private static readonly string[] InvoiceExtensions =
@@ -40,17 +44,25 @@ public class HomeController : Controller
         IOrgConfigService orgConfigSvc,
         ITenantContext tenantContext,
         IInvoiceActionService invoiceActionSvc,
+        IConfigurationService configSvc,
+        IBatchActionService batchActionSvc,
+        IBatchChangeNotifier batchNotifier,
+        IBatchNotificationService batchNotificationSvc,
         ILogger<HomeController> logger)
     {
-        _ocrSvc           = ocrSvc;
-        _batchSvc         = batchSvc;
-        _fileSvc          = fileSvc;
-        _exportSvc        = exportSvc;
-        _dbSvc            = dbSvc;
-        _orgConfigSvc     = orgConfigSvc;
-        _tenantContext    = tenantContext;
-        _invoiceActionSvc = invoiceActionSvc;
-        _logger           = logger;
+        _ocrSvc               = ocrSvc;
+        _batchSvc             = batchSvc;
+        _fileSvc              = fileSvc;
+        _exportSvc            = exportSvc;
+        _dbSvc                = dbSvc;
+        _orgConfigSvc         = orgConfigSvc;
+        _tenantContext        = tenantContext;
+        _invoiceActionSvc     = invoiceActionSvc;
+        _configSvc            = configSvc;
+        _batchActionSvc       = batchActionSvc;
+        _batchNotifier        = batchNotifier;
+        _batchNotificationSvc = batchNotificationSvc;
+        _logger               = logger;
     }
 
     [HttpGet]
@@ -520,7 +532,8 @@ public class HomeController : Controller
         var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
         if (!int.TryParse(currentBatchIdStr, out int batchId)) return null;
         var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
-        return batches.FirstOrDefault(b => b.BatchId == batchId);
+        var batch = batches.FirstOrDefault(b => b.BatchId == batchId);
+        return batch is { IsMarkedForDeletion: false } ? batch : null;
     }
 
     private async Task<List<(string FileName, InvoiceDto Invoice)>> LoadBatchInvoicesAsync(BatchSummary batch)
@@ -537,7 +550,8 @@ public class HomeController : Controller
         return result;
     }
 
-    [HttpGet]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> ExportBatchJson()
     {
         if (User.IsInRole(RoleNames.SuperAdmin))
@@ -556,10 +570,13 @@ public class HomeController : Controller
         foreach (var (fn, _) in invoices)
             await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Exported, fn, batch.Name, orgUser);
 
+        await TrySoftDeleteBatchAfterExportAsync(batch);
+
         return File(bytes, "application/json", $"{name}.json");
     }
 
-    [HttpGet]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> ExportBatchExcel()
     {
         if (User.IsInRole(RoleNames.SuperAdmin))
@@ -634,8 +651,46 @@ public class HomeController : Controller
         foreach (var (fn, _) in invoices)
             await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Exported, fn, batch.Name, orgUser);
 
+        await TrySoftDeleteBatchAfterExportAsync(batch);
+
         return File(ms.ToArray(),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"{name}.xlsx");
+    }
+
+    private async Task TrySoftDeleteBatchAfterExportAsync(BatchSummary batch)
+    {
+        try
+        {
+            var settings = await _configSvc.LoadSettingsAsync();
+            if (!settings.SoftDeleteBatchOnExport)
+                return;
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            await _batchSvc.DeleteBatchAsync(batch.BatchId, userId);
+
+            HttpContext.Session.Remove("CurrentBatchId");
+
+            var orgId  = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+            var orgName = User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty;
+            var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            _batchNotifier.Notify(orgId);
+            await _batchActionSvc.LogAsync(
+                BatchActionTypes.MarkedForDeletion, batch.Name, orgName, orgUser);
+            try
+            {
+                await _batchNotificationSvc.NotifyBatchSoftDeletedAsync(orgId, batch.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send soft-delete notification for batch '{Batch}' in org {OrgId}", batch.Name, orgId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Post-export soft-delete failed for batch {BatchId} ({BatchName}); export file was still returned.",
+                batch.BatchId, batch.Name);
+        }
     }
 }

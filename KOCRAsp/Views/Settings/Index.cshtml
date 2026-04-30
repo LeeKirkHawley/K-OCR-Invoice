@@ -60,11 +60,33 @@
                     <input asp-for="MaxConcurrentRequests" type="number"
                            class="form-control" min="1" max="20" />
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Retention -->
+    <div class="card mb-3">
+        <div class="card-header"><strong>Retention</strong></div>
+        <div class="card-body">
+            <div class="row g-3">
                 <div class="col-md-4">
                     <label asp-for="GuestAccountRetentionDays" class="form-label">Guest Account Retention (Days)</label>
                     <input asp-for="GuestAccountRetentionDays" type="number"
                            class="form-control" min="0" />
                     <div class="form-text">Expired guest accounts are revoked and deleted automatically. Set to 0 to disable cleanup.</div>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="DeletedBatchRetentionDays" class="form-label">Batch Retention (Days)</label>
+                    <input asp-for="DeletedBatchRetentionDays" type="number"
+                           class="form-control" min="1" />
+                    <div class="form-text">Soft-deleted batches are permanently removed after this many days.</div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check">
+                        <input asp-for="SoftDeleteBatchOnExport" type="checkbox" class="form-check-input" />
+                        <label asp-for="SoftDeleteBatchOnExport" class="form-check-label">Soft-delete batch after export</label>
+                    </div>
+                    <div class="form-text">When enabled, a batch is automatically soft-deleted after a successful JSON or Excel export.</div>
                 </div>
             </div>
         </div>

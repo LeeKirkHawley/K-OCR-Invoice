@@ -12,6 +12,9 @@ public class BatchSummary
     public DateTime? LockAcquiredAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public string CreatedByUserId { get; set; } = string.Empty;
+    public DateTime? MarkedForDeletionAtUtc { get; set; }
+
+    public bool IsMarkedForDeletion => MarkedForDeletionAtUtc.HasValue;
 }
 
 public class BatchDetail : BatchSummary
