@@ -16,6 +16,7 @@ tessdata/
 *.userosscache
 *.sln.docstates
 *.db
+startup-diag.txt
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
