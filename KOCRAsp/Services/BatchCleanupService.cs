@@ -1,5 +1,6 @@
 using K_OCR.Configuration;
 using K_OCR.Data;
+using K_OCR.Models;
 using K_OCR.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -109,6 +110,25 @@ public class BatchCleanupService : IBatchCleanupService
 
                 foreach (var batchName in deletedBatchNames)
                 {
+                    try
+                    {
+                        context.BatchActions.Add(new BatchAction
+                        {
+                            Action       = BatchActionTypes.HardDeleted,
+                            TimestampUtc = DateTime.UtcNow,
+                            Organization = orgName,
+                            OrgUser      = "System",
+                            BatchName    = batchName,
+                        });
+                        await context.SaveChangesAsync(cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        context.ChangeTracker.Clear();
+                        _logger.LogError(ex, "Failed to log hard-delete action for batch '{Batch}' in org '{OrgName}'",
+                            batchName, orgName);
+                    }
+
                     try
                     {
                         await _batchNotificationSvc.NotifyBatchHardDeletedAsync(orgName, batchName, cancellationToken);

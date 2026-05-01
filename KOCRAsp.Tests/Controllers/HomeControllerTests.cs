@@ -25,6 +25,7 @@ public class HomeControllerTests
     private readonly Mock<IInvoiceActionService> _mockInvoiceActionSvc;
     private readonly Mock<IConfigurationService> _mockConfigSvc;
     private readonly Mock<IBatchActionService> _mockBatchActionSvc;
+    private readonly Mock<IBatchNotificationService> _mockBatchNotificationSvc;
     private readonly Mock<ILogger<HomeController>> _mockLogger;
     private readonly DatabaseService _dbSvc;
     private readonly IBatchChangeNotifier _batchNotifier;
@@ -45,6 +46,7 @@ public class HomeControllerTests
         _mockInvoiceActionSvc  = new Mock<IInvoiceActionService>();
         _mockConfigSvc         = new Mock<IConfigurationService>();
         _mockBatchActionSvc    = new Mock<IBatchActionService>();
+        _mockBatchNotificationSvc = new Mock<IBatchNotificationService>();
         _mockLogger            = new Mock<ILogger<HomeController>>();
         _batchNotifier         = new BatchChangeNotifier();
 
@@ -70,6 +72,7 @@ public class HomeControllerTests
             _mockConfigSvc.Object,
             _mockBatchActionSvc.Object,
             _batchNotifier,
+            _mockBatchNotificationSvc.Object,
             _mockLogger.Object);
     }
 

@@ -156,7 +156,11 @@
                             <td>@b.FileCount</td>
                             <td>@b.ValidatedCount</td>
                             <td>
-                                @if (b.LockedByUserId != null)
+                                @if (b.MarkedForDeletionAtUtc.HasValue)
+                                {
+                                    <span class="badge bg-danger">Marked For Deletion</span>
+                                }
+                                else if (b.LockedByUserId != null)
                                 {
                                     <span class="badge bg-warning text-dark">Locked</span>
                                 }

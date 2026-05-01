@@ -59,18 +59,19 @@ internal sealed class SuperAdminDataService : ISuperAdminDataService
 
                     results.Add(new BatchDetail
                     {
-                        BatchId           = b.BatchId,
-                        OrganizationId    = org.Id,
-                        OrganizationName  = org.Name,
-                        Name              = b.Name,
-                        BatchNumber       = b.BatchNumber,
-                        FolderPath        = b.FolderPath,
-                        LockedByUserId    = b.LockedByUserId,
-                        LockAcquiredAtUtc = b.LockAcquiredAtUtc,
-                        CreatedAtUtc      = b.CreatedAtUtc,
-                        CreatedByUserId   = b.CreatedByUserId,
-                        FileCount         = fileCount,
-                        ValidatedCount    = validatedCount,
+                        BatchId                = b.BatchId,
+                        OrganizationId         = org.Id,
+                        OrganizationName       = org.Name,
+                        Name                   = b.Name,
+                        BatchNumber            = b.BatchNumber,
+                        FolderPath             = b.FolderPath,
+                        LockedByUserId         = b.LockedByUserId,
+                        LockAcquiredAtUtc      = b.LockAcquiredAtUtc,
+                        CreatedAtUtc           = b.CreatedAtUtc,
+                        CreatedByUserId        = b.CreatedByUserId,
+                        MarkedForDeletionAtUtc = b.MarkedForDeletionAtUtc,
+                        FileCount              = fileCount,
+                        ValidatedCount         = validatedCount,
                     });
                 }
             }

@@ -1,4 +1,0 @@
-- When a new batch is created, the dropdown is not re-populated.
-- GuestX should be able to login without using email.
-- The Validation panels should have the same header etc. color scheme as the image window
-- The Upload Files button should be disabled until a Batch is selected.
