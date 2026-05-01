@@ -28,7 +28,7 @@ public class BatchNotificationService : IBatchNotificationService
 
     public async Task NotifyBatchSoftDeletedAsync(string orgId, string batchName, CancellationToken ct = default)
     {
-        var retentionDays = _configuration.GetValue<int>("DeletedBatchRetentionDays");
+        var retentionDays = _configuration.GetValue<int>("DeletedBatchRetentionDays", 14);
 
         var admins = await _appDb.Users
             .Where(u => u.OrganizationId == orgId && u.IsOrganizationAdmin)
