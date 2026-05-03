@@ -57,9 +57,18 @@ builder.Services.AddScoped<IDbContextFactory<KOCRDbContext>>(sp =>
         databaseSettings));
 builder.Services.AddScoped<DatabaseService>();
 
-// Central identity database
+// Central identity database — provider selected by DatabaseSettings.Provider
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(databaseSettings.IdentityConnectionString ?? "Data Source=kocr.db"));
+{
+    var cs = databaseSettings.ConnectionString ?? "Data Source=kocr.db";
+    if (databaseSettings.Provider?.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) == true)
+        options.UseSqlServer(cs);
+    else
+        options.UseSqlite(cs);
+
+    if (databaseSettings.EnableDetailedErrors)       options.EnableDetailedErrors();
+    if (databaseSettings.EnableSensitiveDataLogging) options.EnableSensitiveDataLogging();
+});
 
 // ── ASP.NET Identity ─────────────────────────────────────────────────────────
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>

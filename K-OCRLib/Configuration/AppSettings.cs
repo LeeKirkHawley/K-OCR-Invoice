@@ -38,12 +38,16 @@ public class DatabaseSettings
     /// <summary>
     /// Connection string for the central identity database (ApplicationDbContext).
     /// Per-organisation OCR databases are routed automatically from the org folder path.
+    /// Defaults to SQLite for safe local fallback; set Provider to "SqlServer" in appsettings
+    /// and supply a SQL Server connection string for production use.
     /// </summary>
-    public string? IdentityConnectionString { get; set; } = "Data Source=kocr.db";
-    public string? Provider { get; set; } = "SQLite"; // SQLite, SQLServer, PostgreSQL, etc.
+    public string? ConnectionString { get; set; } = "Data Source=kocr.db";
+
+    /// <summary>Database provider for the identity database: "SQLite" (default) or "SqlServer".</summary>
+    public string? Provider { get; set; } = "SQLite";
+
     public bool EnableSensitiveDataLogging { get; set; } = false;
     public bool EnableDetailedErrors { get; set; } = false;
-    public bool UseWalMode { get; set; } = false; // WAL mode can cause issues on external drives
 }
 
 public class EmailSettings

@@ -13,7 +13,7 @@ namespace K_OCR.Database
     /// Retained for reference only; do not call from application code.
     /// </summary>
     [Obsolete("Use the KOCRDbContext factory in Program.cs (per-org routing). " +
-              "ApplicationDbContext is configured directly in Program.cs using IdentityConnectionString.")]
+              "ApplicationDbContext is configured directly in Program.cs using DatabaseSettings.ConnectionString.")]
     public static class DatabaseConfiguration
     {
         public static IServiceCollection AddKOCRDatabase(
@@ -25,10 +25,10 @@ namespace K_OCR.Database
 
             services.AddDbContext<KOCRDbContext>(options =>
             {
-                var sqliteOptions = new SqliteConnectionStringBuilder(databaseSettings.IdentityConnectionString ?? "Data Source=kocr.db");
+                var sqliteOptions = new SqliteConnectionStringBuilder(databaseSettings.ConnectionString ?? "Data Source=kocr.db");
 
-                if (!databaseSettings.UseWalMode)
-                    sqliteOptions.Cache = SqliteCacheMode.Shared;
+                // Per-org databases use SQLite shared-cache mode (WAL is not used for org DBs).
+                sqliteOptions.Cache = SqliteCacheMode.Shared;
 
                 options.UseSqlite(sqliteOptions.ToString());
 
