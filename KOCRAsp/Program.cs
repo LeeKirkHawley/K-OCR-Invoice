@@ -193,7 +193,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// ── HTTP pipeline ─────────────────────────────────────────────────────────────
+// ── HTTP pipeline ────────────────────────────────────────────────────────────
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/error");
