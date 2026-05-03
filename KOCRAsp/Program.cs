@@ -60,11 +60,19 @@ builder.Services.AddScoped<DatabaseService>();
 // Central identity database — provider selected by DatabaseSettings.Provider
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    var cs = databaseSettings.ConnectionString ?? "Data Source=kocr.db";
+    var cs = databaseSettings.ConnectionString;
     if (databaseSettings.Provider?.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) == true)
+    {
+        if (string.IsNullOrWhiteSpace(cs))
+            throw new InvalidOperationException(
+                "Database:ConnectionString must be set when Provider is SqlServer. " +
+                "Ensure ASPNETCORE_ENVIRONMENT is set correctly and appsettings.Production.json is deployed.");
         options.UseSqlServer(cs);
+    }
     else
-        options.UseSqlite(cs);
+    {
+        options.UseSqlite(cs ?? "Data Source=kocr.db");
+    }
 
     if (databaseSettings.EnableDetailedErrors)       options.EnableDetailedErrors();
     if (databaseSettings.EnableSensitiveDataLogging) options.EnableSensitiveDataLogging();

@@ -28,9 +28,11 @@ jobs:
       # Azure credentials are carried over from the checked-in appsettings.json.
       # Note: move AzureCognitiveServicesKey to a GitHub Secret when the repo goes public.
       - name: Write production appsettings.json
+        env:
+          DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
         run: |
           python3 << 'EOF'
-          import json
+          import json, os
 
           with open('./KOCRAsp/appsettings.json') as f:
               base = json.load(f)
@@ -67,8 +69,8 @@ jobs:
               "FromName":                  email.get("FromName", "K-OCR")
             },
             "Database": {
-              "IdentityConnectionString": "Data Source=KOCRBase/kocr.db",
-              "UseWalMode": False,
+              "Provider": "SqlServer",
+              "ConnectionString": os.environ["DB_CONNECTION_STRING"],
               "EnableSensitiveDataLogging": False,
               "EnableDetailedErrors": False
             }
