@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
+
 // TEMPORARY STARTUP DIAGNOSTIC — remove after debugging
 try { File.WriteAllText("startup-diag.txt", $"Managed code started at {DateTime.UtcNow:O}"); } catch { }
 
