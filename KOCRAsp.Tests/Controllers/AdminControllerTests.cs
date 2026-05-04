@@ -15,7 +15,7 @@ public class AdminControllerTests
     private readonly Mock<ISuperAdminService> _mockSuperAdminSvc;
     private readonly Mock<ISuperAdminDataService> _mockDataSvc;
     private readonly Mock<ILogger<AdminController>> _mockLogger;
-    private readonly Mock<IConfiguration> _mockConfig;
+    private readonly IConfiguration _configuration;
     private readonly AdminController _controller;
 
     public AdminControllerTests()
@@ -23,12 +23,18 @@ public class AdminControllerTests
         _mockSuperAdminSvc = new Mock<ISuperAdminService>();
         _mockDataSvc = new Mock<ISuperAdminDataService>();
         _mockLogger = new Mock<ILogger<AdminController>>();
-        _mockConfig = new Mock<IConfiguration>();   
+
+        _configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["DeletedOrgRetentionDays"] = "14"
+            })
+            .Build();
 
         _controller = new AdminController(
             _mockSuperAdminSvc.Object,
             _mockDataSvc.Object,
-            _mockConfig.Object,
+            _configuration,
             _mockLogger.Object);
 
         _controller.ControllerContext = ControllerTestHelper.CreateControllerContext(role: "SuperAdmin");

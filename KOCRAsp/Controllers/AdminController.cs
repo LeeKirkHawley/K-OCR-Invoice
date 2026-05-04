@@ -31,7 +31,17 @@ public class AdminController : Controller
         var orgs = await _superAdminSvc.ListOrganizationsAsync();
         var batches = await _dataSvc.GetAllBatchesAcrossOrgsAsync();
         ViewBag.Batches = batches;
-        ViewBag.DeletedOrgRetentionDays = _configuration.GetValue<int>("DeletedOrgRetentionDays", 14);
+        int value = 0;
+        try
+        {
+            value = _configuration.GetValue<int>("DeletedOrgRetentionDays");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to read DeletedOrgRetentionDays from configuration. Defaulting to 14 days.");
+            value = 14; // default fallback
+        }
+        ViewBag.DeletedOrgRetentionDays = value;
         return View(orgs);
     }
 
