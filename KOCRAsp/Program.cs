@@ -79,6 +79,19 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     if (databaseSettings.EnableSensitiveDataLogging) options.EnableSensitiveDataLogging();
 });
 
+// Reporting (master) DB — same provider and connection as the identity DB
+builder.Services.AddDbContext<ReportingDbContext>(options =>
+{
+    var cs = databaseSettings.ConnectionString;
+    if (databaseSettings.Provider?.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) == true)
+        options.UseSqlServer(cs!);
+    else
+        options.UseSqlite(cs ?? "Data Source=kocr-reporting.db");
+
+    if (databaseSettings.EnableDetailedErrors)       options.EnableDetailedErrors();
+    if (databaseSettings.EnableSensitiveDataLogging) options.EnableSensitiveDataLogging();
+});
+
 // ── ASP.NET Identity ─────────────────────────────────────────────────────────
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
@@ -126,6 +139,7 @@ builder.Services.AddMemoryCache();
 
 // ── Application services ─────────────────────────────────────────────────────
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IReportingService, ReportingService>();
 builder.Services.AddScoped<IBatchActionService, BatchActionService>();
 builder.Services.AddScoped<IInvoiceActionService, InvoiceActionService>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
@@ -190,6 +204,21 @@ using (var scope = app.Services.CreateScope())
     catch (Exception ex)
     {
         Log.Logger.Fatal(ex, "Fatal error during Identity initialization");
+        throw;
+    }
+}
+
+// ── Reporting database ────────────────────────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var reportingDb = scope.ServiceProvider.GetRequiredService<ReportingDbContext>();
+        reportingDb.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        Log.Logger.Fatal(ex, "Fatal error during Reporting DB initialization");
         throw;
     }
 }

@@ -9,14 +9,10 @@ using System.Threading.Tasks;
 
 namespace K_OCR.Services
 {
-    public class DatabaseService : IAsyncDisposable
+    public class DatabaseService
     {
         private readonly IDbContextFactory<KOCRDbContext> _contextFactory;
         private readonly ILogger<DatabaseService> _logger;
-
-        // Lazily created on first DB call; never created for super-admin code paths.
-        private KOCRDbContext? _context;
-        private KOCRDbContext Context => _context ??= _contextFactory.CreateDbContext();
 
         public DatabaseService(IDbContextFactory<KOCRDbContext> contextFactory, ILogger<DatabaseService> logger)
         {
@@ -24,19 +20,13 @@ namespace K_OCR.Services
             _logger = logger;
         }
 
-        public async ValueTask DisposeAsync()
-        {
-            if (_context is not null)
-                await _context.DisposeAsync();
-        }
-
         // Database health check
         public async Task<bool> IsDatabaseAvailableAsync()
         {
             try
             {
-                // Simple query to test database connectivity
-                await Context.Invoices.FirstOrDefaultAsync(f => false);
+                await using var ctx = _contextFactory.CreateDbContext();
+                await ctx.Invoices.FirstOrDefaultAsync(f => false);
                 return true;
             }
             catch (Exception ex)
@@ -49,7 +39,8 @@ namespace K_OCR.Services
         // Invoice operations
         public async Task<Invoice?> GetInvoiceByIdAsync(int id)
         {
-            return await Context.Invoices
+            await using var ctx = _contextFactory.CreateDbContext();
+            return await ctx.Invoices
                 .Include(i => i.Items)
                 .Include(i => i.DocumentFields)
                 .FirstOrDefaultAsync(i => i.Id == id);
@@ -57,7 +48,8 @@ namespace K_OCR.Services
 
         public async Task<Invoice?> GetInvoiceByFilePathAsync(string filePath)
         {
-            return await Context.Invoices
+            await using var ctx = _contextFactory.CreateDbContext();
+            return await ctx.Invoices
                 .Include(i => i.Items)
                 .Include(i => i.DocumentFields)
                 .FirstOrDefaultAsync(i => i.FilePath == filePath);
@@ -65,7 +57,8 @@ namespace K_OCR.Services
 
         public async Task<List<Invoice>> GetAllInvoicesAsync()
         {
-            return await Context.Invoices
+            await using var ctx = _contextFactory.CreateDbContext();
+            return await ctx.Invoices
                 .Include(i => i.Items)
                 .Include(i => i.DocumentFields)
                 .OrderByDescending(i => i.UploadedAtUtc)
@@ -76,16 +69,17 @@ namespace K_OCR.Services
         {
             try
             {
+                await using var ctx = _contextFactory.CreateDbContext();
                 if (invoice.Id == 0)
                 {
-                    Context.Invoices.Add(invoice);
+                    ctx.Invoices.Add(invoice);
                 }
                 else
                 {
-                    Context.Invoices.Update(invoice);
+                    ctx.Invoices.Update(invoice);
                 }
 
-                await Context.SaveChangesAsync();
+                await ctx.SaveChangesAsync();
                 _logger.LogInformation($"Invoice {invoice.FilePath} saved to database with ID: {invoice.Id}");
                 return invoice;
             }
@@ -100,11 +94,12 @@ namespace K_OCR.Services
         {
             try
             {
-                var invoice = await Context.Invoices.FindAsync(id);
+                await using var ctx = _contextFactory.CreateDbContext();
+                var invoice = await ctx.Invoices.FindAsync(id);
                 if (invoice != null)
                 {
-                    Context.Invoices.Remove(invoice);
-                    await Context.SaveChangesAsync();
+                    ctx.Invoices.Remove(invoice);
+                    await ctx.SaveChangesAsync();
                     _logger.LogInformation($"Invoice deleted with ID: {id}");
                     return true;
                 }
@@ -125,8 +120,9 @@ namespace K_OCR.Services
         {
             try
             {
-                Context.Invoices.RemoveRange(Context.Invoices);
-                await Context.SaveChangesAsync();
+                await using var ctx = _contextFactory.CreateDbContext();
+                ctx.Invoices.RemoveRange(ctx.Invoices);
+                await ctx.SaveChangesAsync();
                 _logger.LogInformation("All invoice data cleared from database.");
             }
             catch (Exception ex)
@@ -142,7 +138,8 @@ namespace K_OCR.Services
         /// </summary>
         public async Task<List<Invoice>> GetInvoicesByBatchAsync(int batchId)
         {
-            return await Context.Invoices
+            await using var ctx = _contextFactory.CreateDbContext();
+            return await ctx.Invoices
                 .Where(i => i.BatchId == batchId)
                 .Select(i => new Invoice
                 {

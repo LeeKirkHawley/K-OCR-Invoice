@@ -30,6 +30,7 @@ public class HomeController : Controller
     private readonly IBatchActionService _batchActionSvc;
     private readonly IBatchChangeNotifier _batchNotifier;
     private readonly IBatchNotificationService _batchNotificationSvc;
+    private readonly IReportingService _reportingSvc;
     private readonly ILogger<HomeController> _logger;
 
     private static readonly string[] InvoiceExtensions =
@@ -48,6 +49,7 @@ public class HomeController : Controller
         IBatchActionService batchActionSvc,
         IBatchChangeNotifier batchNotifier,
         IBatchNotificationService batchNotificationSvc,
+        IReportingService reportingSvc,
         ILogger<HomeController> logger)
     {
         _ocrSvc               = ocrSvc;
@@ -62,6 +64,7 @@ public class HomeController : Controller
         _batchActionSvc       = batchActionSvc;
         _batchNotifier        = batchNotifier;
         _batchNotificationSvc = batchNotificationSvc;
+        _reportingSvc         = reportingSvc;
         _logger               = logger;
     }
 
@@ -188,6 +191,30 @@ public class HomeController : Controller
             var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             var batch   = await GetCurrentBatchAsync();
             await _invoiceActionSvc.LogAsync(InvoiceActionTypes.OCRed, Path.GetFileName(filePath), batch?.Name ?? string.Empty, orgUser, invoice?.PageCount ?? 1);
+
+            try
+            {
+                await _reportingSvc.RecordBatchOcrEventAsync(new BatchOcrReportRequest
+                {
+                    OrganizationId   = _tenantContext.OrganizationId ?? string.Empty,
+                    OrganizationName = _tenantContext.OrganizationName ?? string.Empty,
+                    BatchName        = batch?.Name ?? string.Empty,
+                    Invoices         =
+                    [
+                        new OcrInvoiceResult
+                        {
+                            FileName     = Path.GetFileName(filePath),
+                            OcrSucceeded = result.IsSuccess,
+                            OcrService   = "Azure",
+                            PageCount    = invoice?.PageCount ?? 1,
+                        }
+                    ],
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to record single-file OCR report for {FilePath}.", filePath);
+            }
 
             return Json(new { success = true, invoice });
         }

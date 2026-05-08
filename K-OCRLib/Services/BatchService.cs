@@ -14,6 +14,8 @@ public class BatchService : IBatchService, IAsyncDisposable
     private readonly IPathService _pathService;
     private readonly IInvoiceProcessingService _processingService;
     private readonly IFileService _fileService;
+    private readonly ITenantContext _tenantContext;
+    private readonly IReportingService _reportingService;
     private readonly ILogger<BatchService> _logger;
 
     private KOCRDbContext? _db;
@@ -24,12 +26,16 @@ public class BatchService : IBatchService, IAsyncDisposable
         IPathService pathService,
         IInvoiceProcessingService processingService,
         IFileService fileService,
+        ITenantContext tenantContext,
+        IReportingService reportingService,
         ILogger<BatchService> logger)
     {
         _dbFactory          = dbFactory;
         _pathService        = pathService;
         _processingService  = processingService;
         _fileService        = fileService;
+        _tenantContext      = tenantContext;
+        _reportingService   = reportingService;
         _logger             = logger;
     }
 
@@ -317,11 +323,36 @@ public class BatchService : IBatchService, IAsyncDisposable
 
         _logger.LogInformation("TriggerOcrAsync: processing {Count} file(s) in batch {BatchId}.", filePaths.Count, batchId);
 
-        await _processingService.ProcessBatchAsync(
+        var results = await _processingService.ProcessBatchAsync(
             filePaths,
             useCache: true,
             artifactsDirectory: artifactsDir,
             minConfidenceThreshold: minConfidenceThreshold);
+
+        try
+        {
+            var orgName = _tenantContext.OrganizationName ?? string.Empty;
+            var invoiceResults = results.Select(kvp => new OcrInvoiceResult
+            {
+                FileName     = Path.GetFileName(kvp.Key),
+                OcrSucceeded = kvp.Value.IsSuccess,
+                OcrService   = "Azure",
+                PageCount    = kvp.Value.Context?.Layout?.FirstOrDefault()?.PageCount ?? 1,
+            }).ToList();
+
+            await _reportingService.RecordBatchOcrEventAsync(new BatchOcrReportRequest
+            {
+                OrganizationId   = _tenantContext.OrganizationId ?? string.Empty,
+                OrganizationName = orgName,
+                BatchName        = batch.Name,
+                Invoices         = invoiceResults,
+            });
+        }
+        catch (Exception ex)
+        {
+            // Reporting failure must never abort the OCR operation.
+            _logger.LogError(ex, "Failed to record OCR batch report for batch {BatchId}.", batchId);
+        }
     }
 
     public async Task<UploadResult> UploadFilesToBatchAsync(
