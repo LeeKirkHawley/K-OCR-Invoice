@@ -1,5 +1,7 @@
 using K_OCR.Data;
 using K_OCR.Security;
+using KOCRAsp.Data;
+using KOCRAsp.Identity;
 using KOCRAsp.Security;
 
 namespace KOCRAsp.Services;
@@ -12,8 +14,16 @@ namespace KOCRAsp.Services;
 internal sealed class TenantContext : ITenantContext
 {
     private readonly IHttpContextAccessor _http;
+    private readonly ApplicationDbContext _db;
 
-    public TenantContext(IHttpContextAccessor http) => _http = http;
+    private Organization? _org;
+    private bool _orgLoaded;
+
+    public TenantContext(IHttpContextAccessor http, ApplicationDbContext db)
+    {
+        _http = http;
+        _db   = db;
+    }
 
     private System.Security.Claims.ClaimsPrincipal? User => _http.HttpContext?.User;
 
@@ -25,4 +35,17 @@ internal sealed class TenantContext : ITenantContext
 
     public bool IsSuperAdmin =>
         User?.IsInRole(RoleNames.SuperAdmin) ?? false;
+
+    public string? StripeCustomerId => GetOrg()?.StripeCustomerId;
+
+    public string StripeSubscriptionStatus => GetOrg()?.StripeSubscriptionStatus ?? "none";
+
+    private Organization? GetOrg()
+    {
+        if (_orgLoaded) return _org;
+        _orgLoaded = true;
+        if (OrganizationId is not null)
+            _org = _db.Organizations.Find(OrganizationId);
+        return _org;
+    }
 }

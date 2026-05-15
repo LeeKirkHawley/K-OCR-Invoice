@@ -173,6 +173,9 @@ builder.Services.AddSingleton<IPathService, PathService>();
 // ── Batch change notifications (Rx.NET) ──────────────────────────────────────
 builder.Services.AddSingleton<IBatchChangeNotifier, BatchChangeNotifier>();
 
+// ── Stripe ───────────────────────────────────────────────────────────────────
+builder.Services.AddScoped<IStripeUsageService, StripeUsageService>();
+
 // Scoped: transitively depend on DatabaseService
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IAzureService, AzureService>();

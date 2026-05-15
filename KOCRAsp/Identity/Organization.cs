@@ -20,4 +20,11 @@ public class Organization
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public ICollection<ApplicationUser> Users { get; set; } = new List<ApplicationUser>();
+
+    // Stripe billing
+    public string? StripeCustomerId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
+    public string? StripeSubscriptionItemId { get; set; }
+    public string? StripePriceId { get; set; }
+    public string StripeSubscriptionStatus { get; set; } = "none";
 }

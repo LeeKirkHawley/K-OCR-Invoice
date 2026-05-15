@@ -31,6 +31,7 @@ public class HomeController : Controller
     private readonly IBatchChangeNotifier _batchNotifier;
     private readonly IBatchNotificationService _batchNotificationSvc;
     private readonly IReportingService _reportingSvc;
+    private readonly IStripeUsageService _stripeUsage;
     private readonly ILogger<HomeController> _logger;
 
     private static readonly string[] InvoiceExtensions =
@@ -50,6 +51,7 @@ public class HomeController : Controller
         IBatchChangeNotifier batchNotifier,
         IBatchNotificationService batchNotificationSvc,
         IReportingService reportingSvc,
+        IStripeUsageService stripeUsage,
         ILogger<HomeController> logger)
     {
         _ocrSvc               = ocrSvc;
@@ -65,6 +67,7 @@ public class HomeController : Controller
         _batchNotifier        = batchNotifier;
         _batchNotificationSvc = batchNotificationSvc;
         _reportingSvc         = reportingSvc;
+        _stripeUsage          = stripeUsage;
         _logger               = logger;
     }
 
@@ -167,6 +170,9 @@ public class HomeController : Controller
         if (string.IsNullOrWhiteSpace(filePath))
             return Json(new { success = false, error = "File path required." });
 
+        if (!_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
+            return Json(new { success = false, error = "OCR is unavailable: subscription inactive." });
+
         try
         {
             // File lives at {batchDir}/Invoices/{name} — artifacts belong at {batchDir}/Artifacts
@@ -215,6 +221,9 @@ public class HomeController : Controller
             {
                 _logger.LogError(ex, "Failed to record single-file OCR report for {FilePath}.", filePath);
             }
+
+            if (_tenantContext.StripeCustomerId is { } customerId)
+                await _stripeUsage.ReportUsageAsync(customerId, invoice?.PageCount ?? 1);
 
             return Json(new { success = true, invoice });
         }
