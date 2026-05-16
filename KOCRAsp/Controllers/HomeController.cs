@@ -170,7 +170,8 @@ public class HomeController : Controller
         if (string.IsNullOrWhiteSpace(filePath))
             return Json(new { success = false, error = "File path required." });
 
-        if (!_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
+        if (!_tenantContext.IsGuestOrganization &&
+            !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
             return Json(new { success = false, error = "OCR is unavailable: subscription inactive." });
 
         try

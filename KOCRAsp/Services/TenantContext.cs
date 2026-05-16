@@ -40,6 +40,8 @@ internal sealed class TenantContext : ITenantContext
 
     public string StripeSubscriptionStatus => GetOrg()?.StripeSubscriptionStatus ?? "none";
 
+    public bool IsGuestOrganization => GetOrg()?.IsGuestOrganization ?? false;
+
     private Organization? GetOrg()
     {
         if (_orgLoaded) return _org;
