@@ -223,8 +223,11 @@ public class HomeController : Controller
                 _logger.LogError(ex, "Failed to record single-file OCR report for {FilePath}.", filePath);
             }
 
-            if (_tenantContext.StripeCustomerId is { } customerId)
-                await _stripeUsage.ReportUsageAsync(customerId, invoice?.PageCount ?? 1);
+            if (!_tenantContext.IsGuestOrganization && _tenantContext.StripeCustomerId is { } customerId)
+            {
+                var idempotencyKey = $"file-{Path.GetFileName(filePath)}-{Guid.NewGuid():N}";
+                await _stripeUsage.ReportUsageAsync(customerId, invoice?.PageCount ?? 1, idempotencyKey);
+            }
 
             return Json(new { success = true, invoice });
         }

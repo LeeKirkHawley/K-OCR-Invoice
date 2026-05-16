@@ -223,9 +223,7 @@
 
     // ── Batch OCR ───────────────────────────────────────────────
     document.getElementById('batchOcrBtn').addEventListener('click', async function () {
-        setButtonLoading(this, true);
         showOcrOverlay();
-        const btn = this;
         try {
             const fd = new FormData();
             const result = await postForm('/home/batchocr', fd);
@@ -239,8 +237,6 @@
         } catch (err) {
             hideOcrOverlay();
             showToast('Batch OCR error: ' + err.message, 'error');
-        } finally {
-            setButtonLoading(btn, false);
         }
     });
 
@@ -343,6 +339,7 @@
     function renderRunOcrButton(filePath) {
         const container = document.getElementById('invoiceFields');
         const btn = document.createElement('button');
+        btn.id = 'runOcrBtn';
         btn.className = 'btn btn-sm btn-primary mt-2';
         btn.textContent = '▶ Run OCR';
         btn.onclick = () => runOcrOnFile(filePath, btn);
@@ -525,10 +522,21 @@
 
     function showOcrOverlay() {
         document.getElementById('ocrOverlay').classList.add('active');
+        setOcrButtonsDisabled(true);
     }
 
     function hideOcrOverlay() {
         document.getElementById('ocrOverlay').classList.remove('active');
+        setOcrButtonsDisabled(false);
+    }
+
+    function setOcrButtonsDisabled(disabled) {
+        for (const id of ['batchOcrBtn', 'runOcrBtn']) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            el.disabled = disabled;
+            el.classList.toggle('disabled', disabled);
+        }
     }
 
     function updateValidationStatusLabel(inv) {

@@ -45,6 +45,7 @@
                     <th>Users</th>
                     <th>Created</th>
                     <th>Status</th>
+                    <th>Stripe</th>
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
@@ -93,6 +94,28 @@
                                     </span>
                                 }
                             </td>
+                            <td id="org-stripe-@org.OrganizationId">
+                                @if (org.IsGuestOrganization)
+                                {
+                                    <span class="text-muted small">N/A</span>
+                                }
+                                else if (org.StripeCustomerId != null)
+                                {
+                                    var stripeBadgeClass = org.StripeSubscriptionStatus switch
+                                    {
+                                        "active"   => "bg-success",
+                                        "trialing" => "bg-info text-dark",
+                                        "past_due" => "bg-warning text-dark",
+                                        "canceled" => "bg-secondary",
+                                        _          => "bg-secondary"
+                                    };
+                                    <span class="badge @stripeBadgeClass">@org.StripeSubscriptionStatus</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark">Not provisioned</span>
+                                }
+                            </td>
                             <td class="text-end" id="org-actions-@org.OrganizationId">
                                 @if (isPendingDeletion)
                                 {
@@ -103,6 +126,11 @@
                                 }
                                 else if (org.IsActive)
                                 {
+                                    if (!org.IsGuestOrganization && org.StripeCustomerId == null)
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary me-1"
+                                                onclick="provisionStripe('@org.OrganizationId', this)">Provision Stripe</button>
+                                    }
                                     <button class="btn btn-sm btn-outline-warning"
                                             onclick="revokeOrg('@org.OrganizationId', this)">Revoke</button>
                                 }
@@ -342,6 +370,27 @@
         const input = document.getElementById('setupLinkInput');
         input.select();
         navigator.clipboard.writeText(input.value).then(() => showToast('Copied!'));
+    }
+
+    async function provisionStripe(orgId, btn) {
+        const priceId = prompt('Enter a Stripe Price ID to use (leave blank to use the configured default):');
+        if (priceId === null) return; // cancelled
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/provisionstripe', { orgId, priceId });
+            if (result.success) {
+                document.getElementById('org-stripe-' + orgId).innerHTML =
+                    '<span class="badge bg-success">active</span>';
+                btn.remove();
+                showToast('Stripe subscription provisioned.');
+            } else {
+                showToast(result.error ?? 'Provision failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
     }
 </script>
 }

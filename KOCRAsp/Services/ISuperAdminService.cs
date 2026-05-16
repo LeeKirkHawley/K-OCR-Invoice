@@ -20,4 +20,6 @@ public interface ISuperAdminService
     Task<bool> IsOrgMarkedForDeletionAsync(string organizationId, CancellationToken cancellationToken = default);
     Task<int> PeekNextGuestNumberAsync();
     Task<GuestLoginResult> CreateGuestAsync(string email);
+    /// <summary>Creates a Stripe Customer + Subscription for the given org and saves the IDs.</summary>
+    Task ProvisionStripeAsync(string organizationId, string? priceId = null);
 }

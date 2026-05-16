@@ -10,6 +10,10 @@ public class BatchService : IBatchService, IAsyncDisposable
     private static readonly string[] InvoiceExtensions =
         [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"];
 
+    // Prevents concurrent OCR runs on the same batch from the same process.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, SemaphoreSlim>
+        _ocrLocks = new();
+
     private readonly IDbContextFactory<KOCRDbContext> _dbFactory;
     private readonly IPathService _pathService;
     private readonly IInvoiceProcessingService _processingService;
@@ -305,66 +309,87 @@ public class BatchService : IBatchService, IAsyncDisposable
             !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
             throw new InvalidOperationException("OCR is unavailable: subscription inactive.");
 
-        var batch = await Db.Batches.FindAsync(batchId);
-        if (batch is null)
+        var batchLock = _ocrLocks.GetOrAdd(batchId, _ => new SemaphoreSlim(1, 1));
+        if (!await batchLock.WaitAsync(0))
         {
-            _logger.LogWarning("TriggerOcrAsync: batch {BatchId} not found.", batchId);
+            _logger.LogWarning("TriggerOcrAsync: batch {BatchId} is already being processed; ignoring duplicate request.", batchId);
             return;
         }
 
-        var invoicesDir  = Path.Combine(batch.FolderPath, "Invoices");
-        var artifactsDir = Path.Combine(batch.FolderPath, "Artifacts");
-
-        if (!Directory.Exists(invoicesDir))
-        {
-            _logger.LogWarning("TriggerOcrAsync: invoices folder does not exist for batch {BatchId}.", batchId);
-            return;
-        }
-
-        var filePaths = _fileService.LoadFiles(invoicesDir, InvoiceExtensions).ToList();
-        if (filePaths.Count == 0)
-        {
-            _logger.LogInformation("TriggerOcrAsync: no files to process in batch {BatchId}.", batchId);
-            return;
-        }
-
-        _logger.LogInformation("TriggerOcrAsync: processing {Count} file(s) in batch {BatchId}.", filePaths.Count, batchId);
-
-        var results = await _processingService.ProcessBatchAsync(
-            filePaths,
-            useCache: true,
-            artifactsDirectory: artifactsDir,
-            minConfidenceThreshold: minConfidenceThreshold);
-
-        var orgName        = _tenantContext.OrganizationName ?? string.Empty;
-        var invoiceResults = results.Select(kvp => new OcrInvoiceResult
-        {
-            FileName     = Path.GetFileName(kvp.Key),
-            OcrSucceeded = kvp.Value.IsSuccess,
-            OcrService   = "Azure",
-            PageCount    = kvp.Value.Context?.Layout?.FirstOrDefault()?.PageCount ?? 1,
-        }).ToList();
+        // Unique key for this OCR run — used as Stripe idempotency key so a duplicate
+        // concurrent or retried request cannot double-charge the customer.
+        var ocrRunId = Guid.NewGuid().ToString("N");
 
         try
         {
-            await _reportingService.RecordBatchOcrEventAsync(new BatchOcrReportRequest
+            var batch = await Db.Batches.FindAsync(batchId);
+            if (batch is null)
             {
-                OrganizationId   = _tenantContext.OrganizationId ?? string.Empty,
-                OrganizationName = orgName,
-                BatchName        = batch.Name,
-                Invoices         = invoiceResults,
-            });
-        }
-        catch (Exception ex)
-        {
-            // Reporting failure must never abort the OCR operation.
-            _logger.LogError(ex, "Failed to record OCR batch report for batch {BatchId}.", batchId);
-        }
+                _logger.LogWarning("TriggerOcrAsync: batch {BatchId} not found.", batchId);
+                return;
+            }
 
-        if (_tenantContext.StripeCustomerId is { } customerId)
+            var invoicesDir  = Path.Combine(batch.FolderPath, "Invoices");
+            var artifactsDir = Path.Combine(batch.FolderPath, "Artifacts");
+
+            if (!Directory.Exists(invoicesDir))
+            {
+                _logger.LogWarning("TriggerOcrAsync: invoices folder does not exist for batch {BatchId}.", batchId);
+                return;
+            }
+
+            var filePaths = _fileService.LoadFiles(invoicesDir, InvoiceExtensions).ToList();
+            if (filePaths.Count == 0)
+            {
+                _logger.LogInformation("TriggerOcrAsync: no files to process in batch {BatchId}.", batchId);
+                return;
+            }
+
+            _logger.LogInformation("TriggerOcrAsync: processing {Count} file(s) in batch {BatchId}.", filePaths.Count, batchId);
+
+            var results = await _processingService.ProcessBatchAsync(
+                filePaths,
+                useCache: true,
+                artifactsDirectory: artifactsDir,
+                minConfidenceThreshold: minConfidenceThreshold);
+
+            var orgName        = _tenantContext.OrganizationName ?? string.Empty;
+            var invoiceResults = results.Select(kvp => new OcrInvoiceResult
+            {
+                FileName     = Path.GetFileName(kvp.Key),
+                OcrSucceeded = kvp.Value.IsSuccess,
+                OcrService   = "Azure",
+                PageCount    = kvp.Value.Context?.Layout?.FirstOrDefault()?.PageCount ?? 1,
+            }).ToList();
+
+            try
+            {
+                await _reportingService.RecordBatchOcrEventAsync(new BatchOcrReportRequest
+                {
+                    OrganizationId   = _tenantContext.OrganizationId ?? string.Empty,
+                    OrganizationName = orgName,
+                    BatchName        = batch.Name,
+                    Invoices         = invoiceResults,
+                });
+            }
+            catch (Exception ex)
+            {
+                // Reporting failure must never abort the OCR operation.
+                _logger.LogError(ex, "Failed to record OCR batch report for batch {BatchId}.", batchId);
+            }
+
+            if (!_tenantContext.IsGuestOrganization && _tenantContext.StripeCustomerId is { } customerId)
+            {
+                var totalPages = invoiceResults.Sum(r => r.PageCount);
+                var idempotencyKey = $"batch-{batchId}-{ocrRunId}";
+                await _stripeUsage.ReportUsageAsync(customerId, totalPages, idempotencyKey);
+            }
+        }
+        finally
         {
-            var totalPages = invoiceResults.Sum(r => r.PageCount);
-            await _stripeUsage.ReportUsageAsync(customerId, totalPages);
+            batchLock.Release();
+            // Clean up the lock entry once released so the dictionary doesn't grow unbounded.
+            _ocrLocks.TryRemove(batchId, out _);
         }
     }
 

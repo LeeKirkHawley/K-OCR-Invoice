@@ -18,13 +18,12 @@ public class StripeUsageService : IStripeUsageService
             ?? throw new InvalidOperationException("Stripe:MeterEventName is not configured.");
     }
 
-    public async Task ReportUsageAsync(string stripeCustomerId, long pageCount)
+    public async Task ReportUsageAsync(string stripeCustomerId, long pageCount, string? idempotencyKey = null)
     {
         try
         {
             var service = new MeterEventService();
-            // Apparently, CreateAsync actually sends the event to Stripe.
-            await service.CreateAsync(new MeterEventCreateOptions
+            var options = new MeterEventCreateOptions
             {
                 EventName = _meterEventName,
                 Payload   = new Dictionary<string, string>
@@ -32,7 +31,11 @@ public class StripeUsageService : IStripeUsageService
                     ["stripe_customer_id"] = stripeCustomerId,
                     ["value"]              = pageCount.ToString(),
                 },
-            });
+            };
+            if (!string.IsNullOrEmpty(idempotencyKey))
+                options.Identifier = idempotencyKey;
+
+            await service.CreateAsync(options);
 
             _logger.LogInformation("Reported {PageCount} page(s) to Stripe meter for customer {CustomerId}.",
                 pageCount, stripeCustomerId);

@@ -24,6 +24,7 @@ public class SuperAdminService : ISuperAdminService
     private readonly IConfiguration _configuration;
     private readonly IPathService _pathService;
     private readonly IOrgConfigService _orgConfigSvc;
+    private readonly IStripeProvisioningService? _stripeProvisioning;
     private readonly ILogger<SuperAdminService> _logger;
 
     public SuperAdminService(
@@ -35,6 +36,7 @@ public class SuperAdminService : ISuperAdminService
         IConfiguration configuration,
         IPathService pathService,
         IOrgConfigService orgConfigSvc,
+        IStripeProvisioningService? stripeProvisioning,
         ILogger<SuperAdminService> logger)
     {
         _dbContext = dbContext;
@@ -45,6 +47,7 @@ public class SuperAdminService : ISuperAdminService
         _configuration = configuration;
         _pathService = pathService;
         _orgConfigSvc = orgConfigSvc;
+        _stripeProvisioning = stripeProvisioning;
         _logger = logger;
     }
 
@@ -60,7 +63,9 @@ public class SuperAdminService : ISuperAdminService
                 IsGuestOrganization = org.IsGuestOrganization,
                 MarkedForDeletionAtUtc = org.MarkedForDeletionAtUtc,
                 CreatedAtUtc = org.CreatedAtUtc,
-                UserCount = org.Users.Count
+                UserCount = org.Users.Count,
+                StripeCustomerId = org.StripeCustomerId,
+                StripeSubscriptionStatus = org.StripeSubscriptionStatus,
             })
             .ToArrayAsync();
     }
@@ -221,6 +226,10 @@ public class SuperAdminService : ISuperAdminService
             throw new InvalidOperationException(
                 $"Organization folder was created but the database could not be migrated at \"{orgDbPath}\": {ex.Message}");
         }
+
+        // Auto-provision Stripe Customer + Subscription (non-fatal — admin can retry manually)
+        if (!organization.IsGuestOrganization)
+            await TryProvisionStripeAsync(organization, priceId: null);
 
         _logger.LogInformation(
             "Organization created: OrgId={OrgId}, OrgName={OrgName}, IsGuestOrganization={IsGuestOrganization}, AdminUserId={AdminUserId}, AdminEmail={AdminEmail}.",
@@ -637,5 +646,55 @@ public class SuperAdminService : ISuperAdminService
             user.FullName,
             user.OrganizationId,
             reason);
+    }
+
+    public async Task ProvisionStripeAsync(string organizationId, string? priceId = null)
+    {
+        var organization = await _dbContext.Organizations
+            .FirstOrDefaultAsync(o => o.Id == organizationId)
+            ?? throw new KeyNotFoundException("Organization not found.");
+
+        if (organization.IsGuestOrganization)
+            throw new InvalidOperationException("Guest organizations are not billed via Stripe.");
+
+        if (_stripeProvisioning is null)
+            throw new InvalidOperationException("Stripe provisioning service is not configured.");
+
+        var resolvedPriceId = priceId
+            ?? _configuration["Stripe:DefaultPriceId"]
+            ?? throw new InvalidOperationException("No Stripe price ID provided and Stripe:DefaultPriceId is not configured.");
+
+        var customerId = organization.StripeCustomerId;
+        if (customerId is null)
+        {
+            customerId = await _stripeProvisioning.CreateCustomerAsync(organization.Id, organization.Name);
+            organization.StripeCustomerId = customerId;
+            await _dbContext.SaveChangesAsync();
+        }
+
+        var sub = await _stripeProvisioning.CreateSubscriptionAsync(customerId, resolvedPriceId);
+        organization.StripeSubscriptionId = sub.SubscriptionId;
+        organization.StripeSubscriptionItemId = sub.SubscriptionItemId;
+        organization.StripePriceId = resolvedPriceId;
+        organization.StripeSubscriptionStatus = sub.Status;
+        await _dbContext.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Stripe subscription {SubId} provisioned for org {OrgId} (status={Status}).",
+            sub.SubscriptionId, organizationId, sub.Status);
+    }
+
+    private async Task TryProvisionStripeAsync(Organization organization, string? priceId)
+    {
+        try
+        {
+            await ProvisionStripeAsync(organization.Id, priceId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Auto-provisioning Stripe failed for org {OrgId}. Admin can retry manually from the Admin console.",
+                organization.Id);
+        }
     }
 }

@@ -175,6 +175,7 @@ builder.Services.AddSingleton<IBatchChangeNotifier, BatchChangeNotifier>();
 
 // ── Stripe ───────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IStripeUsageService, StripeUsageService>();
+builder.Services.AddScoped<IStripeProvisioningService, StripeProvisioningService>();
 
 // Scoped: transitively depend on DatabaseService
 builder.Services.AddScoped<IFileService, FileService>();

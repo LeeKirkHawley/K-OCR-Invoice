@@ -179,6 +179,22 @@ public class AdminController : Controller
         return Json(batches);
     }
 
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> ProvisionStripe([FromBody] ProvisionStripeRequest request)
+    {
+        try
+        {
+            await _superAdminSvc.ProvisionStripeAsync(request.OrgId, string.IsNullOrWhiteSpace(request.PriceId) ? null : request.PriceId);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ProvisionStripe failed for {OrgId}", request.OrgId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
     // Helper — resolves lazily to avoid circular ctor dependency
     private Task<UserManagerContext?> GetUserManagerAsync(string userId)
     {

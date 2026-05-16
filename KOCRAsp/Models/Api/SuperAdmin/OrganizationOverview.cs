@@ -12,4 +12,6 @@ public class OrganizationOverview
     public DateTime? MarkedForDeletionAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public int UserCount { get; set; }
+    public string? StripeCustomerId { get; set; }
+    public string StripeSubscriptionStatus { get; set; } = "none";
 }
