@@ -27,4 +27,21 @@ public interface ITenantContext
     /// When <c>true</c> the user is a super-admin with no org scope.
     /// </summary>
     bool IsSuperAdmin { get; }
+
+    /// <summary>
+    /// The Stripe customer ID for the org, used to report metered usage via Billing Meter events.
+    /// <c>null</c> if billing has not been provisioned.
+    /// </summary>
+    string? StripeCustomerId { get; }
+
+    /// <summary>
+    /// The cached Stripe subscription status for the org (e.g. "active", "past_due", "canceled").
+    /// Defaults to "none" when billing has not been provisioned.
+    /// </summary>
+    string StripeSubscriptionStatus { get; }
+
+    /// <summary>
+    /// When <c>true</c> the org is a guest organisation and is exempt from Stripe billing.
+    /// </summary>
+    bool IsGuestOrganization { get; }
 }

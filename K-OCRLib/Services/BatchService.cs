@@ -16,6 +16,7 @@ public class BatchService : IBatchService, IAsyncDisposable
     private readonly IFileService _fileService;
     private readonly ITenantContext _tenantContext;
     private readonly IReportingService _reportingService;
+    private readonly IStripeUsageService _stripeUsage;
     private readonly ILogger<BatchService> _logger;
 
     private KOCRDbContext? _db;
@@ -28,6 +29,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         IFileService fileService,
         ITenantContext tenantContext,
         IReportingService reportingService,
+        IStripeUsageService stripeUsage,
         ILogger<BatchService> logger)
     {
         _dbFactory          = dbFactory;
@@ -36,6 +38,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         _fileService        = fileService;
         _tenantContext      = tenantContext;
         _reportingService   = reportingService;
+        _stripeUsage        = stripeUsage;
         _logger             = logger;
     }
 
@@ -298,6 +301,10 @@ public class BatchService : IBatchService, IAsyncDisposable
 
     public async Task TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null)
     {
+        if (!_tenantContext.IsGuestOrganization &&
+            !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
+            throw new InvalidOperationException("OCR is unavailable: subscription inactive.");
+
         var batch = await Db.Batches.FindAsync(batchId);
         if (batch is null)
         {
@@ -329,17 +336,17 @@ public class BatchService : IBatchService, IAsyncDisposable
             artifactsDirectory: artifactsDir,
             minConfidenceThreshold: minConfidenceThreshold);
 
+        var orgName        = _tenantContext.OrganizationName ?? string.Empty;
+        var invoiceResults = results.Select(kvp => new OcrInvoiceResult
+        {
+            FileName     = Path.GetFileName(kvp.Key),
+            OcrSucceeded = kvp.Value.IsSuccess,
+            OcrService   = "Azure",
+            PageCount    = kvp.Value.Context?.Layout?.FirstOrDefault()?.PageCount ?? 1,
+        }).ToList();
+
         try
         {
-            var orgName = _tenantContext.OrganizationName ?? string.Empty;
-            var invoiceResults = results.Select(kvp => new OcrInvoiceResult
-            {
-                FileName     = Path.GetFileName(kvp.Key),
-                OcrSucceeded = kvp.Value.IsSuccess,
-                OcrService   = "Azure",
-                PageCount    = kvp.Value.Context?.Layout?.FirstOrDefault()?.PageCount ?? 1,
-            }).ToList();
-
             await _reportingService.RecordBatchOcrEventAsync(new BatchOcrReportRequest
             {
                 OrganizationId   = _tenantContext.OrganizationId ?? string.Empty,
@@ -352,6 +359,12 @@ public class BatchService : IBatchService, IAsyncDisposable
         {
             // Reporting failure must never abort the OCR operation.
             _logger.LogError(ex, "Failed to record OCR batch report for batch {BatchId}.", batchId);
+        }
+
+        if (_tenantContext.StripeCustomerId is { } customerId)
+        {
+            var totalPages = invoiceResults.Sum(r => r.PageCount);
+            await _stripeUsage.ReportUsageAsync(customerId, totalPages);
         }
     }
 
