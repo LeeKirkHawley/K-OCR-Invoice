@@ -174,6 +174,29 @@ public class HomeController : Controller
             !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
             return Json(new { success = false, error = "OCR is unavailable: subscription inactive." });
 
+        // For guest orgs, pre-check the per-batch page limit before calling Azure.
+        if (_tenantContext.IsGuestOrganization)
+        {
+            var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+            if (int.TryParse(currentBatchIdStr, out int currentBatchId))
+            {
+                var pageLimit = _configSvc.GetGuestOcrPageLimit();
+                var pagesOcrd = await _batchSvc.GetBatchOcrdPageCountAsync(currentBatchId);
+                var remaining = pageLimit - pagesOcrd;
+
+                if (remaining <= 0)
+                {
+                    return Json(new
+                    {
+                        success           = false,
+                        guestLimitReached = true,
+                        limitMessage      = $"Your guest account is limited to {pageLimit} OCR pages per batch. " +
+                                            "Contact us to upgrade to a full account for unlimited OCR."
+                    });
+                }
+            }
+        }
+
         try
         {
             // File lives at {batchDir}/Invoices/{name} — artifacts belong at {batchDir}/Artifacts
@@ -258,7 +281,11 @@ public class HomeController : Controller
                 minConfidence = orgConfig.MinConfidenceThreshold;
             }
 
-            await _batchSvc.TriggerOcrAsync(batchId, minConfidence);
+            int? guestPageLimit = _tenantContext.IsGuestOrganization
+                ? _configSvc.GetGuestOcrPageLimit()
+                : null;
+
+            var ocrResult = await _batchSvc.TriggerOcrAsync(batchId, minConfidence, guestPageLimit);
 
             var batch = await GetCurrentBatchAsync();
             if (batch != null)
@@ -273,7 +300,12 @@ public class HomeController : Controller
                 }
             }
 
-            return Json(new { success = true });
+            return Json(new
+            {
+                success          = true,
+                guestLimitReached = ocrResult.GuestLimitReached,
+                limitMessage     = ocrResult.LimitMessage
+            });
         }
         catch (Exception ex)
         {

@@ -23,4 +23,9 @@ public interface IConfigurationService
     /// Get the default settings file path
     /// </summary>
     string GetDefaultSettingsPath();
+
+    /// <summary>
+    /// Returns the guest-org OCR page limit from settings. Synchronous for use in request pipelines.
+    /// </summary>
+    int GetGuestOcrPageLimit();
 }

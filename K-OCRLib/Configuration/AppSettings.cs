@@ -12,6 +12,12 @@ public class AppSettings
     public int DeletedBatchRetentionDays { get; set; } = 14;
 
     /// <summary>
+    /// Maximum number of pages that can be OCR'd per batch for guest organizations.
+    /// Superadmin-configurable. Defaults to 20.
+    /// </summary>
+    public int GuestOcrPageLimit { get; set; } = 20;
+
+    /// <summary>
     /// When true, a batch is soft-deleted automatically after it is successfully exported
     /// (JSON or Excel). The batch is moved to the deleted queue and purged after
     /// <see cref="DeletedBatchRetentionDays"/> days.

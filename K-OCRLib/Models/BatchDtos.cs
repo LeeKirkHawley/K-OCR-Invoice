@@ -72,3 +72,23 @@ public class UploadResult
 
 /// <summary>Framework-neutral file upload payload. Replaces IBrowserFile at the service boundary.</summary>
 public sealed record FileUpload(string FileName, string ClientPath, Stream Content);
+
+/// <summary>Result of a batch OCR trigger, carrying guest-limit information.</summary>
+public class TriggerOcrResult
+{
+    public bool GuestLimitReached { get; init; }
+    /// <summary>Number of files skipped because the guest page limit was reached.</summary>
+    public int FilesSkipped { get; init; }
+    /// <summary>Human-readable message to show the user when the limit is hit.</summary>
+    public string? LimitMessage { get; init; }
+
+    public static TriggerOcrResult Ok() => new();
+    public static TriggerOcrResult LimitHit(int filesSkipped, int pageLimit) => new()
+    {
+        GuestLimitReached = true,
+        FilesSkipped      = filesSkipped,
+        LimitMessage      = $"Your guest account is limited to {pageLimit} OCR pages per batch. " +
+                            $"{filesSkipped} file(s) were not processed because the limit was reached. " +
+                            "Contact us to upgrade to a full account for unlimited OCR."
+    };
+}

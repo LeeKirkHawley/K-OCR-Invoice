@@ -1,3 +1,5 @@
+using Docnet.Core;
+using Docnet.Core.Models;
 using K_OCR.Data;
 using K_OCR.Models;
 using Microsoft.EntityFrameworkCore;
@@ -103,6 +105,18 @@ public class BatchService : IBatchService, IAsyncDisposable
 
     public async Task<CreateBatchResult> CreateBatchAsync(CreateBatchRequest request)
     {
+        // Guest organizations are limited to 2 active batches.
+        if (_tenantContext.IsGuestOrganization)
+        {
+            const int guestMaxBatches = 2;
+            var activeBatchCount = await Db.Batches
+                .CountAsync(b => b.MarkedForDeletionAtUtc == null);
+            if (activeBatchCount >= guestMaxBatches)
+                return CreateBatchResult.Error(
+                    $"Guest organizations are limited to {guestMaxBatches} batches. " +
+                    "Contact us to upgrade to a full account.");
+        }
+
         // Uniqueness checks before opening a transaction
         var dupName = await Db.Batches
             .AnyAsync(b => b.Name == request.Name);
@@ -303,7 +317,35 @@ public class BatchService : IBatchService, IAsyncDisposable
         return session?.BatchId;
     }
 
-    public async Task TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null)
+    public async Task<int> GetBatchOcrdPageCountAsync(int batchId)
+    {
+        var result = await Db.Invoices
+            .Where(i => i.BatchId == batchId && i.IsFullyProcessed)
+            .SumAsync(i => (int?)i.TotalPages) ?? 0;
+        return result;
+    }
+
+    private static int EstimatePdfPageCount(string filePath)
+    {
+        try
+        {
+            using var docReader = DocLib.Instance.GetDocReader(filePath, new PageDimensions(72, 72));
+            return docReader.GetPageCount();
+        }
+        catch
+        {
+            return 1;
+        }
+    }
+
+    private static int EstimateFilePageCount(string filePath)
+    {
+        if (Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+            return EstimatePdfPageCount(filePath);
+        return 1;
+    }
+
+    public async Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, int? guestPageLimit = null)
     {
         if (!_tenantContext.IsGuestOrganization &&
             !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
@@ -313,7 +355,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         if (!await batchLock.WaitAsync(0))
         {
             _logger.LogWarning("TriggerOcrAsync: batch {BatchId} is already being processed; ignoring duplicate request.", batchId);
-            return;
+            return TriggerOcrResult.Ok();
         }
 
         // Unique key for this OCR run — used as Stripe idempotency key so a duplicate
@@ -326,7 +368,7 @@ public class BatchService : IBatchService, IAsyncDisposable
             if (batch is null)
             {
                 _logger.LogWarning("TriggerOcrAsync: batch {BatchId} not found.", batchId);
-                return;
+                return TriggerOcrResult.Ok();
             }
 
             var invoicesDir  = Path.Combine(batch.FolderPath, "Invoices");
@@ -335,14 +377,65 @@ public class BatchService : IBatchService, IAsyncDisposable
             if (!Directory.Exists(invoicesDir))
             {
                 _logger.LogWarning("TriggerOcrAsync: invoices folder does not exist for batch {BatchId}.", batchId);
-                return;
+                return TriggerOcrResult.Ok();
             }
 
             var filePaths = _fileService.LoadFiles(invoicesDir, InvoiceExtensions).ToList();
             if (filePaths.Count == 0)
             {
                 _logger.LogInformation("TriggerOcrAsync: no files to process in batch {BatchId}.", batchId);
-                return;
+                return TriggerOcrResult.Ok();
+            }
+
+            // ── Guest org page limit ──────────────────────────────────────
+            var limitResult = TriggerOcrResult.Ok();
+            if (_tenantContext.IsGuestOrganization && guestPageLimit.HasValue)
+            {
+                var pagesAlreadyOcrd = await GetBatchOcrdPageCountAsync(batchId);
+                var remaining = guestPageLimit.Value - pagesAlreadyOcrd;
+
+                if (remaining <= 0)
+                {
+                    _logger.LogInformation(
+                        "TriggerOcrAsync: guest page limit reached for batch {BatchId}; skipping all {Count} file(s).",
+                        batchId, filePaths.Count);
+                    return TriggerOcrResult.LimitHit(filePaths.Count, guestPageLimit.Value);
+                }
+
+                // Filter out already-processed files, then truncate by estimated page count.
+                var processedPaths = (await Db.Invoices
+                    .Where(i => i.BatchId == batchId && i.IsFullyProcessed && i.FilePath != null)
+                    .Select(i => i.FilePath!)
+                    .ToListAsync())
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var pendingFiles = filePaths
+                    .Where(f => !processedPaths.Contains(f))
+                    .ToList();
+
+                var allowed = new List<string>();
+                var budgetPages = remaining;
+                foreach (var file in pendingFiles)
+                {
+                    var estimatedPages = EstimateFilePageCount(file);
+                    if (budgetPages <= 0) break;
+                    allowed.Add(file);
+                    budgetPages -= estimatedPages;
+                }
+
+                var skipped = pendingFiles.Count - allowed.Count;
+                if (skipped > 0)
+                {
+                    _logger.LogInformation(
+                        "TriggerOcrAsync: guest page limit truncated processing — {Allowed} file(s) will be OCR'd, {Skipped} skipped (batch {BatchId}).",
+                        allowed.Count, skipped, batchId);
+                    limitResult = TriggerOcrResult.LimitHit(skipped, guestPageLimit.Value);
+                }
+
+                // Replace filePaths with the already-processed paths + allowed new ones so
+                // ProcessBatchAsync (useCache:true) handles cached files normally and only
+                // sends the allowed new ones to Azure.
+                filePaths = processedPaths.ToList().Concat(allowed).ToList();
             }
 
             _logger.LogInformation("TriggerOcrAsync: processing {Count} file(s) in batch {BatchId}.", filePaths.Count, batchId);
@@ -384,6 +477,8 @@ public class BatchService : IBatchService, IAsyncDisposable
                 var idempotencyKey = $"batch-{batchId}-{ocrRunId}";
                 await _stripeUsage.ReportUsageAsync(customerId, totalPages, idempotencyKey);
             }
+
+            return limitResult;
         }
         finally
         {

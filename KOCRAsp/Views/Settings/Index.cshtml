@@ -64,6 +64,21 @@
         </div>
     </div>
 
+    <!-- Guest Organization Limits -->
+    <div class="card mb-3">
+        <div class="card-header"><strong>Guest Organization Limits</strong></div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label asp-for="GuestOcrPageLimit" class="form-label">Max OCR Pages per Batch</label>
+                    <input asp-for="GuestOcrPageLimit" type="number"
+                           class="form-control" min="1" max="1000" />
+                    <div class="form-text">Maximum number of pages a guest organization can OCR in a single batch. Guest orgs are also limited to 2 batches.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Retention -->
     <div class="card mb-3">
         <div class="card-header"><strong>Retention</strong></div>

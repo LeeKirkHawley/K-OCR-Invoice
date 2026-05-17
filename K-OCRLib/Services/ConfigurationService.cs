@@ -128,6 +128,27 @@ public class ConfigurationService : IConfigurationService
         return Path.Combine(Directory.GetCurrentDirectory(), "appsettings.development.user.json");
     }
 
+    public int GetGuestOcrPageLimit()
+    {
+        try
+        {
+            var path = IsDevelopment()
+                ? (File.Exists(GetDevelopmentOverridePath()) ? GetDevelopmentOverridePath() : GetDefaultSettingsPath())
+                : GetDefaultSettingsPath();
+
+            if (!File.Exists(path))
+                return 20;
+
+            var json = File.ReadAllText(path);
+            var node = System.Text.Json.Nodes.JsonNode.Parse(json);
+            if (node?["GuestOcrPageLimit"] is { } val && val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
+                return (int)val;
+        }
+        catch { /* fall through */ }
+
+        return 20;
+    }
+
     private static bool IsDevelopment()
     {
         return string.Equals(

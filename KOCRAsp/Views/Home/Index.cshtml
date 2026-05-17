@@ -170,6 +170,24 @@
     </div>
 </div>
 
+<!-- Guest OCR page limit modal -->
+<div class="modal fade" id="guestLimitModal" tabindex="-1" aria-labelledby="guestLimitModalLabel" aria-modal="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning-subtle">
+                <h5 class="modal-title" id="guestLimitModalLabel">⚠️ Guest Account Limit Reached</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="guestLimitModalBody">
+                Your guest account OCR page limit has been reached.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
     let _currentFilePath  = null;
@@ -228,6 +246,9 @@
             const fd = new FormData();
             const result = await postForm('/home/batchocr', fd);
             if (result.success) {
+                if (result.guestLimitReached) {
+                    showGuestLimitDialog(result.limitMessage);
+                }
                 showToast('Batch OCR started.');
                 startOcrPolling();
             } else {
@@ -353,6 +374,11 @@
             const fd = new FormData();
             fd.append('filePath', filePath);
             const result = await postForm('/home/startocr', fd);
+            if (result.guestLimitReached) {
+                showGuestLimitDialog(result.limitMessage);
+                setButtonLoading(btn, false);
+                return;
+            }
             if (result.success && result.invoice) {
                 _currentInvoice = result.invoice;
                 renderInvoiceFields(result.invoice);
@@ -372,6 +398,13 @@
         } finally {
             hideOcrOverlay();
         }
+    }
+
+    function showGuestLimitDialog(message) {
+        const body = document.getElementById('guestLimitModalBody');
+        if (body && message) body.textContent = message;
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('guestLimitModal'));
+        modal.show();
     }
 
     const HEADER_FIELDS = [
