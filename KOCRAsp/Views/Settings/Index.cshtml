@@ -70,6 +70,12 @@
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-4">
+                    <label asp-for="GuestMaxBatches" class="form-label">Max Active Batches</label>
+                    <input asp-for="GuestMaxBatches" type="number"
+                           class="form-control" min="1" max="100" />
+                    <div class="form-text">Maximum number of active batches a guest organization can have.</div>
+                </div>
+                <div class="col-md-4">
                     <label asp-for="GuestOcrPageLimit" class="form-label">Max OCR Pages per Batch</label>
                     <input asp-for="GuestOcrPageLimit" type="number"
                            class="form-control" min="1" max="1000" />

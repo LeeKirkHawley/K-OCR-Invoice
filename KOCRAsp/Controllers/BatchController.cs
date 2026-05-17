@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using K_OCR.Configuration;
+using K_OCR.Data;
 using K_OCR.Models;
 using K_OCR.Services;
 using KOCRAsp.Security;
@@ -16,19 +18,25 @@ public class BatchController : Controller
     private readonly IBatchActionService _batchActionSvc;
     private readonly IBatchNotificationService _batchNotificationSvc;
     private readonly ILogger<BatchController> _logger;
+    private readonly ITenantContext _tenantContext;
+    private readonly IConfigurationService _configSvc;
 
     public BatchController(
         IBatchService batchSvc,
         IBatchChangeNotifier batchNotifier,
         IBatchActionService batchActionSvc,
         IBatchNotificationService batchNotificationSvc,
-        ILogger<BatchController> logger)
+        ILogger<BatchController> logger,
+        ITenantContext tenantContext,
+        IConfigurationService configSvc)
     {
         _batchSvc             = batchSvc;
         _batchNotifier        = batchNotifier;
         _batchActionSvc       = batchActionSvc;
         _batchNotificationSvc = batchNotificationSvc;
         _logger               = logger;
+        _tenantContext        = tenantContext;
+        _configSvc            = configSvc;
     }
 
     [HttpGet]
@@ -53,7 +61,8 @@ public class BatchController : Controller
         {
             Name = name,
             CreatedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
-            OrgName = User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty
+            OrgName = User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+            GuestMaxBatches = _configSvc.GetGuestMaxBatches()
         };
 
         try
@@ -99,7 +108,8 @@ public class BatchController : Controller
         {
             Name = name,
             CreatedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
-            OrgName = User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty
+            OrgName = User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+            GuestMaxBatches = _configSvc.GetGuestMaxBatches()
         };
 
         try

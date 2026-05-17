@@ -25,7 +25,9 @@ public class ConfigurationService : IConfigurationService
             AzureCognitiveServicesEndpoint = "https://parsedocimage.cognitiveservices.azure.com/",
             OCRProvider = "Azure",
             MaxConcurrentRequests = 3,
-            GuestAccountRetentionDays = 7
+            GuestAccountRetentionDays = 7,
+            GuestMaxBatches = 2,
+            GuestOcrPageLimit = 20
         };
     }
 
@@ -147,6 +149,27 @@ public class ConfigurationService : IConfigurationService
         catch { /* fall through */ }
 
         return 20;
+    }
+
+    public int GetGuestMaxBatches()
+    {
+        try
+        {
+            var path = IsDevelopment()
+                ? (File.Exists(GetDevelopmentOverridePath()) ? GetDevelopmentOverridePath() : GetDefaultSettingsPath())
+                : GetDefaultSettingsPath();
+
+            if (!File.Exists(path))
+                return 2;
+
+            var json = File.ReadAllText(path);
+            var node = System.Text.Json.Nodes.JsonNode.Parse(json);
+            if (node?["GuestMaxBatches"] is { } val && val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
+                return (int)val;
+        }
+        catch { /* fall through */ }
+
+        return 2;
     }
 
     private static bool IsDevelopment()

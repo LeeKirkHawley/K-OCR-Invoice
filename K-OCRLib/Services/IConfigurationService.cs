@@ -28,4 +28,9 @@ public interface IConfigurationService
     /// Returns the guest-org OCR page limit from settings. Synchronous for use in request pipelines.
     /// </summary>
     int GetGuestOcrPageLimit();
+
+    /// <summary>
+    /// Returns the maximum number of active batches allowed for guest orgs from settings.
+    /// </summary>
+    int GetGuestMaxBatches();
 }

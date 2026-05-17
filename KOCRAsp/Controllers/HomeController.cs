@@ -252,7 +252,25 @@ public class HomeController : Controller
                 await _stripeUsage.ReportUsageAsync(customerId, invoice?.PageCount ?? 1, idempotencyKey);
             }
 
-            return Json(new { success = true, invoice });
+            bool guestLimitReached = false;
+            string? guestLimitMessage = null;
+            if (_tenantContext.IsGuestOrganization)
+            {
+                var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+                if (int.TryParse(currentBatchIdStr, out int currentBatchId))
+                {
+                    var pageLimit = _configSvc.GetGuestOcrPageLimit();
+                    var pagesOcrd = await _batchSvc.GetBatchOcrdPageCountAsync(currentBatchId);
+                    if (pagesOcrd >= pageLimit)
+                    {
+                        guestLimitReached = true;
+                        guestLimitMessage = $"Your guest account is limited to {pageLimit} OCR pages per batch. " +
+                                            "Contact us to upgrade to a full account for unlimited OCR.";
+                    }
+                }
+            }
+
+            return Json(new { success = true, invoice, guestLimitReached, guestLimitMessage });
         }
         catch (Exception ex)
         {

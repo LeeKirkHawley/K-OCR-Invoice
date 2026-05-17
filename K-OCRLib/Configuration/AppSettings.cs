@@ -12,6 +12,12 @@ public class AppSettings
     public int DeletedBatchRetentionDays { get; set; } = 14;
 
     /// <summary>
+    /// Maximum number of active batches allowed for guest organizations.
+    /// Superadmin-configurable. Defaults to 2.
+    /// </summary>
+    public int GuestMaxBatches { get; set; } = 2;
+
+    /// <summary>
     /// Maximum number of pages that can be OCR'd per batch for guest organizations.
     /// Superadmin-configurable. Defaults to 20.
     /// </summary>

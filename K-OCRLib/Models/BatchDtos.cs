@@ -31,6 +31,8 @@ public class CreateBatchRequest
     public string CreatedByUserId { get; set; } = string.Empty;
     /// <summary>Display name of the owning org (for folder path construction).</summary>
     public string OrgName { get; set; } = string.Empty;
+    /// <summary>Maximum active batches for a guest org (sourced from settings at request time).</summary>
+    public int GuestMaxBatches { get; init; } = 2;
 }
 
 public class CreateBatchResult

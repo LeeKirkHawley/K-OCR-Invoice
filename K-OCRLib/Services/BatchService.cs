@@ -108,7 +108,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         // Guest organizations are limited to 2 active batches.
         if (_tenantContext.IsGuestOrganization)
         {
-            const int guestMaxBatches = 2;
+            var guestMaxBatches = request.GuestMaxBatches;
             var activeBatchCount = await Db.Batches
                 .CountAsync(b => b.MarkedForDeletionAtUtc == null);
             if (activeBatchCount >= guestMaxBatches)

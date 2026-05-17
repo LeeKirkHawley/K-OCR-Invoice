@@ -172,6 +172,28 @@
         })();
     </script>
 
+    <div class="modal fade" id="guestOcrLimitModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Guest OCR Limit Reached</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="guestOcrLimitModalBody">Your guest account OCR limit has been reached.</div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        function showGuestOcrLimitModal(message) {
+            const body = document.getElementById('guestOcrLimitModalBody');
+            if (body && message) body.textContent = message;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('guestOcrLimitModal')).show();
+        }
+    </script>
+
     @await RenderSectionAsync("Scripts", required: false)
 
     @if (User.Identity?.IsAuthenticated == true)
