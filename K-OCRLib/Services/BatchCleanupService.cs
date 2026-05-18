@@ -1,0 +1,137 @@
+using K_OCR.Configuration;
+using K_OCR.Data;
+using K_OCR.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace K_OCR.Services;
+
+public class BatchCleanupService : IBatchCleanupService
+{
+    private readonly IPathService _paths;
+    private readonly DatabaseSettings _settings;
+    private readonly IBatchNotificationService _batchNotificationSvc;
+    private readonly ILogger<BatchCleanupService> _logger;
+
+    public BatchCleanupService(
+        IPathService paths,
+        DatabaseSettings settings,
+        IBatchNotificationService batchNotificationSvc,
+        ILogger<BatchCleanupService> logger)
+    {
+        _paths                = paths;
+        _settings             = settings;
+        _batchNotificationSvc = batchNotificationSvc;
+        _logger               = logger;
+    }
+
+    public async Task<int> CleanupExpiredBatchesAsync(TimeSpan retention, CancellationToken cancellationToken = default)
+    {
+        var totalHardDeleted = 0;
+
+        if (!Directory.Exists(_paths.BaseDirectory))
+            return 0;
+
+        var orgDirs = Directory.EnumerateDirectories(_paths.BaseDirectory);
+        foreach (var orgDir in orgDirs)
+        {
+            var orgName = Path.GetFileName(orgDir);
+            try
+            {
+                var dbPath = _paths.GetOrgDbPath(orgName);
+                if (!File.Exists(dbPath))
+                    continue;
+
+                var optionsBuilder = new DbContextOptionsBuilder<KOCRDbContext>()
+                    .UseSqlite($"Data Source={dbPath}");
+
+                if (_settings.EnableSensitiveDataLogging)
+                    optionsBuilder.EnableSensitiveDataLogging();
+                if (_settings.EnableDetailedErrors)
+                    optionsBuilder.EnableDetailedErrors();
+
+                await using var context = new KOCRDbContext(optionsBuilder.Options);
+                context.Database.Migrate();
+
+                var cutoff = DateTime.UtcNow - retention;
+                var expiredBatches = await context.Batches
+                    .Where(b => b.MarkedForDeletionAtUtc != null && b.MarkedForDeletionAtUtc <= cutoff)
+                    .ToListAsync(cancellationToken);
+
+                var deletedBatchNames = new List<string>();
+
+                foreach (var batch in expiredBatches)
+                {
+                    var invoicesPath  = Path.Combine(batch.FolderPath, "Invoices");
+                    var artifactsPath = Path.Combine(batch.FolderPath, "Artifacts");
+                    try
+                    {
+                        if (Directory.Exists(invoicesPath))
+                            Directory.Delete(invoicesPath, recursive: true);
+                        if (Directory.Exists(artifactsPath))
+                            Directory.Delete(artifactsPath, recursive: true);
+                        if (Directory.Exists(batch.FolderPath)
+                            && !Directory.EnumerateFileSystemEntries(batch.FolderPath).Any())
+                            Directory.Delete(batch.FolderPath, recursive: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "Failed to delete batch files for org {OrgName}, batch {BatchId} ({BatchName}) at {FolderPath}",
+                            orgName, batch.BatchId, batch.Name, batch.FolderPath);
+                    }
+
+                    var invoiceRows = await context.Invoices
+                        .Where(i => i.BatchId == batch.BatchId)
+                        .ToListAsync(cancellationToken);
+                    context.Invoices.RemoveRange(invoiceRows);
+                    context.Batches.Remove(batch);
+                    deletedBatchNames.Add(batch.Name);
+                    totalHardDeleted++;
+                }
+
+                await context.SaveChangesAsync(cancellationToken);
+
+                foreach (var batchName in deletedBatchNames)
+                {
+                    try
+                    {
+                        context.BatchActions.Add(new BatchAction
+                        {
+                            Action       = BatchActionTypes.HardDeleted,
+                            TimestampUtc = DateTime.UtcNow,
+                            Organization = orgName,
+                            OrgUser      = "System",
+                            BatchName    = batchName,
+                        });
+                        await context.SaveChangesAsync(cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        context.ChangeTracker.Clear();
+                        _logger.LogError(ex,
+                            "Failed to log hard-delete action for batch '{Batch}' in org '{OrgName}'",
+                            batchName, orgName);
+                    }
+
+                    try
+                    {
+                        await _batchNotificationSvc.NotifyBatchHardDeletedAsync(orgName, batchName, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "Failed to send hard-delete notification for batch '{Batch}' in org '{OrgName}'",
+                            batchName, orgName);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error cleaning up expired batches for org {OrgName}", orgName);
+            }
+        }
+
+        return totalHardDeleted;
+    }
+}

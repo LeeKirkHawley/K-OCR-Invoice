@@ -1,8 +1,9 @@
 using System.Security.Claims;
 using System.ComponentModel.DataAnnotations;
 using KOCRAsp.Controllers;
-using KOCRAsp.Identity;
+using K_OCR.Identity;
 using KOCRAsp.Models;
+using K_OCR.Services;
 using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Authentication;

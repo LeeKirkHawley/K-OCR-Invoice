@@ -1,6 +1,5 @@
-using KOCRAsp.Services;
+using K_OCR.Services;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -24,11 +23,6 @@ public class GuestAccountCleanupServiceTests
             .Setup(service => service.CleanupExpiredBatchesAsync(It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
-        using var provider = new ServiceCollection()
-            .AddScoped(_ => superAdminService.Object)
-            .AddScoped(_ => batchCleanupService.Object)
-            .BuildServiceProvider();
-
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -38,10 +32,11 @@ public class GuestAccountCleanupServiceTests
             })
             .Build();
 
-        var cleanupService = new GuestAccountCleanupService(
-            provider.GetRequiredService<IServiceScopeFactory>(),
+        var cleanupService = new GuestCleanupService(
+            superAdminService.Object,
+            batchCleanupService.Object,
             configuration,
-            Mock.Of<ILogger<GuestAccountCleanupService>>());
+            Mock.Of<ILogger<GuestCleanupService>>());
 
         var markedCount = await cleanupService.RunCleanupCycleAsync(CancellationToken.None);
 
@@ -55,13 +50,7 @@ public class GuestAccountCleanupServiceTests
     public async Task RunCleanupCycleAsync_DoesNothing_WhenRetentionIsDisabled()
     {
         var superAdminService = new Mock<ISuperAdminService>();
-
         var batchCleanupService = new Mock<IBatchCleanupService>();
-
-        using var provider = new ServiceCollection()
-            .AddScoped(_ => superAdminService.Object)
-            .AddScoped(_ => batchCleanupService.Object)
-            .BuildServiceProvider();
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -72,10 +61,11 @@ public class GuestAccountCleanupServiceTests
             })
             .Build();
 
-        var cleanupService = new GuestAccountCleanupService(
-            provider.GetRequiredService<IServiceScopeFactory>(),
+        var cleanupService = new GuestCleanupService(
+            superAdminService.Object,
+            batchCleanupService.Object,
             configuration,
-            Mock.Of<ILogger<GuestAccountCleanupService>>());
+            Mock.Of<ILogger<GuestCleanupService>>());
 
         var count = await cleanupService.RunCleanupCycleAsync(CancellationToken.None);
 

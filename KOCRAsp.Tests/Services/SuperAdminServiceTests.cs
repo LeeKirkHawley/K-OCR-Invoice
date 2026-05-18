@@ -1,6 +1,6 @@
 using K_OCR.Services;
-using KOCRAsp.Data;
-using KOCRAsp.Identity;
+using K_OCR.Data;
+using K_OCR.Identity;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http;
@@ -78,10 +78,10 @@ public class SuperAdminServiceTests
                 userManager.Object,
                 roleManager.Object,
                 Mock.Of<IEmailService>(),
-                Mock.Of<IHttpContextAccessor>(),
                 configuration,
                 new PathService(configuration),
                 Mock.Of<IOrgConfigService>(),
+                null,
                 Mock.Of<ILogger<SuperAdminService>>());
 
             // Phase 1: expired guest org gets marked for deletion; regular org is untouched.
@@ -119,3 +119,4 @@ public class SuperAdminServiceTests
         }
     }
 }
+

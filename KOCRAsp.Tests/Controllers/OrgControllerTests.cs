@@ -1,11 +1,10 @@
 using K_OCR.Configuration;
 using K_OCR.Data;
 using K_OCR.Services;
+using K_OCR.Identity;
 using KOCRAsp.Controllers;
-using KOCRAsp.Identity;
-using KOCRAsp.Models.Api.OrganizationAdmin;
-using KOCRAsp.Models.Api.SuperAdmin;
-using KOCRAsp.Services;
+using K_OCR.Models.Api.OrganizationAdmin;
+using K_OCR.Models.Api.SuperAdmin;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -81,7 +80,7 @@ public class OrgConfigControllerTests
         };
 
         _mockOrgAdminSvc
-            .Setup(s => s.InviteUserAsync(OrgId, request))
+            .Setup(s => s.InviteUserAsync(OrgId, request, It.IsAny<string?>()))
             .ReturnsAsync(inviteResult);
 
         var result = await _controller.InviteUser(request, orgId: null);

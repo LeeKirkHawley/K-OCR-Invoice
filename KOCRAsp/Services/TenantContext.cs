@@ -1,8 +1,7 @@
 using K_OCR.Data;
+using K_OCR.Identity;
 using K_OCR.Security;
-using KOCRAsp.Data;
-using KOCRAsp.Identity;
-using KOCRAsp.Security;
+using K_OCR.Services;
 
 namespace KOCRAsp.Services;
 
@@ -10,6 +9,7 @@ namespace KOCRAsp.Services;
 /// Reads the current tenant from the authenticated user's claims.
 /// Claims are baked into the auth cookie at sign-in by ApplicationUserClaimsPrincipalFactory
 /// and are available on every request via IHttpContextAccessor.
+/// Other front-ends provide their own <see cref="ITenantContext"/> implementations.
 /// </summary>
 internal sealed class TenantContext : ITenantContext
 {

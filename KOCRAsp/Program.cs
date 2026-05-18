@@ -1,8 +1,8 @@
 using K_OCR.Configuration;
 using K_OCR.Data;
+using K_OCR.Identity;
 using K_OCR.Security;
 using K_OCR.Services;
-using KOCRAsp.Data;
 using KOCRAsp.Identity;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -153,6 +153,7 @@ builder.Services.AddScoped<IBatchCleanupService>(sp =>
         databaseSettings,
         sp.GetRequiredService<IBatchNotificationService>(),
         sp.GetRequiredService<ILogger<BatchCleanupService>>()));
+builder.Services.AddScoped<IGuestCleanupService, GuestCleanupService>();
 builder.Services.AddHostedService<GuestAccountCleanupService>();
 
 // Singletons: no DB dependency

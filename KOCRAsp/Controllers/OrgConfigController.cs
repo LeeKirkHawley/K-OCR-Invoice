@@ -1,13 +1,12 @@
 using System.Security.Claims;
 using K_OCR.Configuration;
 using K_OCR.Data;
+using K_OCR.Identity;
 using K_OCR.Security;
 using K_OCR.Services;
-using KOCRAsp.Identity;
 using KOCRAsp.Models;
-using KOCRAsp.Models.Api.OrganizationAdmin;
-using KOCRAsp.Models.Api.SuperAdmin;
-using KOCRAsp.Security;
+using K_OCR.Models.Api.OrganizationAdmin;
+using K_OCR.Models.Api.SuperAdmin;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -107,7 +106,8 @@ public class OrgConfigController : Controller
 
         try
         {
-            var result = await _orgAdminSvc.InviteUserAsync(resolvedOrgId, request);
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var result = await _orgAdminSvc.InviteUserAsync(resolvedOrgId, request, baseUrl);
             return Json(new
             {
                 success   = true,

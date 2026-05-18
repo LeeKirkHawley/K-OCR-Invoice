@@ -1,7 +1,7 @@
 using K_OCR.Models;
+using K_OCR.Services;
 using KOCRAsp.Controllers;
-using KOCRAsp.Models.Api.SuperAdmin;
-using KOCRAsp.Services;
+using K_OCR.Models.Api.SuperAdmin;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;

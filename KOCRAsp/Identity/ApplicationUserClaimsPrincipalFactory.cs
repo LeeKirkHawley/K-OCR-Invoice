@@ -1,8 +1,7 @@
 using System.Security.Claims;
+using K_OCR.Identity;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using KOCRAsp.Security;
 
 namespace KOCRAsp.Identity;
 
@@ -29,21 +28,7 @@ internal sealed class ApplicationUserClaimsPrincipalFactory
     protected override async Task<ClaimsIdentity> GenerateClaimsAsync(ApplicationUser user)
     {
         var identity = await base.GenerateClaimsAsync(user);
-
-        // Load the Organization navigation property — not included by UserManager by default.
-        var fullUser = await UserManager.Users
-            .Include(u => u.Organization)
-            .FirstOrDefaultAsync(u => u.Id == user.Id);
-
-        if (!string.IsNullOrEmpty(fullUser?.OrganizationId))
-            identity.AddClaim(new Claim(AppClaimTypes.OrganizationId, fullUser.OrganizationId));
-
-        var tenantName = fullUser?.Organization?.Name
-                      ?? (fullUser?.IsGlobalAdmin == true ? "Global" : null);
-
-        if (tenantName is not null)
-            identity.AddClaim(new Claim(AppClaimTypes.TenantName, tenantName));
-
+        await ApplicationUserClaimsExtensions.AddKOCRClaimsAsync(identity, user, UserManager);
         return identity;
     }
 }

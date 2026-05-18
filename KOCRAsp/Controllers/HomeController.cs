@@ -6,7 +6,6 @@ using K_OCR.Models;
 using K_OCR.Security;
 using K_OCR.Services;
 using KOCRAsp.Models;
-using KOCRAsp.Security;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

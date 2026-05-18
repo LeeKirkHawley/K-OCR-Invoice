@@ -1,5 +1,5 @@
-using KOCRAsp.Models.Api.SuperAdmin;
-using KOCRAsp.Services;
+using K_OCR.Models.Api.SuperAdmin;
+using K_OCR.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -51,7 +51,8 @@ public class AdminController : Controller
     {
         try
         {
-            var result = await _superAdminSvc.CreateOrganizationAsync(request);
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var result = await _superAdminSvc.CreateOrganizationAsync(request, baseUrl);
             return Json(new
             {
                 success = true,
@@ -199,20 +200,20 @@ public class AdminController : Controller
     private Task<UserManagerContext?> GetUserManagerAsync(string userId)
     {
         var userManager = HttpContext.RequestServices
-            .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<KOCRAsp.Identity.ApplicationUser>>();
+            .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<K_OCR.Identity.ApplicationUser>>();
         return ResolveUser(userManager, userId);
     }
 
     private static async Task<UserManagerContext?> ResolveUser(
-        Microsoft.AspNetCore.Identity.UserManager<KOCRAsp.Identity.ApplicationUser> mgr, string userId)
+        Microsoft.AspNetCore.Identity.UserManager<K_OCR.Identity.ApplicationUser> mgr, string userId)
     {
         var user = await mgr.FindByIdAsync(userId);
         return user is null ? null : new UserManagerContext(mgr, user);
     }
 
     private sealed record UserManagerContext(
-        Microsoft.AspNetCore.Identity.UserManager<KOCRAsp.Identity.ApplicationUser> UserManager,
-        KOCRAsp.Identity.ApplicationUser User);
+        Microsoft.AspNetCore.Identity.UserManager<K_OCR.Identity.ApplicationUser> UserManager,
+        K_OCR.Identity.ApplicationUser User);
 }
 
 // Local request DTOs

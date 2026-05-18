@@ -1,6 +1,6 @@
 using K_OCR.Services;
-using KOCRAsp.Data;
-using KOCRAsp.Identity;
+using K_OCR.Data;
+using K_OCR.Identity;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http;
@@ -82,10 +82,10 @@ public class SuperAdminServiceEmailTests
             userManager.Object,
             roleManager.Object,
             emailServiceMock.Object,
-            Mock.Of<IHttpContextAccessor>(),
             configuration,
             new PathService(configuration),
             Mock.Of<IOrgConfigService>(),
+            null,
             Mock.Of<ILogger<SuperAdminService>>());
 
         // Act
@@ -173,10 +173,10 @@ public class SuperAdminServiceEmailTests
             userManager.Object,
             roleManager.Object,
             emailServiceMock.Object,
-            Mock.Of<IHttpContextAccessor>(),
             configuration,
             new PathService(configuration),
             Mock.Of<IOrgConfigService>(),
+            null,
             Mock.Of<ILogger<SuperAdminService>>());
 
         // Act & Assert: Should not throw even if email fails
@@ -254,10 +254,10 @@ public class SuperAdminServiceEmailTests
             userManager.Object,
             roleManager.Object,
             emailServiceMock.Object,
-            Mock.Of<IHttpContextAccessor>(),
             configuration,
             new PathService(configuration),
             Mock.Of<IOrgConfigService>(),
+            null,
             Mock.Of<ILogger<SuperAdminService>>());
 
         // Act
@@ -280,3 +280,5 @@ public class SuperAdminServiceEmailTests
             Times.Never);
     }
 }
+
+

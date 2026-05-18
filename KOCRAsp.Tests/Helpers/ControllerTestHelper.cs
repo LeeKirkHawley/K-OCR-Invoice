@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using System.Text;
-using KOCRAsp.Security;
+using K_OCR.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
