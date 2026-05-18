@@ -9,29 +9,31 @@
     <!-- ── Left pane: file list ──────────────────────────────────── -->
     <div class="kocr-pane kocr-pane-left">
         <div class="kocr-panel-header kocr-file-list-header p-1">
-            <select id="batchSelector" class="form-select form-select-sm mb-1">
-                <option value="">— Select Batch —</option>
-                @foreach (var batch in Model.AvailableBatches)
-                {
-                    if (batch.IsMarkedForDeletion)
+            <div class="d-flex gap-1 mb-1">
+                <select id="batchSelector" class="form-select form-select-sm">
+                    <option value="">— Select Batch —</option>
+                    @foreach (var batch in Model.AvailableBatches)
                     {
-                        <option value="@batch.BatchId" disabled
-                                style="text-decoration: line-through; color: gray;">
-                            🗑️ @batch.Name (#@batch.BatchNumber)
-                        </option>
+                        if (batch.IsMarkedForDeletion)
+                        {
+                            <option value="@batch.BatchId" disabled
+                                    style="text-decoration: line-through; color: gray;">
+                                🗑️ @batch.Name (#@batch.BatchNumber)
+                            </option>
+                        }
+                        else if (Model.CurrentBatch?.BatchId == batch.BatchId)
+                        {
+                            <option value="@batch.BatchId" selected>@batch.Name (#@batch.BatchNumber)</option>
+                        }
+                        else
+                        {
+                            <option value="@batch.BatchId">@batch.Name (#@batch.BatchNumber)</option>
+                        }
                     }
-                    else if (Model.CurrentBatch?.BatchId == batch.BatchId)
-                    {
-                        <option value="@batch.BatchId" selected>@batch.Name (#@batch.BatchNumber)</option>
-                    }
-                    else
-                    {
-                        <option value="@batch.BatchId">@batch.Name (#@batch.BatchNumber)</option>
-                    }
-                }
-            </select>
+                </select>
+                <button class="btn btn-sm btn-outline-primary py-0 text-nowrap" onclick="openNewBatchModal(); return false;" title="Create new batch">➕ New Batch</button>
+            </div>
             <div class="d-flex gap-1">
-                <button class="btn btn-sm btn-outline-primary py-0" onclick="openNewBatchModal(); return false;" title="Create new batch">➕ New Batch</button>
                 <label class="btn btn-sm btn-outline-primary mb-0 py-0 px-2" title="Upload Invoices">
                     📤 Upload Invoices
                     <input type="file" id="uploadInput" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp" />
@@ -494,8 +496,6 @@
         html += `<div class="d-flex gap-2 mt-2 flex-wrap">
             <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1" onclick="saveInvoice()">Save</button>
             <button id="acceptBtn" class="btn btn-sm btn-success"           tabindex="-1" onclick="acceptValidation()">Accept</button>
-            <a      id="exportBtn" href="#" class="btn btn-sm btn-outline-secondary"
-                    tabindex="-1" onclick="exportDocx(event)">Export DOCX</a>
         </div>`;
 
         container.innerHTML = html;
