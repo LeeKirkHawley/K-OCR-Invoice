@@ -30,6 +30,8 @@ jobs:
       - name: Write production appsettings.json
         env:
           DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
         run: |
           python3 << 'EOF'
           import json, os
@@ -38,6 +40,7 @@ jobs:
               base = json.load(f)
 
           email = base.get("Email", {})
+          stripe = base.get("Stripe", {})
           prod = {
             "AllowDuplicateEmails": True,
             "Logging": {
@@ -73,6 +76,13 @@ jobs:
               "ConnectionString": os.environ["DB_CONNECTION_STRING"],
               "EnableSensitiveDataLogging": False,
               "EnableDetailedErrors": False
+            },
+            "Stripe": {
+              "SecretKey":        os.environ["STRIPE_SECRET_KEY"],
+              "WebhookSecret":    os.environ["STRIPE_WEBHOOK_SECRET"],
+              "MeterEventName":   stripe.get("MeterEventName", "basic_per-page"),
+              "DefaultPriceId":   stripe.get("DefaultPriceId"),
+              "Prices":           stripe.get("Prices", {})
             }
           }
 
