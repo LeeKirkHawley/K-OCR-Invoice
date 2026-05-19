@@ -3,7 +3,7 @@ name: Deploy to kirkhawley.org
 on:
   push:
     branches: [ master ]
-  workflow_dispatch:   # also allows manual trigger from GitHub Actions UI
+  workflow_dispatch:   # also allows manual trigger from GitHub Actions UI.
 
 jobs:
   deploy:
