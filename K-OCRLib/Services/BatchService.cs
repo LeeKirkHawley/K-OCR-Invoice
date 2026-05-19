@@ -444,7 +444,9 @@ public class BatchService : IBatchService, IAsyncDisposable
                 filePaths,
                 useCache: true,
                 artifactsDirectory: artifactsDir,
-                minConfidenceThreshold: minConfidenceThreshold);
+                minConfidenceThreshold: minConfidenceThreshold,
+                batch: batch,
+                organizationName: _tenantContext.OrganizationName);
 
             var orgName        = _tenantContext.OrganizationName ?? string.Empty;
             var invoiceResults = results.Select(kvp => new OcrInvoiceResult

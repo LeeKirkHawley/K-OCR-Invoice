@@ -28,7 +28,9 @@ public interface IInvoiceProcessingService
         bool useCache = true,
         IProgress<(int completed, int total, string currentFile)>? progress = null,
         string? artifactsDirectory = null,
-        double? minConfidenceThreshold = null);
+        double? minConfidenceThreshold = null,
+        Batch? batch = null,
+        string? organizationName = null);
     
     /// <summary>
     /// Save a validated invoice to the database Invoice row.

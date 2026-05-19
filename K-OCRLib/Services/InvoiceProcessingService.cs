@@ -124,40 +124,64 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         bool useCache = true,
         IProgress<(int completed, int total, string currentFile)>? progress = null,
         string? artifactsDirectory = null,
-        double? minConfidenceThreshold = null)
+        double? minConfidenceThreshold = null,
+        Batch? batch = null,
+        string? organizationName = null)
     {
         var results = new Dictionary<string, ProcessingResult>();
         var filePathsList = filePaths.ToList();
         var total = filePathsList.Count;
         var completed = 0;
-        
-        // Use semaphore for concurrency control (reuse from InvoiceService)
+
+        var batchLabel = batch is not null ? $"{batch.Name} (#{batch.BatchNumber})" : "unknown batch";
+        var orgLabel   = organizationName ?? "unknown org";
+
+        var maxConcurrent = Math.Max(1, _configuration.GetValue<int>("MaxConcurrentRequests", 3));
+        using var semaphore = new SemaphoreSlim(maxConcurrent, maxConcurrent);
+
         var tasks = filePathsList.Select(async filePath =>
         {
+            await semaphore.WaitAsync();
+            var threadId = Environment.CurrentManagedThreadId;
+            var fileName = Path.GetFileName(filePath);
             try
             {
-                progress?.Report((completed, total, Path.GetFileName(filePath)));
-                
+                _logger.LogInformation(
+                    "OCR thread {ThreadId} started — org: {Org}, batch: {Batch}, file: {File}",
+                    threadId, orgLabel, batchLabel, fileName);
+
+                progress?.Report((completed, total, fileName));
+
                 var result = await ProcessFileAsync(filePath, useCache, artifactsDirectory, minConfidenceThreshold);
-                
+
                 lock (results)
                 {
                     results[filePath] = result;
                 }
-                
+
                 Interlocked.Increment(ref completed);
-                progress?.Report((completed, total, Path.GetFileName(filePath)));
+                progress?.Report((completed, total, fileName));
+
+                _logger.LogInformation(
+                    "OCR thread {ThreadId} finished — org: {Org}, batch: {Batch}, file: {File}",
+                    threadId, orgLabel, batchLabel, fileName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing file {FileName} in batch.", Path.GetFileName(filePath));
+                _logger.LogError(ex,
+                    "OCR thread {ThreadId} error — org: {Org}, batch: {Batch}, file: {File}",
+                    threadId, orgLabel, batchLabel, fileName);
                 lock (results)
                 {
                     results[filePath] = new ProcessingResult { Error = ex };
                 }
             }
+            finally
+            {
+                semaphore.Release();
+            }
         });
-        
+
         await Task.WhenAll(tasks);
         return results;
     }
