@@ -11,14 +11,14 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace K_OCRLib.Migrations
 {
     [DbContext(typeof(KOCRDbContext))]
-    [Migration("20260401203933_AddNotesToInvoice")]
-    partial class AddNotesToInvoice
+    [Migration("20260519155952_InitialPerOrgSchema")]
+    partial class InitialPerOrgSchema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
+            modelBuilder.HasAnnotation("ProductVersion", "8.0.15");
 
             modelBuilder.Entity("K_OCR.Models.Batch", b =>
                 {
@@ -49,6 +49,9 @@ namespace K_OCRLib.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("MarkedForDeletionAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -63,6 +66,42 @@ namespace K_OCRLib.Migrations
                         .IsUnique();
 
                     b.ToTable("Batches");
+                });
+
+            modelBuilder.Entity("K_OCR.Models.BatchAction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BatchName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OrgUser")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Organization")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("TimestampUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TimestampUtc");
+
+                    b.ToTable("BatchActions");
                 });
 
             modelBuilder.Entity("K_OCR.Models.DocumentField", b =>
@@ -109,6 +148,10 @@ namespace K_OCRLib.Migrations
 
                     b.Property<int>("BatchId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("CurrencyCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("CustomerName")
                         .HasMaxLength(500)
@@ -174,6 +217,10 @@ namespace K_OCRLib.Migrations
                     b.Property<string>("ValidatedOcrText")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("VendorCountry")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("VendorName")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
@@ -183,6 +230,45 @@ namespace K_OCRLib.Migrations
                     b.HasIndex("BatchId");
 
                     b.ToTable("Invoices");
+                });
+
+            modelBuilder.Entity("K_OCR.Models.InvoiceAction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BatchName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("InvoiceName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OrgUser")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PageCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("TimestampUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TimestampUtc");
+
+                    b.ToTable("InvoiceActions");
                 });
 
             modelBuilder.Entity("K_OCR.Models.InvoiceItem", b =>

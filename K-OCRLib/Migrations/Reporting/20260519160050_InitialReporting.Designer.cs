@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace K_OCRLib.Migrations.Reporting
 {
     [DbContext(typeof(ReportingDbContext))]
-    [Migration("20260508183113_AddOcrReportOrganizationId")]
-    partial class AddOcrReportOrganizationId
+    [Migration("20260519160050_InitialReporting")]
+    partial class InitialReporting
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace KOCRAsp.Migrations
+namespace K_OCRLib.Migrations.Identity
 {
     /// <inheritdoc />
     public partial class InitialSqlServer : Migration
@@ -35,7 +35,12 @@ namespace KOCRAsp.Migrations
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
                     IsGuestOrganization = table.Column<bool>(type: "bit", nullable: false),
                     MarkedForDeletionAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    StripeCustomerId = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    StripeSubscriptionId = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    StripeSubscriptionItemId = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    StripePriceId = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    StripeSubscriptionStatus = table.Column<string>(type: "nvarchar(max)", nullable: false)
                 },
                 constraints: table =>
                 {

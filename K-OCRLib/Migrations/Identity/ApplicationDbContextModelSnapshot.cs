@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace KOCRAsp.Migrations
+namespace K_OCRLib.Migrations.Identity
 {
     [DbContext(typeof(ApplicationDbContext))]
     partial class ApplicationDbContextModelSnapshot : ModelSnapshot
@@ -22,7 +22,7 @@ namespace KOCRAsp.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("KOCRAsp.Identity.ApplicationUser", b =>
+            modelBuilder.Entity("K_OCR.Identity.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
@@ -101,7 +101,7 @@ namespace KOCRAsp.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
-            modelBuilder.Entity("KOCRAsp.Identity.Organization", b =>
+            modelBuilder.Entity("K_OCR.Identity.Organization", b =>
                 {
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
@@ -279,9 +279,9 @@ namespace KOCRAsp.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("KOCRAsp.Identity.ApplicationUser", b =>
+            modelBuilder.Entity("K_OCR.Identity.ApplicationUser", b =>
                 {
-                    b.HasOne("KOCRAsp.Identity.Organization", "Organization")
+                    b.HasOne("K_OCR.Identity.Organization", "Organization")
                         .WithMany("Users")
                         .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -300,7 +300,7 @@ namespace KOCRAsp.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<string>", b =>
                 {
-                    b.HasOne("KOCRAsp.Identity.ApplicationUser", null)
+                    b.HasOne("K_OCR.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -309,7 +309,7 @@ namespace KOCRAsp.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<string>", b =>
                 {
-                    b.HasOne("KOCRAsp.Identity.ApplicationUser", null)
+                    b.HasOne("K_OCR.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -324,7 +324,7 @@ namespace KOCRAsp.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("KOCRAsp.Identity.ApplicationUser", null)
+                    b.HasOne("K_OCR.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -333,14 +333,14 @@ namespace KOCRAsp.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
                 {
-                    b.HasOne("KOCRAsp.Identity.ApplicationUser", null)
+                    b.HasOne("K_OCR.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("KOCRAsp.Identity.Organization", b =>
+            modelBuilder.Entity("K_OCR.Identity.Organization", b =>
                 {
                     b.Navigation("Users");
                 });

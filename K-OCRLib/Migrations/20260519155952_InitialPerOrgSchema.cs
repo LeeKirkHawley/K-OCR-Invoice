@@ -12,6 +12,23 @@ namespace K_OCRLib.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
+                name: "BatchActions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Action = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
+                    TimestampUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    Organization = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    OrgUser = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    BatchName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BatchActions", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Batches",
                 columns: table => new
                 {
@@ -23,11 +40,30 @@ namespace K_OCRLib.Migrations
                     LockedByUserId = table.Column<string>(type: "TEXT", maxLength: 450, nullable: true),
                     LockAcquiredAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                     CreatedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    CreatedByUserId = table.Column<string>(type: "TEXT", maxLength: 450, nullable: false)
+                    CreatedByUserId = table.Column<string>(type: "TEXT", maxLength: 450, nullable: false),
+                    MarkedForDeletionAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Batches", x => x.BatchId);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "InvoiceActions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Action = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
+                    TimestampUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    BatchName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    InvoiceName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    OrgUser = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    PageCount = table.Column<int>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_InvoiceActions", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -56,7 +92,10 @@ namespace K_OCRLib.Migrations
                     TotalPages = table.Column<int>(type: "INTEGER", nullable: false),
                     MergedJsonData = table.Column<string>(type: "TEXT", nullable: true),
                     IsFullyProcessed = table.Column<bool>(type: "INTEGER", nullable: false),
-                    IsValidationAccepted = table.Column<bool>(type: "INTEGER", nullable: false)
+                    IsValidationAccepted = table.Column<bool>(type: "INTEGER", nullable: false),
+                    Notes = table.Column<string>(type: "TEXT", nullable: true),
+                    VendorCountry = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
+                    CurrencyCode = table.Column<string>(type: "TEXT", maxLength: 10, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -135,6 +174,11 @@ namespace K_OCRLib.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_BatchActions_TimestampUtc",
+                table: "BatchActions",
+                column: "TimestampUtc");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Batches_BatchNumber",
                 table: "Batches",
                 column: "BatchNumber",
@@ -150,6 +194,11 @@ namespace K_OCRLib.Migrations
                 name: "IX_DocumentFields_InvoiceId",
                 table: "DocumentFields",
                 column: "InvoiceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_InvoiceActions_TimestampUtc",
+                table: "InvoiceActions",
+                column: "TimestampUtc");
 
             migrationBuilder.CreateIndex(
                 name: "IX_InvoiceItems_InvoiceId",
@@ -171,7 +220,13 @@ namespace K_OCRLib.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "BatchActions");
+
+            migrationBuilder.DropTable(
                 name: "DocumentFields");
+
+            migrationBuilder.DropTable(
+                name: "InvoiceActions");
 
             migrationBuilder.DropTable(
                 name: "InvoiceItems");
