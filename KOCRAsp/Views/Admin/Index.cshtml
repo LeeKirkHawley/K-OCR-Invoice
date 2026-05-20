@@ -252,7 +252,7 @@
             });
             if (result.success) {
                 if (result.stripeProvisioned === false) {
-                    showToast('Organization created, but Stripe provisioning failed: ' + (result.stripeProvisioningError ?? 'unknown error') + ' \u2014 use the Provision Stripe button to retry.', 'warning');
+                    alert('Organization created, but Stripe provisioning failed:\n\n' + (result.stripeProvisioningError ?? 'unknown error') + '\n\nUse the Provision Stripe button to retry after the page reloads.');
                 } else {
                     showToast('Organization created.');
                 }
