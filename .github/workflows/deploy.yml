@@ -33,6 +33,7 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_DEFAULT_PRICE_ID: ${{ secrets.STRIPE_DEFAULT_PRICE_ID }}
+          STRIPE_METER_EVENT_NAME: ${{ secrets.STRIPE_METER_EVENT_NAME }}
         run: |
           python3 << 'EOF'
           import json, os
@@ -81,7 +82,7 @@ jobs:
             "Stripe": {
               "SecretKey":        os.environ["STRIPE_SECRET_KEY"],
               "WebhookSecret":    os.environ["STRIPE_WEBHOOK_SECRET"],
-              "MeterEventName":   stripe.get("MeterEventName", "basic_per-page"),
+              "MeterEventName":   os.environ["STRIPE_METER_EVENT_NAME"],
               "DefaultPriceId":   os.environ["STRIPE_DEFAULT_PRICE_ID"],
               "Prices":           stripe.get("Prices", {})
             }
