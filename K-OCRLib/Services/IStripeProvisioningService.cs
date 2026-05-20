@@ -7,6 +7,9 @@ public interface IStripeProvisioningService
 
     /// <summary>Creates a Stripe Subscription for the customer and returns the result.</summary>
     Task<StripeSubscriptionResult> CreateSubscriptionAsync(string stripeCustomerId, string priceId);
+
+    /// <summary>Fetches the current status of an existing subscription directly from Stripe.</summary>
+    Task<string> GetSubscriptionStatusAsync(string stripeSubscriptionId);
 }
 
 public record StripeSubscriptionResult(

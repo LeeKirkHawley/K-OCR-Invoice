@@ -50,4 +50,14 @@ public class StripeProvisioningService : IStripeProvisioningService
 
         return result;
     }
+
+    public async Task<string> GetSubscriptionStatusAsync(string stripeSubscriptionId)
+    {
+        var service = new Stripe.SubscriptionService();
+        var subscription = await service.GetAsync(stripeSubscriptionId);
+        _logger.LogInformation(
+            "Fetched Stripe subscription {SubId}: status={Status}.",
+            stripeSubscriptionId, subscription.Status);
+        return subscription.Status;
+    }
 }

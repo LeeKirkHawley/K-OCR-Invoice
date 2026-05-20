@@ -193,6 +193,34 @@
         }
     </script>
 
+    @if (TempData["StripeInactiveWarning"] is true)
+    {
+        <!-- Stripe inactive warning — shown once after login when subscription is not active -->
+        <div class="modal fade" id="stripeInactiveModal" tabindex="-1"
+             aria-labelledby="stripeInactiveModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title" id="stripeInactiveModalLabel">⚠️ Subscription Inactive</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body pt-2">
+                        <p>Your organization's billing subscription is currently inactive.</p>
+                        <p><strong>OCR processing will be unavailable</strong> until the subscription is reactivated.</p>
+                        <p class="mb-0 text-muted">All other functions — uploading, validating, and exporting invoices — are still available.</p>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="button" class="btn btn-warning" data-bs-dismiss="modal">I Understand</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('stripeInactiveModal')).show();
+            });
+        </script>
+    }
     @await RenderSectionAsync("Scripts", required: false)
 
     @if (User.Identity?.IsAuthenticated == true)

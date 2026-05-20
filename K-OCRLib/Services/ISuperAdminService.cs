@@ -26,4 +26,11 @@ public interface ISuperAdminService
     Task<GuestLoginResult> CreateGuestAsync(string email);
     /// <summary>Creates a Stripe Customer + Subscription for the given org and saves the IDs.</summary>
     Task ProvisionStripeAsync(string organizationId, string? priceId = null);
+
+    /// <summary>
+    /// Fetches the current subscription status directly from Stripe and updates the DB.
+    /// Returns the new status string, or <c>null</c> when the org is not Stripe-billed
+    /// (guest org, no subscription ID, or Stripe not configured).
+    /// </summary>
+    Task<string?> SyncStripeStatusAsync(string organizationId);
 }

@@ -131,6 +131,11 @@
                                         <button class="btn btn-sm btn-outline-primary me-1"
                                                 onclick="provisionStripe('@org.OrganizationId', this)">Provision Stripe</button>
                                     }
+                                    @if (!org.IsGuestOrganization && org.StripeCustomerId != null)
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary me-1"
+                                                onclick="syncStripeStatus('@org.OrganizationId', this)">Sync Status</button>
+                                    }
                                     <button class="btn btn-sm btn-outline-warning"
                                             onclick="revokeOrg('@org.OrganizationId', this)">Revoke</button>
                                 }
@@ -370,6 +375,22 @@
         const input = document.getElementById('setupLinkInput');
         input.select();
         navigator.clipboard.writeText(input.value).then(() => showToast('Copied!'));
+    }
+
+    async function syncStripeStatus(orgId, btn) {
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/syncstripestatus', { orgId });
+            if (result.success) {
+                location.reload();
+            } else {
+                showToast(result.error ?? 'Sync failed.', 'error');
+                setButtonLoading(btn, false);
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+            setButtonLoading(btn, false);
+        }
     }
 
     async function provisionStripe(orgId, btn) {

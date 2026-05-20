@@ -604,6 +604,29 @@ public class SuperAdminService : ISuperAdminService
             user.Id, user.Email, user.FullName, user.OrganizationId, reason);
     }
 
+    public async Task<string?> SyncStripeStatusAsync(string organizationId)
+    {
+        var organization = await _dbContext.Organizations
+            .FirstOrDefaultAsync(o => o.Id == organizationId)
+            ?? throw new KeyNotFoundException("Organization not found.");
+
+        // Guest orgs, unconfigured Stripe, and un-provisioned orgs are silently skipped —
+        // this method is called on every login and must never block it.
+        if (organization.IsGuestOrganization) return null;
+        if (_stripeProvisioning is null) return null;
+        if (string.IsNullOrEmpty(organization.StripeSubscriptionId)) return null;
+
+        var status = await _stripeProvisioning.GetSubscriptionStatusAsync(organization.StripeSubscriptionId);
+        organization.StripeSubscriptionStatus = status;
+        await _dbContext.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Synced Stripe subscription status for org {OrgId}: status={Status}.",
+            organizationId, status);
+
+        return status;
+    }
+
     public async Task ProvisionStripeAsync(string organizationId, string? priceId = null)
     {
         var organization = await _dbContext.Organizations

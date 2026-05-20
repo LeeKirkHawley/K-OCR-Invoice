@@ -81,6 +81,9 @@ public class AuthController : Controller
         if (result.Succeeded)
         {
             _logger.LogInformation("User {Email} logged in.", model.Email);
+            var stripeStatus = await SyncStripeStatusOnLoginAsync(model.Email);
+            if (stripeStatus is not null && stripeStatus is not "active" and not "trialing")
+                TempData["StripeInactiveWarning"] = true;
             return Redirect(returnUrl ?? "/");
         }
 
@@ -199,6 +202,25 @@ public class AuthController : Controller
         {
             _logger.LogError(ex, "GuestLogin failed for {Email}", request.Email);
             return Json(new { success = false, error = ex.Message });
+        }
+    }
+    /// <summary>
+    /// Syncs the user's org subscription status from Stripe.
+    /// Returns the current status string after sync, or <c>null</c> when the org is not
+    /// Stripe-billed or Stripe is not configured. Never throws — must not block login.
+    /// </summary>
+    private async Task<string?> SyncStripeStatusOnLoginAsync(string email)
+    {
+        try
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+            if (user?.OrganizationId is null) return null;
+            return await _superAdminSvc.SyncStripeStatusAsync(user.OrganizationId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Stripe status sync on login failed for {Email}.", email);
+            return null;
         }
     }
 }

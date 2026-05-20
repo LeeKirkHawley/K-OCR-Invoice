@@ -62,6 +62,11 @@ public class StripeWebhookController : ControllerBase
         {
             switch (stripeEvent.Type)
             {
+                case EventTypes.CustomerSubscriptionCreated:
+                    var created = stripeEvent.Data.Object as Subscription;
+                    await UpdateSubscriptionStatusAsync(created!.CustomerId, created.Status);
+                    break;
+
                 case EventTypes.CustomerSubscriptionUpdated:
                     var updated = stripeEvent.Data.Object as Subscription;
                     await UpdateSubscriptionStatusAsync(updated!.CustomerId, updated.Status);

@@ -285,6 +285,10 @@ public class HomeController : Controller
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { success = false, error = "Super-admin does not have org batch access." });
 
+        if (!_tenantContext.IsGuestOrganization &&
+            !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
+            return Json(new { success = false, error = "OCR is unavailable: subscription inactive." });
+
         var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
         if (!int.TryParse(currentBatchIdStr, out int batchId))
             return Json(new { success = false, error = "No batch selected." });

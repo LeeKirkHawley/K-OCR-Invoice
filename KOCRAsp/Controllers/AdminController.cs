@@ -196,6 +196,22 @@ public class AdminController : Controller
         }
     }
 
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> SyncStripeStatus([FromBody] SyncStripeStatusRequest request)
+    {
+        try
+        {
+            var status = await _superAdminSvc.SyncStripeStatusAsync(request.OrgId);
+            return Json(new { success = true, status = status ?? "not-billed" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SyncStripeStatus failed for {OrgId}", request.OrgId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
     // Helper — resolves lazily to avoid circular ctor dependency
     private Task<UserManagerContext?> GetUserManagerAsync(string userId)
     {
