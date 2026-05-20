@@ -29,8 +29,9 @@ public interface ISuperAdminService
 
     /// <summary>
     /// Fetches the current subscription status directly from Stripe and updates the DB.
-    /// Returns the new status string, or <c>null</c> when the org is not Stripe-billed
-    /// (guest org, no subscription ID, or Stripe not configured).
+    /// Returns <see cref="StripeStatusResult.NotApplicable"/> for guest orgs.
+    /// For all real orgs, <see cref="StripeStatusResult.IsApplicable"/> is <c>true</c> and
+    /// <see cref="StripeStatusResult.Status"/> holds the live status or <c>"error"</c> on failure.
     /// </summary>
-    Task<string?> SyncStripeStatusAsync(string organizationId);
+    Task<StripeStatusResult> SyncStripeStatusAsync(string organizationId);
 }

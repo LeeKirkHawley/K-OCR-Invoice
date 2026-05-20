@@ -202,8 +202,8 @@ public class AdminController : Controller
     {
         try
         {
-            var status = await _superAdminSvc.SyncStripeStatusAsync(request.OrgId);
-            return Json(new { success = true, status = status ?? "not-billed" });
+            var result = await _superAdminSvc.SyncStripeStatusAsync(request.OrgId);
+            return Json(new { success = true, status = result.IsApplicable ? result.Status : "not-billed" });
         }
         catch (Exception ex)
         {

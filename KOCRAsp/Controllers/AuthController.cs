@@ -1,4 +1,5 @@
 using K_OCR.Identity;
+using K_OCR.Models.Api.SuperAdmin;
 using KOCRAsp.Models;
 using K_OCR.Services;
 using KOCRAsp.Services;
@@ -81,8 +82,8 @@ public class AuthController : Controller
         if (result.Succeeded)
         {
             _logger.LogInformation("User {Email} logged in.", model.Email);
-            var stripeStatus = await SyncStripeStatusOnLoginAsync(model.Email);
-            if (stripeStatus is not null && stripeStatus is not "active" and not "trialing")
+            var stripeResult = await SyncStripeStatusOnLoginAsync(model.Email);
+            if (stripeResult.IsApplicable && stripeResult.Status is not "active" and not "trialing")
                 TempData["StripeInactiveWarning"] = true;
             return Redirect(returnUrl ?? "/");
         }
@@ -206,21 +207,22 @@ public class AuthController : Controller
     }
     /// <summary>
     /// Syncs the user's org subscription status from Stripe.
-    /// Returns the current status string after sync, or <c>null</c> when the org is not
-    /// Stripe-billed or Stripe is not configured. Never throws — must not block login.
+    /// Returns <see cref="StripeStatusResult.NotApplicable"/> for guest orgs.
+    /// For all real orgs, always returns an applicable result — never throws.
     /// </summary>
-    private async Task<string?> SyncStripeStatusOnLoginAsync(string email)
+    private async Task<StripeStatusResult> SyncStripeStatusOnLoginAsync(string email)
     {
         try
         {
             var user = await _userManager.FindByEmailAsync(email);
-            if (user?.OrganizationId is null) return null;
+            if (user?.OrganizationId is null) return StripeStatusResult.NotApplicable;
             return await _superAdminSvc.SyncStripeStatusAsync(user.OrganizationId);
         }
         catch (Exception ex)
         {
+            // DB or other infrastructure failure — treat as inactive so the user is informed.
             _logger.LogWarning(ex, "Stripe status sync on login failed for {Email}.", email);
-            return null;
+            return new StripeStatusResult(true, "error");
         }
     }
 }

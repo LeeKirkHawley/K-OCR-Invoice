@@ -604,27 +604,45 @@ public class SuperAdminService : ISuperAdminService
             user.Id, user.Email, user.FullName, user.OrganizationId, reason);
     }
 
-    public async Task<string?> SyncStripeStatusAsync(string organizationId)
+    public async Task<StripeStatusResult> SyncStripeStatusAsync(string organizationId)
     {
         var organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId)
             ?? throw new KeyNotFoundException("Organization not found.");
 
-        // Guest orgs, unconfigured Stripe, and un-provisioned orgs are silently skipped —
-        // this method is called on every login and must never block it.
-        if (organization.IsGuestOrganization) return null;
-        if (_stripeProvisioning is null) return null;
-        if (string.IsNullOrEmpty(organization.StripeSubscriptionId)) return null;
+        // Guest orgs are never Stripe-billed — no status check needed.
+        if (organization.IsGuestOrganization) return StripeStatusResult.NotApplicable;
 
-        var status = await _stripeProvisioning.GetSubscriptionStatusAsync(organization.StripeSubscriptionId);
-        organization.StripeSubscriptionStatus = status;
-        await _dbContext.SaveChangesAsync();
+        // Stripe not configured or no subscription provisioned → treat as inactive.
+        if (_stripeProvisioning is null || string.IsNullOrEmpty(organization.StripeSubscriptionId))
+        {
+            _logger.LogWarning(
+                "Cannot sync Stripe status for org {OrgId}: {Reason}.",
+                organizationId,
+                _stripeProvisioning is null ? "Stripe not configured" : "No subscription ID");
+            return new StripeStatusResult(true, organization.StripeSubscriptionStatus); // cached value (default "none")
+        }
 
-        _logger.LogInformation(
-            "Synced Stripe subscription status for org {OrgId}: status={Status}.",
-            organizationId, status);
+        try
+        {
+            var status = await _stripeProvisioning.GetSubscriptionStatusAsync(organization.StripeSubscriptionId);
+            organization.StripeSubscriptionStatus = status;
+            await _dbContext.SaveChangesAsync();
 
-        return status;
+            _logger.LogInformation(
+                "Synced Stripe subscription status for org {OrgId}: status={Status}.",
+                organizationId, status);
+
+            return new StripeStatusResult(true, status);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to fetch Stripe subscription status for org {OrgId}. OCR will be blocked.",
+                organizationId);
+            // Stripe is the authority — if we can't reach it, surface it as inactive.
+            return new StripeStatusResult(true, "error");
+        }
     }
 
     public async Task ProvisionStripeAsync(string organizationId, string? priceId = null)
