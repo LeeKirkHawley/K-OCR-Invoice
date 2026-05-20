@@ -11,4 +11,8 @@ public class CreateOrganizationResult
     /// <summary>Full setup link sent in the invite email (null when email is not bypassed).</summary>
     public string? SetupLink { get; set; }
     public bool EmailSent { get; set; }
+    /// <summary>True if Stripe was auto-provisioned successfully during org creation.</summary>
+    public bool StripeProvisioned { get; set; }
+    /// <summary>Error message when auto-provisioning failed; null on success or when Stripe is not configured.</summary>
+    public string? StripeProvisioningError { get; set; }
 }

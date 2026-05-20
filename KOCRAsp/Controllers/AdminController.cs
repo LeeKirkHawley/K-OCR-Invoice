@@ -59,7 +59,9 @@ public class AdminController : Controller
                 orgId = result.OrganizationId,
                 adminEmail = result.AdminEmail,
                 setupLink = result.SetupLink,
-                emailSent = result.EmailSent
+                emailSent = result.EmailSent,
+                stripeProvisioned = result.StripeProvisioned,
+                stripeProvisioningError = result.StripeProvisioningError
             });
         }
         catch (Exception ex)

@@ -221,8 +221,14 @@ public class SuperAdminService : ISuperAdminService
         }
 
         // Auto-provision Stripe Customer + Subscription (non-fatal — admin can retry manually)
+        bool stripeProvisioned = false;
+        string? stripeProvisioningError = null;
         if (!organization.IsGuestOrganization)
-            await TryProvisionStripeAsync(organization, priceId: null);
+        {
+            var stripeResult = await TryProvisionStripeAsync(organization, priceId: null);
+            stripeProvisioned = stripeResult.Success;
+            stripeProvisioningError = stripeResult.Error;
+        }
 
         _logger.LogInformation(
             "Organization created: OrgId={OrgId}, OrgName={OrgName}, IsGuestOrganization={IsGuestOrganization}, AdminUserId={AdminUserId}, AdminEmail={AdminEmail}.",
@@ -244,7 +250,9 @@ public class SuperAdminService : ISuperAdminService
             TempPassword = tempPassword,
             InvitationToken = invitationToken,
             SetupLink = setupLink,
-            EmailSent = emailSent
+            EmailSent = emailSent,
+            StripeProvisioned = stripeProvisioned,
+            StripeProvisioningError = stripeProvisioningError
         };
     }
 
@@ -681,17 +689,19 @@ public class SuperAdminService : ISuperAdminService
             sub.SubscriptionId, organizationId, sub.Status);
     }
 
-    private async Task TryProvisionStripeAsync(Organization organization, string? priceId)
+    private async Task<(bool Success, string? Error)> TryProvisionStripeAsync(Organization organization, string? priceId)
     {
         try
         {
             await ProvisionStripeAsync(organization.Id, priceId);
+            return (true, null);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
                 "Auto-provisioning Stripe failed for org {OrgId}. Admin can retry manually from the Admin console.",
                 organization.Id);
+            return (false, ex.Message);
         }
     }
 }
