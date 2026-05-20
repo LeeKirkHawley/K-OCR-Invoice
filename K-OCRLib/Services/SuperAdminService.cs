@@ -665,9 +665,16 @@ public class SuperAdminService : ISuperAdminService
         if (_stripeProvisioning is null)
             throw new InvalidOperationException("Stripe provisioning service is not configured.");
 
-        var resolvedPriceId = priceId
-            ?? _configuration["Stripe:DefaultPriceId"]
-            ?? throw new InvalidOperationException("No Stripe price ID provided and Stripe:DefaultPriceId is not configured.");
+        var configuredPriceId = _configuration["Stripe:DefaultPriceId"];
+        var resolvedPriceId = !string.IsNullOrWhiteSpace(priceId) ? priceId
+            : !string.IsNullOrWhiteSpace(configuredPriceId) ? configuredPriceId
+            : throw new InvalidOperationException(
+                $"No Stripe price ID provided and Stripe:DefaultPriceId is not configured (raw config value: \"{configuredPriceId ?? "null"}\").");
+
+        _logger.LogInformation(
+            "Provisioning Stripe for org {OrgId} with priceId={PriceId} (from {Source}).",
+            organizationId, resolvedPriceId,
+            !string.IsNullOrWhiteSpace(priceId) ? "caller" : "Stripe:DefaultPriceId config");
 
         var customerId = organization.StripeCustomerId;
         if (customerId is null)
