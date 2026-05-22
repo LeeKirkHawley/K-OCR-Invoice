@@ -1,5 +1,6 @@
-/* ── OCR overlay ──────────────────────────────────────────────── */
-#ocrOverlay {
+/* ── OCR / upload overlays ────────────────────────────────────── */
+#ocrOverlay,
+#uploadOverlay {
     display: none;
     position: fixed;
     inset: 0;
@@ -11,7 +12,8 @@
     gap: 14px;
 }
 
-#ocrOverlay.active { display: flex; }
+#ocrOverlay.active,
+#uploadOverlay.active { display: flex; }
 
 .ocr-spinner { width: 3rem; height: 3rem; }
 

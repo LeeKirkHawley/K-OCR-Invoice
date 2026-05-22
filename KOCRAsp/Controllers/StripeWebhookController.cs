@@ -82,6 +82,11 @@ public class StripeWebhookController : ControllerBase
                     await UpdateSubscriptionStatusAsync(paid!.CustomerId, "active");
                     break;
 
+                case EventTypes.InvoiceFinalized:
+                    var finalized = stripeEvent.Data.Object as Invoice;
+                    await UpdateSubscriptionStatusAsync(finalized!.CustomerId, "invoice_finalized");
+                    break;
+
                 case EventTypes.InvoicePaymentFailed:
                     var failed = stripeEvent.Data.Object as Invoice;
                     await UpdateSubscriptionStatusAsync(failed!.CustomerId, "past_due");

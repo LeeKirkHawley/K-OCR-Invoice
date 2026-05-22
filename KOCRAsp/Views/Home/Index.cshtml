@@ -153,6 +153,13 @@
     </div>
     <span class="ocr-overlay-label">OCR In Progress...</span>
 </div>
+<!-- Upload In Progress overlay -->
+<div id="uploadOverlay">
+    <div class="spinner-border text-light ocr-spinner" role="status">
+        <span class="visually-hidden">Uploading...</span>
+    </div>
+    <span class="ocr-overlay-label">Uploading...</span>
+</div>
 <!-- Setup link modal -->
 <div class="modal fade" id="setupLinkModal" tabindex="-1">
     <div class="modal-dialog">
@@ -219,6 +226,7 @@
             fd.append('files', f);
             fd.append('clientPaths', f.webkitRelativePath || f.name);
         }
+        showUploadOverlay();
         try {
             const result = await postForm('/home/uploadfiles', fd);
             if (result.success) {
@@ -231,6 +239,8 @@
             }
         } catch (err) {
             showToast('Upload error: ' + err.message, 'error');
+        } finally {
+            hideUploadOverlay();
         }
         this.value = '';
     });
@@ -561,6 +571,14 @@
     function hideOcrOverlay() {
         document.getElementById('ocrOverlay').classList.remove('active');
         setOcrButtonsDisabled(false);
+    }
+
+    function showUploadOverlay() {
+        document.getElementById('uploadOverlay').classList.add('active');
+    }
+
+    function hideUploadOverlay() {
+        document.getElementById('uploadOverlay').classList.remove('active');
     }
 
     function setOcrButtonsDisabled(disabled) {
