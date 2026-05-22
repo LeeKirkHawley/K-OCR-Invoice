@@ -182,10 +182,20 @@ builder.Services.AddScoped<IStripeProvisioningService, StripeProvisioningService
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<IAzureService, AzureService>();
 //builder.Services.AddScoped<IOCRService, OCRService>();
-builder.Services.AddScoped<IInvoiceProcessingService, InvoiceProcessingService>();
 builder.Services.AddScoped<IInvoiceEnrichmentService, InvoiceEnrichmentService>();
 builder.Services.AddScoped<IBatchService, BatchService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+
+// ── OCR workflow steps ────────────────────────────────────────────────────────
+builder.Services.AddScoped<K_OCR.Services.Workflow.AzureOcrStep>();
+builder.Services.AddScoped<K_OCR.Services.Workflow.TesseractOcrStep>();
+builder.Services.AddScoped<K_OCR.Services.Workflow.TesseractValidationStep>();
+builder.Services.AddScoped<K_OCR.Services.Workflow.LineItemValidationStep>();
+builder.Services.AddScoped<K_OCR.Services.Workflow.ConfidenceValidationStep>();
+builder.Services.AddScoped<K_OCR.Services.Workflow.EnrichmentStep>();
+builder.Services.AddScoped<K_OCR.Services.Workflow.SaveContextStep>();
+builder.Services.AddScoped<K_OCR.Services.Workflow.InvoiceProcessingWorkflow>();
+builder.Services.AddScoped<IInvoiceProcessingService, InvoiceProcessingService>();
 
 var app = builder.Build();
 
