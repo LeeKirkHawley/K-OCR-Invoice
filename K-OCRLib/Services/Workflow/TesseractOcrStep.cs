@@ -12,12 +12,12 @@ namespace K_OCR.Services.Workflow;
 /// <c>null</c> as "infrastructure failure; skip Tesseract validation".
 /// </para>
 /// </summary>
-public class TesseractOcrStep : IWorkflowStep
+public class TesseractOcrStep : WorkflowStepBase
 {
     private readonly ITesseractValidationService _tesseractService;
     private readonly ILogger<TesseractOcrStep> _logger;
 
-    public string Name => "Tesseract OCR";
+    public override string Name => "Tesseract OCR";
 
     public TesseractOcrStep(ITesseractValidationService tesseractService, ILogger<TesseractOcrStep> logger)
     {
@@ -25,7 +25,7 @@ public class TesseractOcrStep : IWorkflowStep
         _logger = logger;
     }
 
-    public async Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
+    public override async Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("[{Step}] Starting for {File}.", Name, Path.GetFileName(context.InputPath));
         try

@@ -1,3 +1,5 @@
+using K_OCR.Identity;
+
 namespace K_OCR.Data;
 
 /// <summary>
@@ -22,6 +24,12 @@ public interface ITenantContext
     /// unauthenticated contexts.
     /// </summary>
     string? OrganizationName { get; }
+
+    /// <summary>
+    /// The full <see cref="Organization"/> entity for the current tenant, or
+    /// <c>null</c> for super-admins and unauthenticated contexts.
+    /// </summary>
+    Organization? Organization { get; }
 
     /// <summary>
     /// When <c>true</c> the user is a super-admin with no org scope.

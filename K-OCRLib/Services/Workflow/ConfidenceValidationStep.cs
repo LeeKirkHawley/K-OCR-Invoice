@@ -15,12 +15,12 @@ namespace K_OCR.Services.Workflow;
 /// </list>
 /// </para>
 /// </summary>
-public class ConfidenceValidationStep : IWorkflowStep
+public class ConfidenceValidationStep : WorkflowStepBase
 {
     private readonly IConfidenceValidationService _validationService;
     private readonly IConfiguration _configuration;
 
-    public string Name => "Confidence Validation";
+    public override string Name => "Confidence Validation";
 
     public ConfidenceValidationStep(
         IConfidenceValidationService validationService,
@@ -30,7 +30,7 @@ public class ConfidenceValidationStep : IWorkflowStep
         _configuration = configuration;
     }
 
-    public Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
     {
         if (context.Layout == null)
             return Task.CompletedTask;

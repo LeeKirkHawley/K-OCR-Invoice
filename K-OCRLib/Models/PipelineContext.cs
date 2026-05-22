@@ -1,3 +1,4 @@
+using K_OCR.Identity;
 using K_OCR.Models;
 
 namespace K_OCR.Models
@@ -19,5 +20,16 @@ namespace K_OCR.Models
         /// When null the value is read from <c>MinConfidenceThreshold</c> in configuration.
         /// </summary>
         public double? MinConfidenceThreshold { get; set; }
+
+        /// <summary>
+        /// The organization on whose behalf the pipeline is running.
+        /// Available to pre-run and post-run hooks for per-organization customization.
+        /// </summary>
+        public Organization? Organization { get; set; }
+
+        /// <summary>
+        /// The batch being processed. Available to pre-run and post-run hooks.
+        /// </summary>
+        public Batch? Batch { get; set; }
     }
 }

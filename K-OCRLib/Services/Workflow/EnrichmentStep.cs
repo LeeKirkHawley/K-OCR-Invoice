@@ -6,18 +6,18 @@ namespace K_OCR.Services.Workflow;
 /// Workflow step that enriches every invoice in the pipeline context with
 /// the vendor's country of origin and the invoice currency code.
 /// </summary>
-public class EnrichmentStep : IWorkflowStep
+public class EnrichmentStep : WorkflowStepBase
 {
     private readonly IInvoiceEnrichmentService _enrichmentService;
 
-    public string Name => "Enrichment";
+    public override string Name => "Enrichment";
 
     public EnrichmentStep(IInvoiceEnrichmentService enrichmentService)
     {
         _enrichmentService = enrichmentService;
     }
 
-    public Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
     {
         if (context.Layout == null)
             return Task.CompletedTask;

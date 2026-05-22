@@ -1,3 +1,4 @@
+using K_OCR.Identity;
 using K_OCR.Models;
 
 namespace K_OCR.Services;
@@ -8,8 +9,13 @@ public interface IInvoiceProcessingService
     /// Process a file (image or PDF) through Azure OCR and return results.
     /// Always calls Azure — cached results are never substituted.
     /// </summary>
-    Task<ProcessingResult> ProcessFileAsync(string filePath, string? artifactsDirectory = null, double? minConfidenceThreshold = null);
-    
+    Task<ProcessingResult> ProcessFileAsync(
+        string filePath,
+        string? artifactsDirectory = null,
+        double? minConfidenceThreshold = null,
+        Organization? organization = null,
+        Batch? batch = null);
+
     /// <summary>
     /// Process multiple files in batch with progress reporting.
     /// Always calls Azure for every file — cached results are never substituted.
@@ -20,13 +26,13 @@ public interface IInvoiceProcessingService
         string? artifactsDirectory = null,
         double? minConfidenceThreshold = null,
         Batch? batch = null,
-        string? organizationName = null);
-    
+        Organization? organization = null);
+
     /// <summary>
     /// Save a validated invoice to the database Invoice row.
     /// </summary>
     Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice);
-    
+
     /// <summary>
     /// Load a previously processed invoice from the database.
     /// </summary>

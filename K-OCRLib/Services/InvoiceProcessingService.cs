@@ -1,3 +1,4 @@
+using K_OCR.Identity;
 using K_OCR.Models;
 using K_OCR.Services.Workflow;
 using Microsoft.Extensions.Configuration;
@@ -24,12 +25,17 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         _logger = logger;
     }
 
-    public async Task<ProcessingResult> ProcessFileAsync(string filePath, string? artifactsDirectory = null, double? minConfidenceThreshold = null)
+    public async Task<ProcessingResult> ProcessFileAsync(
+        string filePath,
+        string? artifactsDirectory = null,
+        double? minConfidenceThreshold = null,
+        Organization? organization = null,
+        Batch? batch = null)
     {
         var result = new ProcessingResult();
         try
         {
-            var context = await _workflow.RunAsync(filePath, artifactsDirectory, minConfidenceThreshold);
+            var context = await _workflow.RunAsync(filePath, artifactsDirectory, minConfidenceThreshold, organization, batch);
             result.Context = context;
             result.Json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
         }
@@ -47,7 +53,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         string? artifactsDirectory = null,
         double? minConfidenceThreshold = null,
         Batch? batch = null,
-        string? organizationName = null)
+        Organization? organization = null)
     {
         var results = new Dictionary<string, ProcessingResult>();
         var filePathsList = filePaths.ToList();
@@ -55,7 +61,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         var completed = 0;
 
         var batchLabel = batch is not null ? $"{batch.Name} (#{batch.BatchNumber})" : "unknown batch";
-        var orgLabel   = organizationName ?? "unknown org";
+        var orgLabel   = organization?.Name ?? "unknown org";
 
         var maxConcurrent = Math.Max(1, _configuration.GetValue<int>("MaxConcurrentRequests", 3));
         using var semaphore = new SemaphoreSlim(maxConcurrent, maxConcurrent);
@@ -73,7 +79,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
 
                 progress?.Report((completed, total, fileName));
 
-                var result = await ProcessFileAsync(filePath, artifactsDirectory, minConfidenceThreshold);
+                var result = await ProcessFileAsync(filePath, artifactsDirectory, minConfidenceThreshold, organization, batch);
 
                 lock (results)
                 {

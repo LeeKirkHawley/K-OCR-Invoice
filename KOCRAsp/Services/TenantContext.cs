@@ -42,6 +42,8 @@ internal sealed class TenantContext : ITenantContext
 
     public bool IsGuestOrganization => GetOrg()?.IsGuestOrganization ?? false;
 
+    public Organization? Organization => GetOrg();
+
     private Organization? GetOrg()
     {
         if (_orgLoaded) return _org;

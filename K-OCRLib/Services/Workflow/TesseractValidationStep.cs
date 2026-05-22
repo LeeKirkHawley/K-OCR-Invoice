@@ -10,18 +10,18 @@ namespace K_OCR.Services.Workflow;
 /// <c>null</c>, which indicates a Tesseract infrastructure failure.
 /// </para>
 /// </summary>
-public class TesseractValidationStep : IWorkflowStep
+public class TesseractValidationStep : WorkflowStepBase
 {
     private readonly IInvoiceValidationService _validationService;
 
-    public string Name => "Tesseract Validation";
+    public override string Name => "Tesseract Validation";
 
     public TesseractValidationStep(IInvoiceValidationService validationService)
     {
         _validationService = validationService;
     }
 
-    public Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
     {
         // null  = Tesseract task threw (infrastructure failure) → skip validation
         // ""    = Tesseract ran but found no text → FlagAllExtracted inside service

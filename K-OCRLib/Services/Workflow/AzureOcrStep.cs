@@ -7,12 +7,12 @@ namespace K_OCR.Services.Workflow;
 /// Workflow step that calls Azure Document Intelligence to extract structured
 /// invoice data. Writes the result to <see cref="PipelineContext.Layout"/>.
 /// </summary>
-public class AzureOcrStep : IWorkflowStep
+public class AzureOcrStep : WorkflowStepBase
 {
     private readonly IInvoiceService _invoiceService;
     private readonly ILogger<AzureOcrStep> _logger;
 
-    public string Name => "Azure OCR";
+    public override string Name => "Azure OCR";
 
     public AzureOcrStep(IInvoiceService invoiceService, ILogger<AzureOcrStep> logger)
     {
@@ -20,7 +20,7 @@ public class AzureOcrStep : IWorkflowStep
         _logger = logger;
     }
 
-    public async Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
+    public override async Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("[{Step}] Starting for {File}.", Name, Path.GetFileName(context.InputPath));
         context.Layout = await _invoiceService.RunAzureInvoiceParse(context.InputPath);

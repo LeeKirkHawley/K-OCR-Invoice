@@ -6,18 +6,18 @@ namespace K_OCR.Services.Workflow;
 /// Workflow step that validates the mathematical accuracy of line items and
 /// invoice totals for every invoice in the pipeline context.
 /// </summary>
-public class LineItemValidationStep : IWorkflowStep
+public class LineItemValidationStep : WorkflowStepBase
 {
     private readonly ILineItemValidationService _validationService;
 
-    public string Name => "Line Item Validation";
+    public override string Name => "Line Item Validation";
 
     public LineItemValidationStep(ILineItemValidationService validationService)
     {
         _validationService = validationService;
     }
 
-    public Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
     {
         if (context.Layout == null)
             return Task.CompletedTask;
