@@ -197,7 +197,28 @@
     </div>
 </div>
 
-@section Scripts {
+<!-- Re-OCR confirmation dialog -->
+<div class="modal fade" id="reOcrModal" tabindex="-1" aria-labelledby="reOcrModalLabel" aria-modal="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info-subtle">
+                <h5 class="modal-title" id="reOcrModalLabel">ℹ️ Files Already Processed</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>The following files already have OCR results:</p>
+                <ul id="reOcrFileList" class="list-group list-group-flush mb-3" style="max-height:200px;overflow-y:auto;"></ul>
+                <p class="mb-0">What would you like to do?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="reOcrSkipBtn">Skip these files (OCR remaining only)</button>
+                <button type="button" class="btn btn-outline-danger" id="reOcrAllBtn">Re-OCR all files</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <script>
     let _currentFilePath  = null;
     let _currentInvoice   = null;
@@ -253,9 +274,40 @@
 
     // ── Batch OCR ───────────────────────────────────────────────
     document.getElementById('batchOcrBtn').addEventListener('click', async function () {
+        try {
+            const checkResult = await fetch('/home/GetAlreadyOcrdFiles');
+            const checkData   = await checkResult.json();
+            if (checkData.files && checkData.files.length > 0) {
+                const list = document.getElementById('reOcrFileList');
+                list.innerHTML = '';
+                checkData.files.forEach(f => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item py-1 px-2 small';
+                    li.textContent = f;
+                    list.appendChild(li);
+                });
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('reOcrModal')).show();
+                return;
+            }
+        } catch { /* network error – fall through to OCR */ }
+        startBatchOcr(false);
+    });
+
+    document.getElementById('reOcrSkipBtn').addEventListener('click', function () {
+        bootstrap.Modal.getInstance(document.getElementById('reOcrModal')).hide();
+        startBatchOcr(true);
+    });
+
+    document.getElementById('reOcrAllBtn').addEventListener('click', function () {
+        bootstrap.Modal.getInstance(document.getElementById('reOcrModal')).hide();
+        startBatchOcr(false);
+    });
+
+    async function startBatchOcr(skipAlreadyOcrd) {
         showOcrOverlay();
         try {
             const fd = new FormData();
+            if (skipAlreadyOcrd) fd.append('skipAlreadyOcrd', 'true');
             const result = await postForm('/home/batchocr', fd);
             if (result.success) {
                 if (result.guestLimitReached) {
@@ -271,7 +323,7 @@
             hideOcrOverlay();
             showToast('Batch OCR error: ' + err.message, 'error');
         }
-    });
+    }
 
     // ── File click ──────────────────────────────────────────────
     document.getElementById('fileListContainer').addEventListener('click', function (e) {

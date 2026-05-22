@@ -14,7 +14,8 @@ public interface IBatchService
     Task ReleaseBatchLockAsync(int batchId, string userId);
     Task SetUserLastBatchAsync(string userId, string organizationId, int? batchId);
     Task<int?> GetUserLastBatchIdAsync(string userId, string organizationId);
-    Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, int? guestPageLimit = null);
+    Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, int? guestPageLimit = null, ISet<string>? skipFileNames = null);
+    Task<List<string>> GetFullyProcessedFileNamesAsync(int batchId);
     Task<int> GetBatchOcrdPageCountAsync(int batchId);
     Task<UploadResult> UploadFilesToBatchAsync(int batchId, IReadOnlyList<FileUpload> files, string userId);
 }

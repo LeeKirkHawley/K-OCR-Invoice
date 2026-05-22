@@ -135,12 +135,12 @@ public class HomeControllerTests
             Json = "{}"
         };
         _mockOcrSvc
-            .Setup(s => s.ProcessFileAsync(@"C:\invoices\file.pdf", false, @"C:\Artifacts", 0.8))
+            .Setup(s => s.ProcessFileAsync(@"C:\invoices\file.pdf", @"C:\Artifacts", 0.8))
             .ReturnsAsync(processingResult);
 
         var invoice = new InvoiceDto { VendorName = "Acme Corp" };
         _mockOcrSvc
-            .Setup(s => s.LoadCachedInvoiceAsync(@"C:\invoices\file.pdf"))
+            .Setup(s => s.LoadInvoiceAsync(@"C:\invoices\file.pdf"))
             .ReturnsAsync(invoice);
 
         var result = await _controller.StartOcr(@"C:\invoices\file.pdf");
@@ -159,7 +159,7 @@ public class HomeControllerTests
 
         var invoice = new InvoiceDto { VendorName = "Acme Corp" };
         _mockOcrSvc
-            .Setup(s => s.LoadCachedInvoiceAsync(@"C:\invoices\file.pdf"))
+            .Setup(s => s.LoadInvoiceAsync(@"C:\invoices\file.pdf"))
             .ReturnsAsync(invoice);
 
         // Callback writes a minimal placeholder DOCX so File.ReadAllBytesAsync succeeds

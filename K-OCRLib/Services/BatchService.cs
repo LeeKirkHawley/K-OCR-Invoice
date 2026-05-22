@@ -325,6 +325,14 @@ public class BatchService : IBatchService, IAsyncDisposable
         return result;
     }
 
+    public async Task<List<string>> GetFullyProcessedFileNamesAsync(int batchId)
+    {
+        return await Db.Invoices
+            .Where(i => i.BatchId == batchId && i.IsFullyProcessed && i.FilePath != null)
+            .Select(i => Path.GetFileName(i.FilePath!))
+            .ToListAsync();
+    }
+
     private static int EstimatePdfPageCount(string filePath)
     {
         try
@@ -345,7 +353,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         return 1;
     }
 
-    public async Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, int? guestPageLimit = null)
+    public async Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, int? guestPageLimit = null, ISet<string>? skipFileNames = null)
     {
         if (!_tenantContext.IsGuestOrganization &&
             !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
@@ -387,6 +395,16 @@ public class BatchService : IBatchService, IAsyncDisposable
                 return TriggerOcrResult.Ok();
             }
 
+            // ── Apply caller-requested skip list ─────────────────────────
+            if (skipFileNames != null && skipFileNames.Count > 0)
+            {
+                filePaths = filePaths
+                    .Where(f => !skipFileNames.Contains(Path.GetFileName(f), StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+                _logger.LogInformation("TriggerOcrAsync: {Skipped} file(s) skipped per caller request; {Remaining} will be OCR'd (batch {BatchId}).",
+                    skipFileNames.Count, filePaths.Count, batchId);
+            }
+
             // ── Guest org page limit ──────────────────────────────────────
             var limitResult = TriggerOcrResult.Ok();
             if (_tenantContext.IsGuestOrganization && guestPageLimit.HasValue)
@@ -402,20 +420,9 @@ public class BatchService : IBatchService, IAsyncDisposable
                     return TriggerOcrResult.LimitHit(filePaths.Count, guestPageLimit.Value);
                 }
 
-                // Filter out already-processed files, then truncate by estimated page count.
-                var processedPaths = (await Db.Invoices
-                    .Where(i => i.BatchId == batchId && i.IsFullyProcessed && i.FilePath != null)
-                    .Select(i => i.FilePath!)
-                    .ToListAsync())
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                var pendingFiles = filePaths
-                    .Where(f => !processedPaths.Contains(f))
-                    .ToList();
-
                 var allowed = new List<string>();
                 var budgetPages = remaining;
-                foreach (var file in pendingFiles)
+                foreach (var file in filePaths)
                 {
                     var estimatedPages = EstimateFilePageCount(file);
                     if (budgetPages <= 0) break;
@@ -423,7 +430,7 @@ public class BatchService : IBatchService, IAsyncDisposable
                     budgetPages -= estimatedPages;
                 }
 
-                var skipped = pendingFiles.Count - allowed.Count;
+                var skipped = filePaths.Count - allowed.Count;
                 if (skipped > 0)
                 {
                     _logger.LogInformation(
@@ -432,17 +439,19 @@ public class BatchService : IBatchService, IAsyncDisposable
                     limitResult = TriggerOcrResult.LimitHit(skipped, guestPageLimit.Value);
                 }
 
-                // Replace filePaths with the already-processed paths + allowed new ones so
-                // ProcessBatchAsync (useCache:true) handles cached files normally and only
-                // sends the allowed new ones to Azure.
-                filePaths = processedPaths.ToList().Concat(allowed).ToList();
+                filePaths = allowed;
+            }
+
+            if (filePaths.Count == 0)
+            {
+                _logger.LogInformation("TriggerOcrAsync: no files remaining to process in batch {BatchId}.", batchId);
+                return limitResult;
             }
 
             _logger.LogInformation("TriggerOcrAsync: processing {Count} file(s) in batch {BatchId}.", filePaths.Count, batchId);
 
             var results = await _processingService.ProcessBatchAsync(
                 filePaths,
-                useCache: true,
                 artifactsDirectory: artifactsDir,
                 minConfidenceThreshold: minConfidenceThreshold,
                 batch: batch,

@@ -5,27 +5,17 @@ namespace K_OCR.Services;
 public interface IInvoiceProcessingService
 {
     /// <summary>
-    /// Process a file (image or PDF) and return OCR results
+    /// Process a file (image or PDF) through Azure OCR and return results.
+    /// Always calls Azure — cached results are never substituted.
     /// </summary>
-    /// <param name="filePath">Path to the file to process</param>
-    /// <param name="useCache">Whether to use cached results if available</param>
-    /// <param name="artifactsDirectory">Directory where artifacts are stored (optional)</param>
-    /// <param name="minConfidenceThreshold">Minimum confidence score override; falls back to app configuration when null</param>
-    /// <returns>Processing result with context and JSON</returns>
-    Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true, string? artifactsDirectory = null, double? minConfidenceThreshold = null);
+    Task<ProcessingResult> ProcessFileAsync(string filePath, string? artifactsDirectory = null, double? minConfidenceThreshold = null);
     
     /// <summary>
-    /// Process multiple files in batch with progress reporting
+    /// Process multiple files in batch with progress reporting.
+    /// Always calls Azure for every file — cached results are never substituted.
     /// </summary>
-    /// <param name="filePaths">Paths to files to process</param>
-    /// <param name="useCache">Whether to use cached results if available</param>
-    /// <param name="progress">Optional progress reporter</param>
-    /// <param name="artifactsDirectory">Directory where artifacts are stored (optional)</param>
-    /// <param name="minConfidenceThreshold">Minimum confidence score override; falls back to app configuration when null</param>
-    /// <returns>Dictionary of file paths to processing results</returns>
     Task<Dictionary<string, ProcessingResult>> ProcessBatchAsync(
         IEnumerable<string> filePaths,
-        bool useCache = true,
         IProgress<(int completed, int total, string currentFile)>? progress = null,
         string? artifactsDirectory = null,
         double? minConfidenceThreshold = null,
@@ -34,23 +24,11 @@ public interface IInvoiceProcessingService
     
     /// <summary>
     /// Save a validated invoice to the database Invoice row.
-    /// Updates all scalar field values, sets IsValidationAccepted = true, ProcessedAtUtc, and ValidatedOcrText.
     /// </summary>
-    /// <param name="originalFilePath">Original image/PDF file path (used to look up the Invoice row)</param>
-    /// <param name="invoice">Validated invoice data</param>
     Task SaveInvoiceAsync(string originalFilePath, InvoiceDto invoice);
     
     /// <summary>
-    /// Load cached invoice from the database Invoice row (reads ValidatedOcrText).
+    /// Load a previously processed invoice from the database.
     /// </summary>
-    /// <param name="filePath">Path to the image/PDF file (used to look up the Invoice row)</param>
-    /// <returns>Cached invoice or null if not found</returns>
-    Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath);
-    
-    /// <summary>
-    /// Check if a file has cached processing results
-    /// </summary>
-    /// <param name="filePath">Path to the image/PDF file</param>
-    /// <returns>True if cached results exist</returns>
-    bool HasCachedResults(string filePath);
+    Task<InvoiceDto?> LoadInvoiceAsync(string filePath);
 }

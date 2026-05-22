@@ -15,14 +15,13 @@ namespace K_OCR.Services
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
             _logger = logger;
         }
-        public async Task<PipelineContext?> LoadCachedContextAsync(string imagePath, string? artifactsDirectory = null)
+        public async Task<PipelineContext?> LoadContextAsync(string imagePath)
         {
             var invoice = await _databaseService.GetInvoiceByFilePathAsync(imagePath);
             if (invoice != null)
             {
                 PipelineContext? context = null;
 
-                // Load the main context from OcrText
                 if (!string.IsNullOrEmpty(invoice.OcrText))
                 {
                     try
@@ -31,30 +30,24 @@ namespace K_OCR.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "[Database Cache] Failed to deserialize OcrText for {FileName}.", Path.GetFileName(imagePath));
+                        _logger.LogError(ex, "[Database] Failed to deserialize OcrText for {FileName}.", Path.GetFileName(imagePath));
                     }
                 }
 
-                // If we have a context and ValidatedOcrText exists, replace the Layout with validated data
                 if (context != null && !string.IsNullOrEmpty(invoice.ValidatedOcrText))
                 {
                     try
                     {
-                        // ValidatedOcrText contains the validated invoice array
                         var validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(invoice.ValidatedOcrText);
                         if (validatedInvoices != null)
-                        {
                             context.Layout = validatedInvoices;
-                        }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "[Database Cache] Failed to deserialize ValidatedOcrText for {FileName}.", Path.GetFileName(imagePath));
+                        _logger.LogError(ex, "[Database] Failed to deserialize ValidatedOcrText for {FileName}.", Path.GetFileName(imagePath));
                     }
                 }
 
-                // Restore TesseractOcrText from dedicated DB column when loading a context
-                // written before the column existed (backward compatibility).
                 if (context != null
                     && string.IsNullOrWhiteSpace(context.TesseractOcrText)
                     && !string.IsNullOrWhiteSpace(invoice.TesseractOcrText))
@@ -68,7 +61,7 @@ namespace K_OCR.Services
             return null;
         }
         
-        public async Task SaveContextAsync(string imagePath, PipelineContext context, string? artifactsDirectory = null)
+        public async Task SaveContextAsync(string imagePath, PipelineContext context)
         {
             var json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
             var isFullyProcessed = context.Layout != null && !string.IsNullOrWhiteSpace(context.TesseractOcrText);
@@ -98,12 +91,11 @@ namespace K_OCR.Services
                 existing.IsFullyProcessed = isFullyProcessed;
                 existing.ProcessedAtUtc = isFullyProcessed ? DateTime.UtcNow : existing.ProcessedAtUtc;
                 await _databaseService.SaveInvoiceAsync(existing);
-                _logger.LogDebug("[Database Cache] Updated OCR data for: {FileName}.", Path.GetFileName(imagePath));
+                _logger.LogDebug("[Database] Updated OCR data for: {FileName}.", Path.GetFileName(imagePath));
             }
             else
             {
-                // Cannot create invoice without BatchId; log and skip
-                _logger.LogWarning("[Database Cache] No invoice record found for {FileName} — skipping save.", Path.GetFileName(imagePath));
+                _logger.LogWarning("[Database] No invoice record found for {FileName} — skipping save.", Path.GetFileName(imagePath));
             }
         }
         
@@ -143,16 +135,10 @@ namespace K_OCR.Services
             }
             else
             {
-                _logger.LogWarning("[Database Cache] No invoice record found for {FileName} — skipping validated layout save.", Path.GetFileName(imagePath));
+                _logger.LogWarning("[Database] No invoice record found for {FileName} — skipping validated layout save.", Path.GetFileName(imagePath));
             }
         }
 
-        public bool HasCachedJson(string imagePath)
-        {
-            var invoice = _databaseService.GetInvoiceByFilePathAsync(imagePath).GetAwaiter().GetResult();
-            return invoice != null && (!string.IsNullOrEmpty(invoice.OcrText) || !string.IsNullOrEmpty(invoice.ValidatedOcrText));
-        }
-        
         public IEnumerable<string> LoadFiles(string directory, string[]? extensions = null)
         {
             if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))

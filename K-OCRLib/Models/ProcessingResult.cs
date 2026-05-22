@@ -13,11 +13,6 @@ public class ProcessingResult
     public string Json { get; set; } = string.Empty;
     
     /// <summary>
-    /// Indicates whether the result was loaded from cache
-    /// </summary>
-    public bool WasCached { get; set; }
-    
-    /// <summary>
     /// Error that occurred during processing, if any
     /// </summary>
     public Exception? Error { get; set; }

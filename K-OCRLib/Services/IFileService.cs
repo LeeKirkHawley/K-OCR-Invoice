@@ -5,14 +5,14 @@ namespace K_OCR.Services
     public interface IFileService
     {
         /// <summary>
-        /// Load cached pipeline context from database
+        /// Load pipeline context from database
         /// </summary>
-        Task<PipelineContext?> LoadCachedContextAsync(string imagePath, string? artifactsDirectory = null);
+        Task<PipelineContext?> LoadContextAsync(string imagePath);
         
         /// <summary>
         /// Save pipeline context to database
         /// </summary>
-        Task SaveContextAsync(string imagePath, PipelineContext context, string? artifactsDirectory = null);
+        Task SaveContextAsync(string imagePath, PipelineContext context);
 
         /// <summary>
         /// Save the validated Invoice DTO back to the Invoice row: updates all scalar
@@ -20,11 +20,6 @@ namespace K_OCR.Services
         /// OcrText (original OCR output) is never changed by this method.
         /// </summary>
         Task SaveValidatedLayoutAsync(string imagePath, K_OCR.Models.InvoiceDto invoice);
-        
-        /// <summary>
-        /// Check if cached JSON exists for an image
-        /// </summary>
-        bool HasCachedJson(string imagePath);
         
         /// <summary>
         /// Load files from a directory, optionally filtered by extensions.

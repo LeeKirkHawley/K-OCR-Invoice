@@ -38,36 +38,13 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         _logger = logger;
     }
     
-    public bool HasCachedResults(string filePath)
-    {
-        return _fileService.HasCachedJson(filePath);
-    }
-    
-    public async Task<ProcessingResult> ProcessFileAsync(string filePath, bool useCache = true, string? artifactsDirectory = null, double? minConfidenceThreshold = null)
+    public async Task<ProcessingResult> ProcessFileAsync(string filePath, string? artifactsDirectory = null, double? minConfidenceThreshold = null)
     {
         var result = new ProcessingResult();
         
         try
         {
-            // Try to load from cache if enabled.
-            // A cache entry is only usable if it already contains Tesseract text;
-            // older entries (created before Tesseract validation was added) will
-            // fall through so the full reprocessing path runs and the cache is updated.
-            if (useCache)
-            {
-                var cachedContext = await _fileService.LoadCachedContextAsync(filePath, artifactsDirectory);
-                if (cachedContext != null && !string.IsNullOrWhiteSpace(cachedContext.TesseractOcrText))
-                {
-                    RunValidation(cachedContext, minConfidenceThreshold);
-                    result.Context = cachedContext;
-                    result.Json = Newtonsoft.Json.JsonConvert.SerializeObject(cachedContext, Newtonsoft.Json.Formatting.Indented);
-                    result.WasCached = true;
-                    return result;
-                }
-                // Cache absent or predates Tesseract validation — fall through to full reprocessing.
-            }
-            
-            // No usable cache — run Azure OCR and local Tesseract validation concurrently.
+            // Always run Azure OCR and local Tesseract validation concurrently.
             async Task<PipelineContext> RunAzureAsync()
             {
                 var ctx = new PipelineContext { InputPath = filePath };
@@ -102,12 +79,11 @@ public class InvoiceProcessingService : IInvoiceProcessingService
             // Cross-validate every Azure-extracted field against the Tesseract text.
             RunValidation(processedContext, minConfidenceThreshold);
 
-            // Save to cache
-            await _fileService.SaveContextAsync(filePath, processedContext, artifactsDirectory);
+            // Save to database
+            await _fileService.SaveContextAsync(filePath, processedContext);
             
             result.Context = processedContext;
             result.Json = Newtonsoft.Json.JsonConvert.SerializeObject(processedContext, Newtonsoft.Json.Formatting.Indented);
-            result.WasCached = false;
             
             return result;
         }
@@ -121,7 +97,6 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     
     public async Task<Dictionary<string, ProcessingResult>> ProcessBatchAsync(
         IEnumerable<string> filePaths,
-        bool useCache = true,
         IProgress<(int completed, int total, string currentFile)>? progress = null,
         string? artifactsDirectory = null,
         double? minConfidenceThreshold = null,
@@ -152,7 +127,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
 
                 progress?.Report((completed, total, fileName));
 
-                var result = await ProcessFileAsync(filePath, useCache, artifactsDirectory, minConfidenceThreshold);
+                var result = await ProcessFileAsync(filePath, artifactsDirectory, minConfidenceThreshold);
 
                 lock (results)
                 {
@@ -193,9 +168,9 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         await _fileService.SaveValidatedLayoutAsync(originalFilePath, invoice);
     }
     
-    public async Task<InvoiceDto?> LoadCachedInvoiceAsync(string filePath)
+    public async Task<InvoiceDto?> LoadInvoiceAsync(string filePath)
     {
-        var context = await _fileService.LoadCachedContextAsync(filePath);
+        var context = await _fileService.LoadContextAsync(filePath);
         if (context?.Layout != null)
             RunValidation(context);
         return context?.Layout?.FirstOrDefault();

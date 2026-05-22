@@ -212,11 +212,11 @@ public class HomeController : Controller
                 minConfidence = orgConfig.MinConfidenceThreshold;
             }
 
-            var result = await _ocrSvc.ProcessFileAsync(filePath, useCache: false, artifactsDir, minConfidence);
+            var result = await _ocrSvc.ProcessFileAsync(filePath, artifactsDir, minConfidence);
             if (!result.IsSuccess)
                 return Json(new { success = false, error = result.Error?.Message ?? "Processing failed." });
 
-            var invoice = await _ocrSvc.LoadCachedInvoiceAsync(filePath);
+            var invoice = await _ocrSvc.LoadInvoiceAsync(filePath);
             var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             var batch   = await GetCurrentBatchAsync();
             await _invoiceActionSvc.LogAsync(InvoiceActionTypes.OCRed, Path.GetFileName(filePath), batch?.Name ?? string.Empty, orgUser, invoice?.PageCount ?? 1);
@@ -280,7 +280,7 @@ public class HomeController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> BatchOcr()
+    public async Task<IActionResult> BatchOcr(bool skipAlreadyOcrd = false)
     {
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { success = false, error = "Super-admin does not have org batch access." });
@@ -306,7 +306,15 @@ public class HomeController : Controller
                 ? _configSvc.GetGuestOcrPageLimit()
                 : null;
 
-            var ocrResult = await _batchSvc.TriggerOcrAsync(batchId, minConfidence, guestPageLimit);
+            ISet<string>? skipFileNames = null;
+            if (skipAlreadyOcrd)
+            {
+                var processed = await _batchSvc.GetFullyProcessedFileNamesAsync(batchId);
+                skipFileNames = new HashSet<string>(processed, StringComparer.OrdinalIgnoreCase);
+            }
+            HttpContext.Session.SetInt32("OcrSkipBaseline", skipFileNames?.Count ?? 0);
+
+            var ocrResult = await _batchSvc.TriggerOcrAsync(batchId, minConfidence, guestPageLimit, skipFileNames);
 
             var batch = await GetCurrentBatchAsync();
             if (batch != null)
@@ -316,16 +324,16 @@ public class HomeController : Controller
                 var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
                 foreach (var fp in files)
                 {
-                    var inv = await _ocrSvc.LoadCachedInvoiceAsync(fp);
+                    var inv = await _ocrSvc.LoadInvoiceAsync(fp);
                     await _invoiceActionSvc.LogAsync(InvoiceActionTypes.OCRed, Path.GetFileName(fp), batch.Name, orgUser, inv?.PageCount ?? 1);
                 }
             }
 
             return Json(new
             {
-                success          = true,
+                success           = true,
                 guestLimitReached = ocrResult.GuestLimitReached,
-                limitMessage     = ocrResult.LimitMessage
+                limitMessage      = ocrResult.LimitMessage
             });
         }
         catch (Exception ex)
@@ -355,8 +363,25 @@ public class HomeController : Controller
             ? _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions).ToList()
             : new List<string>();
 
-        int processed = filePaths.Count(fp => _ocrSvc.HasCachedResults(fp));
-        return Json(new { success = true, total = filePaths.Count, processed });
+        int allProcessed = (await _batchSvc.GetFullyProcessedFileNamesAsync(batchId)).Count;
+        int baseline = HttpContext.Session.GetInt32("OcrSkipBaseline") ?? 0;
+        int total     = filePaths.Count - baseline;
+        int processed = allProcessed - baseline;
+        return Json(new { success = true, total, processed });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAlreadyOcrdFiles()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { files = Array.Empty<string>() });
+
+        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        if (!int.TryParse(currentBatchIdStr, out int batchId))
+            return Json(new { files = Array.Empty<string>() });
+
+        var files = await _batchSvc.GetFullyProcessedFileNamesAsync(batchId);
+        return Json(new { files });
     }
 
     [HttpGet]
@@ -435,9 +460,9 @@ public class HomeController : Controller
         if (string.IsNullOrWhiteSpace(filePath))
             return Json(new { success = false, error = "File path required." });
 
-        var invoice = await _ocrSvc.LoadCachedInvoiceAsync(filePath);
+        var invoice = await _ocrSvc.LoadInvoiceAsync(filePath);
         if (invoice == null)
-            return Json(new { success = false, error = "No cached invoice for this file." });
+            return Json(new { success = false, error = "No processed invoice for this file." });
 
         return Json(new { success = true, invoice });
     }
@@ -489,9 +514,9 @@ public class HomeController : Controller
 
         try
         {
-            var invoice = await _ocrSvc.LoadCachedInvoiceAsync(filePath);
+            var invoice = await _ocrSvc.LoadInvoiceAsync(filePath);
             if (invoice == null)
-                return Json(new { success = false, error = "No cached invoice for this file." });
+                return Json(new { success = false, error = "No processed invoice for this file." });
 
             invoice.IsValidationAccepted = true;
             await _ocrSvc.SaveInvoiceAsync(filePath, invoice);
@@ -518,9 +543,9 @@ public class HomeController : Controller
         if (string.IsNullOrWhiteSpace(filePath))
             return BadRequest("File path required.");
 
-        var invoice = await _ocrSvc.LoadCachedInvoiceAsync(filePath);
+        var invoice = await _ocrSvc.LoadInvoiceAsync(filePath);
         if (invoice == null)
-            return NotFound("No cached invoice for this file.");
+            return NotFound("No processed invoice for this file.");
 
         var json = JsonConvert.SerializeObject(StripBboxFields(invoice));
         var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.docx");
@@ -637,7 +662,7 @@ public class HomeController : Controller
         var result = new List<(string, InvoiceDto)>();
         foreach (var fp in filePaths)
         {
-            var inv = await _ocrSvc.LoadCachedInvoiceAsync(fp);
+            var inv = await _ocrSvc.LoadInvoiceAsync(fp);
             if (inv != null) result.Add((Path.GetFileName(fp), inv));
         }
         return result;
