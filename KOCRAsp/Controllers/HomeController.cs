@@ -332,6 +332,7 @@ public class HomeController : Controller
             return Json(new
             {
                 success           = true,
+                allSkipped        = ocrResult.AllSkipped,
                 guestLimitReached = ocrResult.GuestLimitReached,
                 limitMessage      = ocrResult.LimitMessage
             });

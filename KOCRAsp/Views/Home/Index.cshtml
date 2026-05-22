@@ -310,11 +310,16 @@
             if (skipAlreadyOcrd) fd.append('skipAlreadyOcrd', 'true');
             const result = await postForm('/home/batchocr', fd);
             if (result.success) {
-                if (result.guestLimitReached) {
-                    showGuestLimitDialog(result.limitMessage);
+                if (result.allSkipped) {
+                    hideOcrOverlay();
+                    showToast('All files already processed — nothing to OCR.');
+                } else {
+                    if (result.guestLimitReached) {
+                        showGuestLimitDialog(result.limitMessage);
+                    }
+                    showToast('Batch OCR started.');
+                    startOcrPolling();
                 }
-                showToast('Batch OCR started.');
-                startOcrPolling();
             } else {
                 hideOcrOverlay();
                 showToast(result.error ?? 'OCR failed.', 'error');

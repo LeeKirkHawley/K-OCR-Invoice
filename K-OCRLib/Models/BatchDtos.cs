@@ -83,8 +83,11 @@ public class TriggerOcrResult
     public int FilesSkipped { get; init; }
     /// <summary>Human-readable message to show the user when the limit is hit.</summary>
     public string? LimitMessage { get; init; }
+    /// <summary>True when every file in the batch was already processed and nothing was OCR'd.</summary>
+    public bool AllSkipped { get; init; }
 
     public static TriggerOcrResult Ok() => new();
+    public static TriggerOcrResult Skipped() => new() { AllSkipped = true };
     public static TriggerOcrResult LimitHit(int filesSkipped, int pageLimit) => new()
     {
         GuestLimitReached = true,

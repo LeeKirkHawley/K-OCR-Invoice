@@ -445,7 +445,7 @@ public class BatchService : IBatchService, IAsyncDisposable
             if (filePaths.Count == 0)
             {
                 _logger.LogInformation("TriggerOcrAsync: no files remaining to process in batch {BatchId}.", batchId);
-                return limitResult;
+                return limitResult.GuestLimitReached ? limitResult : TriggerOcrResult.Skipped();
             }
 
             _logger.LogInformation("TriggerOcrAsync: processing {Count} file(s) in batch {BatchId}.", filePaths.Count, batchId);
