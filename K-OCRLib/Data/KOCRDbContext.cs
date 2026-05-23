@@ -17,6 +17,7 @@ namespace K_OCR.Data
         public DbSet<UserBatchSession> UserBatchSessions { get; set; }
         public DbSet<BatchAction> BatchActions { get; set; }
         public DbSet<InvoiceAction> InvoiceActions { get; set; }
+        public DbSet<OcrJobEntity> OcrJobs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -66,6 +67,19 @@ namespace K_OCR.Data
 
             modelBuilder.Entity<InvoiceAction>()
                 .HasIndex(i => i.TimestampUtc);
+
+            // OcrJobs: FK to Invoice (optional — invoice may be deleted while job is queued)
+            modelBuilder.Entity<OcrJobEntity>()
+                .HasOne(j => j.Invoice)
+                .WithMany()
+                .HasForeignKey(j => j.InvoiceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<OcrJobEntity>()
+                .HasIndex(j => j.Status);
+
+            modelBuilder.Entity<OcrJobEntity>()
+                .HasIndex(j => j.QueuedAtUtc);
         }
     }
 }

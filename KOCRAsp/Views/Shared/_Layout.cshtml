@@ -41,6 +41,7 @@
                 {
                     <a class="nav-link text-light small" asp-controller="Settings" asp-action="Index">⚙️ Settings</a>
                     <a class="nav-link text-light small" asp-controller="Admin" asp-action="Index">🔧 Admin</a>
+                    <a class="nav-link text-light small" asp-controller="Admin" asp-action="OcrQueue">📋 OCR Queue</a>
                 }
                 <span class="text-light small">@User.Identity.Name</span>
                 <form method="post" action="/auth/logout" class="d-inline">

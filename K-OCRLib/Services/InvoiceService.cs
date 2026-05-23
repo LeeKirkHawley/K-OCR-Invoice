@@ -249,7 +249,7 @@ namespace K_OCR.Services
                     NetworkTimeout = TimeSpan.FromSeconds(90)
                 }
             };
-            var client = new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(key), clientOptions);
+            var documentIntelligenceClient = new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(key), clientOptions);
 
             using var stream = File.OpenRead(imagePath);
             var options = new AnalyzeDocumentOptions("prebuilt-invoice", BinaryData.FromStream(stream));
@@ -260,7 +260,9 @@ namespace K_OCR.Services
             try
             {
                 _logger.LogInformation("[Azure OCR] Sending file: {FileName}.", Path.GetFileName(imagePath));
-                operation = await client.AnalyzeDocumentAsync(WaitUntil.Completed, options, cts.Token);
+
+                // WaitUntil.Completed does the Azure polling to check for completion.
+                operation = await documentIntelligenceClient.AnalyzeDocumentAsync(WaitUntil.Completed, options, cts.Token);
             }
             catch (OperationCanceledException)
             {

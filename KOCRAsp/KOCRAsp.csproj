@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\K-OCRLib\K-OCRLib.csproj" />
+    <ProjectReference Include="..\OCRQueue\OCRQueue.csproj" />
   </ItemGroup>
 
   <ItemGroup>

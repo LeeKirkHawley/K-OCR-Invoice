@@ -16,4 +16,11 @@ public class OrgConfig
     /// has been validated (IsValidationAccepted = true).
     /// </summary>
     public bool RequireBatchValidationForExport { get; set; } = true;
+
+    /// <summary>
+    /// Selects which OCR workflow to use for this organisation.
+    /// Must match one of the registered <c>IQueuedOcrWorkflow.WorkflowKey</c> values.
+    /// Defaults to "Default" (Azure + Tesseract parallel pipeline).
+    /// </summary>
+    public string OcrWorkflowKey { get; set; } = "Default";
 }
