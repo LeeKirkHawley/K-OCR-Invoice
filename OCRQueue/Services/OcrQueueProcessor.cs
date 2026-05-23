@@ -201,6 +201,12 @@ public sealed class OcrQueueProcessor : BackgroundService
             _eventPublisher.OnJobFailed(job, ex.Message);
             await _repository.MarkFailedAsync(job.JobId, job.OrgName, ex.Message, CancellationToken.None);
         }
+        finally
+        {
+            // Always decrement the outstanding count so stats stay accurate
+            // regardless of success or failure.
+            _jobQueue.NotifyJobComplete(job);
+        }
     }
 
     private static OcrJob EntityToJob(OcrJobEntity entity, string orgId) =>

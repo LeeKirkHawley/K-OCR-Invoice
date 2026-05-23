@@ -77,8 +77,9 @@ public sealed class OcrSignalRBridge : IHostedService, IDisposable
     {
         var payload = new
         {
-            totalQueued = stats.TotalQueued,
-            perOrgCount = stats.PerOrgCount,
+            totalQueued    = stats.TotalQueued,
+            perOrgCount    = stats.PerOrgCount,
+            perOrgInvoices = stats.PerOrgInvoices,
         };
 
         // Fire-and-forget: hub SendAsync is thread-safe but async.

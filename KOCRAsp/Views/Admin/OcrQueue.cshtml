@@ -31,7 +31,7 @@
             <thead class="table-light">
                 <tr>
                     <th>Organisation</th>
-                    <th class="text-end">Queued Jobs</th>
+                    <th class="text-end">Queued Invoices</th>
                 </tr>
             </thead>
             <tbody id="org-queue-body">
@@ -46,10 +46,24 @@
                     foreach (var (orgId, count) in Model.PerOrgCount.OrderByDescending(x => x.Value))
                     {
                         var name = Model.OrgNames.TryGetValue(orgId, out var n) ? n : orgId;
-                        <tr id="org-row-@orgId">
-                            <td>@name</td>
+                        Model.PerOrgInvoices.TryGetValue(orgId, out var files);
+                        <tr class="org-header-row">
+                            <td><strong>@name</strong></td>
                             <td class="text-end fw-bold">@count</td>
                         </tr>
+                        @if (files is { Count: > 0 })
+                        {
+                            <tr class="invoice-detail-row">
+                                <td colspan="2" class="pt-0 pb-2">
+                                    <ul class="mb-0 ms-3 small text-muted">
+                                        @foreach (var file in files)
+                                        {
+                                            <li>@file</li>
+                                        }
+                                    </ul>
+                                </td>
+                            </tr>
+                        }
                     }
                 }
             </tbody>
@@ -77,16 +91,25 @@
         // Update total
         totalEl.textContent = stats.totalQueued;
 
-        // Rebuild per-org rows
-        const counts = stats.perOrgCount || {};
-        const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        // Rebuild per-org rows (exclude zero-count entries)
+        const counts   = stats.perOrgCount    || {};
+        const invoices = stats.perOrgInvoices  || {};
+        const entries  = Object.entries(counts).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
 
         if (entries.length === 0) {
             tbody.innerHTML = '<tr id="empty-row"><td colspan="2" class="text-center text-muted py-3">Queue is empty.</td></tr>';
         } else {
             tbody.innerHTML = entries.map(([orgId, count]) => {
-                const name = orgNames[orgId] || orgId;
-                return `<tr id="org-row-${orgId}"><td>${name}</td><td class="text-end fw-bold">${count}</td></tr>`;
+                const name  = orgNames[orgId] || orgId;
+                const files = invoices[orgId]  || [];
+                const fileList = files.length
+                    ? `<tr class="invoice-detail-row"><td colspan="2" class="pt-0 pb-2">` +
+                      `<ul class="mb-0 ms-3 small text-muted">` +
+                      files.map(f => `<li>${f}</li>`).join('') +
+                      `</ul></td></tr>`
+                    : '';
+                return `<tr class="org-header-row"><td><strong>${name}</strong></td>` +
+                       `<td class="text-end fw-bold">${count}</td></tr>${fileList}`;
             }).join('');
         }
 

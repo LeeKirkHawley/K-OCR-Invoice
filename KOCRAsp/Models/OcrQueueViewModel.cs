@@ -13,6 +13,10 @@ public class OcrQueueViewModel
     public IReadOnlyDictionary<string, int> PerOrgCount { get; init; } =
         new Dictionary<string, int>();
 
+    /// <summary>Per-org invoice file names for outstanding jobs.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> PerOrgInvoices { get; init; } =
+        new Dictionary<string, IReadOnlyList<string>>();
+
     /// <summary>
     /// Org ID → org name mapping, resolved from the identity database.
     /// Used to display friendly names instead of GUIDs.

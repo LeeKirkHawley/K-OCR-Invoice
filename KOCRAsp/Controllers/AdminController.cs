@@ -228,9 +228,10 @@ public class AdminController : Controller
 
         var vm = new OcrQueueViewModel
         {
-            TotalQueued  = _ocrJobQueue.TotalCount,
-            PerOrgCount  = _ocrJobQueue.CountPerOrg,
-            OrgNames     = orgNames,
+            TotalQueued     = _ocrJobQueue.TotalCount,
+            PerOrgCount     = _ocrJobQueue.CountPerOrg,
+            PerOrgInvoices  = _ocrJobQueue.InvoicesPerOrg,
+            OrgNames        = orgNames,
         };
 
         return View(vm);

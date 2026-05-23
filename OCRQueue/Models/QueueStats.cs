@@ -5,4 +5,5 @@ namespace OCRQueue.Models;
 /// </summary>
 public record QueueStats(
     int TotalQueued,
-    IReadOnlyDictionary<string, int> PerOrgCount);
+    IReadOnlyDictionary<string, int> PerOrgCount,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> PerOrgInvoices);
