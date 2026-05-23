@@ -1,7 +1,9 @@
 using K_OCR.Models.Api.SuperAdmin;
 using K_OCR.Services;
+using KOCRAsp.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OCRQueue.Abstractions;
 
 namespace KOCRAsp.Controllers;
 
@@ -11,18 +13,21 @@ public class AdminController : Controller
     private readonly ISuperAdminService _superAdminSvc;
     private readonly ISuperAdminDataService _dataSvc;
     private readonly IConfiguration _configuration;
+    private readonly IOcrJobQueue _ocrJobQueue;
     private readonly ILogger<AdminController> _logger;
 
     public AdminController(
         ISuperAdminService superAdminSvc,
         ISuperAdminDataService dataSvc,
         IConfiguration configuration,
+        IOcrJobQueue ocrJobQueue,
         ILogger<AdminController> logger)
     {
         _superAdminSvc = superAdminSvc;
-        _dataSvc = dataSvc;
+        _dataSvc       = dataSvc;
         _configuration = configuration;
-        _logger = logger;
+        _ocrJobQueue   = ocrJobQueue;
+        _logger        = logger;
     }
 
     [HttpGet]
@@ -212,6 +217,23 @@ public class AdminController : Controller
             _logger.LogError(ex, "SyncStripeStatus failed for {OrgId}", request.OrgId);
             return Json(new { success = false, error = ex.Message });
         }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> OcrQueue()
+    {
+        // Build org ID → name lookup from existing service.
+        var orgs = await _superAdminSvc.ListOrganizationsAsync();
+        var orgNames = orgs.ToDictionary(o => o.OrganizationId, o => o.Name);
+
+        var vm = new OcrQueueViewModel
+        {
+            TotalQueued  = _ocrJobQueue.TotalCount,
+            PerOrgCount  = _ocrJobQueue.CountPerOrg,
+            OrgNames     = orgNames,
+        };
+
+        return View(vm);
     }
 
     // Helper — resolves lazily to avoid circular ctor dependency

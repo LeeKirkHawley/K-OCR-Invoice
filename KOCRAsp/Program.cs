@@ -3,11 +3,14 @@ using K_OCR.Data;
 using K_OCR.Identity;
 using K_OCR.Security;
 using K_OCR.Services;
+using KOCRAsp.Hubs;
 using KOCRAsp.Identity;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using OCRQueue.Abstractions;
+using OCRQueue.Services;
 using Serilog;
 
 
@@ -126,8 +129,9 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(keysFolder))
     .SetApplicationName("KOCRAsp");
 
-// ── MVC ───────────────────────────────────────────────────────────────────────
+// ── MVC + SignalR ─────────────────────────────────────────────────────────────
 builder.Services.AddControllersWithViews();
+builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSession(options =>
 {
@@ -173,6 +177,23 @@ builder.Services.AddSingleton<IPathService, PathService>();
 
 // ── Batch change notifications (Rx.NET) ──────────────────────────────────────
 builder.Services.AddSingleton<IBatchChangeNotifier, BatchChangeNotifier>();
+
+// ── OCR Queue services ────────────────────────────────────────────────────────
+builder.Services.Configure<OcrQueueSettings>(configuration.GetSection("OcrQueue"));
+builder.Services.AddSingleton<IOcrQueueStatsNotifier, OcrQueueStatsNotifier>();
+builder.Services.AddSingleton<IOcrJobEventPublisher, OcrJobEventPublisher>();
+builder.Services.AddSingleton<IOcrJobQueue, OcrJobQueue>();
+builder.Services.AddSingleton<IOcrQueueRepository, OcrQueueRepository>();
+builder.Services.AddSingleton<IOcrEnqueueService, OcrEnqueueService>();
+// Workflows — registered as IQueuedOcrWorkflow so OcrWorkflowRegistry can enumerate them.
+builder.Services.AddSingleton<IQueuedOcrWorkflow, OCRQueue.Workflows.DefaultOcrWorkflow>();
+builder.Services.AddSingleton<IQueuedOcrWorkflow, OCRQueue.Workflows.TesseractOnlyOcrWorkflow>();
+builder.Services.AddSingleton<IQueuedOcrWorkflow, OCRQueue.Workflows.AzureOnlyOcrWorkflow>();
+builder.Services.AddSingleton<OcrWorkflowRegistry>();
+builder.Services.AddSingleton<OcrQueueProcessor>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<OcrQueueProcessor>());
+// Bridge: Rx streams → SignalR push
+builder.Services.AddHostedService<OcrSignalRBridge>();
 
 // ── Stripe ───────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IStripeUsageService, StripeUsageService>();
@@ -255,6 +276,8 @@ app.UseAuthorization();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+
+app.MapHub<OcrHub>("/hubs/ocr");
 
 // ── Page-list endpoint: returns all PNG paths for a document (multi-page aware) ──
 app.MapGet("/api/pages", async (string path, IImageService imageSvc) =>

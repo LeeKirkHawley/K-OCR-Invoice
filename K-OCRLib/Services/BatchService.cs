@@ -18,11 +18,13 @@ public class BatchService : IBatchService, IAsyncDisposable
 
     private readonly IDbContextFactory<KOCRDbContext> _dbFactory;
     private readonly IPathService _pathService;
+    // TODO: Remove _processingService once the queue path is fully stable (kept to avoid breaking test mocks).
     private readonly IInvoiceProcessingService _processingService;
     private readonly IFileService _fileService;
     private readonly ITenantContext _tenantContext;
     private readonly IReportingService _reportingService;
     private readonly IStripeUsageService _stripeUsage;
+    private readonly IOcrEnqueueService _ocrEnqueueSvc;
     private readonly ILogger<BatchService> _logger;
 
     private KOCRDbContext? _db;
@@ -36,6 +38,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         ITenantContext tenantContext,
         IReportingService reportingService,
         IStripeUsageService stripeUsage,
+        IOcrEnqueueService ocrEnqueueSvc,
         ILogger<BatchService> logger)
     {
         _dbFactory          = dbFactory;
@@ -45,6 +48,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         _tenantContext      = tenantContext;
         _reportingService   = reportingService;
         _stripeUsage        = stripeUsage;
+        _ocrEnqueueSvc      = ocrEnqueueSvc;
         _logger             = logger;
     }
 
@@ -353,7 +357,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         return 1;
     }
 
-    public async Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, int? guestPageLimit = null, ISet<string>? skipFileNames = null)
+    public async Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, int? guestPageLimit = null, ISet<string>? skipFileNames = null, string? workflowKey = null)
     {
         if (!_tenantContext.IsGuestOrganization &&
             !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
@@ -450,43 +454,35 @@ public class BatchService : IBatchService, IAsyncDisposable
 
             _logger.LogInformation("TriggerOcrAsync: processing {Count} file(s) in batch {BatchId}.", filePaths.Count, batchId);
 
-            var results = await _processingService.ProcessBatchAsync(
-                filePaths,
-                artifactsDirectory: artifactsDir,
-                minConfidenceThreshold: minConfidenceThreshold,
-                batch: batch,
-                organization: _tenantContext.Organization);
+            var orgId   = _tenantContext.OrganizationId   ?? string.Empty;
+            var orgName = _tenantContext.OrganizationName ?? string.Empty;
 
-            var orgName        = _tenantContext.OrganizationName ?? string.Empty;
-            var invoiceResults = results.Select(kvp => new OcrInvoiceResult
-            {
-                FileName     = Path.GetFileName(kvp.Key),
-                OcrSucceeded = kvp.Value.IsSuccess,
-                OcrService   = "Azure",
-                PageCount    = kvp.Value.Context?.Layout?.FirstOrDefault()?.PageCount ?? 1,
-            }).ToList();
+            // Look up Invoice.Id for each file path so we can track jobs per-invoice.
+            var invoiceIdByPath = await Db.Invoices
+                .Where(i => i.BatchId == batchId && i.FilePath != null)
+                .ToDictionaryAsync(i => i.FilePath!, i => i.Id);
 
-            try
-            {
-                await _reportingService.RecordBatchOcrEventAsync(new BatchOcrReportRequest
-                {
-                    OrganizationId   = _tenantContext.OrganizationId ?? string.Empty,
-                    OrganizationName = orgName,
-                    BatchName        = batch.Name,
-                    Invoices         = invoiceResults,
-                });
-            }
-            catch (Exception ex)
-            {
-                // Reporting failure must never abort the OCR operation.
-                _logger.LogError(ex, "Failed to record OCR batch report for batch {BatchId}.", batchId);
-            }
+            var jobItems = filePaths
+                .Where(fp => invoiceIdByPath.ContainsKey(fp))
+                .Select(fp => (fp, invoiceIdByPath[fp]))
+                .ToList();
 
+            if (jobItems.Count < filePaths.Count)
+                _logger.LogWarning(
+                    "TriggerOcrAsync: {Missing} file(s) had no Invoice record and will be skipped (batch {BatchId}).",
+                    filePaths.Count - jobItems.Count, batchId);
+
+            await _ocrEnqueueSvc.EnqueueFilesAsync(
+                jobItems, batchId, orgId, orgName, workflowKey ?? "Default");
+
+            // TODO: RecordBatchOcrEventAsync requires actual OCR results; move to OcrQueueProcessor completion callback.
+
+            // Bill Stripe now with estimated page counts; actual page counts are available after OCR completes.
             if (!_tenantContext.IsGuestOrganization && _tenantContext.StripeCustomerId is { } customerId)
             {
-                var totalPages = invoiceResults.Sum(r => r.PageCount);
+                var estimatedPages = filePaths.Sum(EstimateFilePageCount);
                 var idempotencyKey = $"batch-{batchId}-{ocrRunId}";
-                await _stripeUsage.ReportUsageAsync(customerId, totalPages, idempotencyKey);
+                await _stripeUsage.ReportUsageAsync(customerId, estimatedPages, idempotencyKey);
             }
 
             return limitResult;

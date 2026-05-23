@@ -219,6 +219,7 @@
 </div>
 
 
+<script src="~/lib/signalr/signalr.min.js"></script>
 <script>
     let _currentFilePath  = null;
     let _currentInvoice   = null;
@@ -227,6 +228,9 @@
     let _currentPage      = @Model.CurrentPage;
     let _pageSize         = @Model.PageSize;
     let _refreshAbort     = null;
+
+    const _orgId          = '@Html.Raw(Model.OrgId)';
+    const _currentBatchId = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
 
     // ── Batch selector ──────────────────────────────────────────
     document.getElementById('batchSelector').addEventListener('change', function () {
@@ -1129,6 +1133,44 @@
         }, 3000);
     }
 
+    // ── SignalR: real-time dot updates per invoice ───────────────
+    async function refreshInvoiceDots(invoiceId) {
+        try {
+            const resp = await fetch(`/home/invoicedotstate?invoiceId=${invoiceId}`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.error || !data.filePath) return;
+            const item = document.querySelector(`.file-list-item[data-filepath="${CSS.escape(data.filePath)}"]`);
+            if (!item) return;
+            const dots = item.querySelectorAll('.file-status-dot');
+            if (dots.length >= 1) {
+                dots[0].className = `file-status-dot ${data.processedDotClass ?? ''}`.trim();
+                dots[0].title = data.processedDotTitle ?? '';
+            }
+            if (dots.length >= 2) {
+                dots[1].className = `file-status-dot ${data.validationDotClass ?? ''}`.trim();
+                dots[1].title = data.validationDotTitle ?? '';
+            }
+        } catch { /* ignore */ }
+    }
+
+    function initOcrSignalR() {
+        if (!_orgId) return;
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl('/hubs/ocr')
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on('InvoiceOcrCompleted', async (payload) => {
+            if (_currentBatchId !== null && payload.batchId !== _currentBatchId) return;
+            await refreshInvoiceDots(payload.invoiceId);
+        });
+
+        connection.start()
+            .then(() => connection.invoke('JoinOrgGroup', _orgId))
+            .catch(err => console.warn('[OCR SignalR] Connection failed:', err));
+    }
+
     // ── Strip bbox-only fields for JSON display / export ────────
     // Keeps _currentInvoice intact so 2-way highlighting still works.
     function stripBboxFields(inv) {
@@ -1152,5 +1194,6 @@
     initKocrSplitters();
     initKocrZoom();
     initVtip();
+    initOcrSignalR();
 </script>
 }

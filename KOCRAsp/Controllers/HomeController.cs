@@ -93,6 +93,7 @@ public class HomeController : Controller
 
         return View(new HomeIndexViewModel
         {
+            OrgId = orgId,
             AvailableBatches = batches,
             CurrentBatch = currentBatch,
             Files = files,
@@ -296,10 +297,12 @@ public class HomeController : Controller
         try
         {
             double? minConfidence = null;
+            string? workflowKey = null;
             if (!string.IsNullOrEmpty(_tenantContext.OrganizationName))
             {
                 var orgConfig = await _orgConfigSvc.LoadAsync(_tenantContext.OrganizationName);
                 minConfidence = orgConfig.MinConfidenceThreshold;
+                workflowKey   = orgConfig.OcrWorkflowKey;
             }
 
             int? guestPageLimit = _tenantContext.IsGuestOrganization
@@ -314,20 +317,9 @@ public class HomeController : Controller
             }
             HttpContext.Session.SetInt32("OcrSkipBaseline", skipFileNames?.Count ?? 0);
 
-            var ocrResult = await _batchSvc.TriggerOcrAsync(batchId, minConfidence, guestPageLimit, skipFileNames);
+            var ocrResult = await _batchSvc.TriggerOcrAsync(batchId, minConfidence, guestPageLimit, skipFileNames, workflowKey);
 
-            var batch = await GetCurrentBatchAsync();
-            if (batch != null)
-            {
-                var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
-                var files = _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions);
-                var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-                foreach (var fp in files)
-                {
-                    var inv = await _ocrSvc.LoadInvoiceAsync(fp);
-                    await _invoiceActionSvc.LogAsync(InvoiceActionTypes.OCRed, Path.GetFileName(fp), batch.Name, orgUser, inv?.PageCount ?? 1);
-                }
-            }
+            // Action logging (OCRed) is now deferred to OcrQueueProcessor completion — OCR runs asynchronously.
 
             return Json(new
             {
@@ -369,6 +361,57 @@ public class HomeController : Controller
         int total     = filePaths.Count - baseline;
         int processed = allProcessed - baseline;
         return Json(new { success = true, total, processed });
+    }
+
+    /// <summary>
+    /// Returns the current dot-state for a single invoice so the Home page
+    /// can update coloured status indicators in real-time via SignalR.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> InvoiceDotState(int invoiceId)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { error = "Not available for super-admin." });
+
+        var invoice = await _dbSvc.GetInvoiceByIdAsync(invoiceId);
+        if (invoice == null)
+            return Json(new { error = "Invoice not found." });
+
+        var entry = new FileListEntry { FilePath = invoice.FilePath ?? string.Empty, FileName = Path.GetFileName(invoice.FilePath ?? string.Empty) };
+        entry.IsProcessed = true;
+        if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
+        {
+            InvoiceDto? dto = null;
+            try
+            {
+                dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
+            }
+            catch
+            {
+                dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
+            }
+            if (dto != null)
+            {
+                entry.IsSavedOrAccepted = dto.IsValidationAccepted;
+                if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
+                {
+                    entry.HasSuspectFields =
+                        dto.TesseractConfirmed.Values.Any(v => !v)
+                        || (dto.MathConfirmed?.Values.Any(v => !v) ?? false)
+                        || (dto.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
+                    entry.IsValidated = !entry.HasSuspectFields;
+                }
+            }
+        }
+
+        return Json(new
+        {
+            filePath           = entry.FilePath,
+            processedDotClass  = entry.ProcessedDotClass,
+            processedDotTitle  = entry.ProcessedDotTitle,
+            validationDotClass = entry.ValidationDotClass,
+            validationDotTitle = entry.ValidationDotTitle,
+        });
     }
 
     [HttpGet]

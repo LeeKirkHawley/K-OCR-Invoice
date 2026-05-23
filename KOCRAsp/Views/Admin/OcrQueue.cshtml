@@ -1,0 +1,123 @@
+@model KOCRAsp.Models.OcrQueueViewModel
+@{
+    ViewData["Title"] = "OCR Queue Monitor";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">📋 OCR Queue Monitor</h4>
+    <span class="badge bg-secondary" id="connection-badge">Connecting…</span>
+</div>
+
+<!-- Summary card -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-4">
+        <div class="card text-center">
+            <div class="card-body py-3">
+                <div class="fs-1 fw-bold text-primary" id="total-queued">@Model.TotalQueued</div>
+                <div class="text-muted small">Jobs queued</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Per-org table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Queue by Organisation</strong>
+        <span class="text-muted small" id="last-updated">—</span>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0" id="org-queue-table">
+            <thead class="table-light">
+                <tr>
+                    <th>Organisation</th>
+                    <th class="text-end">Queued Jobs</th>
+                </tr>
+            </thead>
+            <tbody id="org-queue-body">
+                @if (!Model.PerOrgCount.Any())
+                {
+                    <tr id="empty-row">
+                        <td colspan="2" class="text-center text-muted py-3">Queue is empty.</td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var (orgId, count) in Model.PerOrgCount.OrderByDescending(x => x.Value))
+                    {
+                        var name = Model.OrgNames.TryGetValue(orgId, out var n) ? n : orgId;
+                        <tr id="org-row-@orgId">
+                            <td>@name</td>
+                            <td class="text-end fw-bold">@count</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/signalr/signalr.min.js"></script>
+<script>
+    // org ID → name map, seeded from server render; updated by SignalR pushes
+    const orgNames = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.OrgNames));
+
+    const badge   = document.getElementById('connection-badge');
+    const totalEl = document.getElementById('total-queued');
+    const tbody   = document.getElementById('org-queue-body');
+    const lastUpd = document.getElementById('last-updated');
+
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl('/hubs/ocr')
+        .withAutomaticReconnect()
+        .build();
+
+    connection.on('QueueStatsUpdated', (stats) => {
+        // Update total
+        totalEl.textContent = stats.totalQueued;
+
+        // Rebuild per-org rows
+        const counts = stats.perOrgCount || {};
+        const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+        if (entries.length === 0) {
+            tbody.innerHTML = '<tr id="empty-row"><td colspan="2" class="text-center text-muted py-3">Queue is empty.</td></tr>';
+        } else {
+            tbody.innerHTML = entries.map(([orgId, count]) => {
+                const name = orgNames[orgId] || orgId;
+                return `<tr id="org-row-${orgId}"><td>${name}</td><td class="text-end fw-bold">${count}</td></tr>`;
+            }).join('');
+        }
+
+        lastUpd.textContent = 'Updated ' + new Date().toLocaleTimeString();
+    });
+
+    connection.onreconnecting(() => {
+        badge.textContent = 'Reconnecting…';
+        badge.className = 'badge bg-warning text-dark';
+    });
+
+    connection.onreconnected(() => {
+        badge.textContent = 'Live';
+        badge.className = 'badge bg-success';
+    });
+
+    connection.onclose(() => {
+        badge.textContent = 'Disconnected';
+        badge.className = 'badge bg-danger';
+    });
+
+    connection.start()
+        .then(() => {
+            badge.textContent = 'Live';
+            badge.className = 'badge bg-success';
+            return connection.invoke('JoinQueueMonitor');
+        })
+        .catch(err => {
+            badge.textContent = 'Error';
+            badge.className = 'badge bg-danger';
+            console.error('SignalR connection failed:', err);
+        });
+</script>
+}
