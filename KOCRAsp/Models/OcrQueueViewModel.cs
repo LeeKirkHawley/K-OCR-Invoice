@@ -23,4 +23,7 @@ public class OcrQueueViewModel
     /// </summary>
     public IReadOnlyDictionary<string, string> OrgNames { get; init; } =
         new Dictionary<string, string>();
+
+    /// <summary>Whether the OCR queue processor is currently paused.</summary>
+    public bool IsPaused { get; init; }
 }

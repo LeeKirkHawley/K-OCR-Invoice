@@ -8,6 +8,22 @@
     <span class="badge bg-secondary" id="connection-badge">Connecting…</span>
 </div>
 
+<!-- Pause/Resume controls -->
+<div class="mb-3 d-flex align-items-center gap-3">
+    <button id="btn-pause" class="btn btn-warning btn-sm" onclick="pauseQueue()"
+        @(Model.IsPaused ? "disabled" : "")>
+        ⏸ Pause Queue
+    </button>
+    <button id="btn-resume" class="btn btn-success btn-sm" onclick="resumeQueue()"
+        @(!Model.IsPaused ? "disabled" : "")>
+        ▶ Resume Queue
+    </button>
+    <span id="queue-status" class="fw-semibold @(Model.IsPaused ? "text-warning" : "text-success")">
+        @(Model.IsPaused ? "⚠ Paused" : "● Running")
+    </span>
+    <span id="drain-status" class="text-muted small" style="display:none">Draining in-flight jobs…</span>
+</div>
+
 <!-- Summary card -->
 <div class="row g-3 mb-4">
     <div class="col-sm-4">
@@ -142,5 +158,49 @@
             badge.className = 'badge bg-danger';
             console.error('SignalR connection failed:', err);
         });
+
+    // ── Pause / Resume ──────────────────────────────────────────────────────────
+
+    const btnPause    = document.getElementById('btn-pause');
+    const btnResume   = document.getElementById('btn-resume');
+    const queueStatus = document.getElementById('queue-status');
+    const drainStatus = document.getElementById('drain-status');
+
+    function setUiPaused(paused) {
+        btnPause.disabled  =  paused;
+        btnResume.disabled = !paused;
+        queueStatus.textContent  = paused ? '⚠ Paused'  : '● Running';
+        queueStatus.className    = paused ? 'fw-semibold text-warning' : 'fw-semibold text-success';
+        drainStatus.style.display = 'none';
+    }
+
+    async function pauseQueue() {
+        btnPause.disabled = true;
+        drainStatus.style.display = '';
+        queueStatus.textContent = '⏳ Draining…';
+        queueStatus.className = 'fw-semibold text-muted';
+        try {
+            const resp = await fetch('/Admin/PauseQueue', { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) setUiPaused(true);
+            else { alert('Pause failed: ' + data.error); setUiPaused(false); }
+        } catch (e) {
+            alert('Pause request failed: ' + e);
+            setUiPaused(false);
+        }
+    }
+
+    async function resumeQueue() {
+        btnResume.disabled = true;
+        try {
+            const resp = await fetch('/Admin/ResumeQueue', { method: 'POST' });
+            const data = await resp.json();
+            if (data.success) setUiPaused(false);
+            else { alert('Resume failed: ' + data.error); setUiPaused(true); }
+        } catch (e) {
+            alert('Resume request failed: ' + e);
+            setUiPaused(true);
+        }
+    }
 </script>
 }

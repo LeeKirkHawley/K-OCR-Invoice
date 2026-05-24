@@ -21,7 +21,7 @@ namespace OCRQueue.Services;
 ///   them concurrently up to <see cref="OcrQueueSettings.MaxConcurrentJobs"/>.</item>
 /// </list>
 /// </summary>
-public sealed class OcrQueueProcessor : BackgroundService
+public sealed class OcrQueueProcessor : BackgroundService, IOcrQueueProcessor
 {
     private readonly IOcrJobQueue _jobQueue;
     private readonly IOcrQueueRepository _repository;
@@ -32,6 +32,37 @@ public sealed class OcrQueueProcessor : BackgroundService
     private readonly OcrQueueSettings _settings;
     private readonly ILogger<OcrQueueProcessor> _logger;
     private readonly RateLimiter _rateLimiter;
+
+    // Pause/drain state
+    private volatile bool _paused;
+    private SemaphoreSlim? _concurrencySemaphore;
+
+    public bool IsPaused => _paused;
+
+    public async Task PauseAndDrainAsync(CancellationToken ct = default)
+    {
+        _paused = true;
+        _logger.LogInformation("[OcrQueue] Pause requested — draining in-flight jobs.");
+
+        // Wait for every concurrency slot to be free (all in-flight jobs done).
+        var sem = _concurrencySemaphore;
+        if (sem is not null)
+        {
+            for (var i = 0; i < _settings.MaxConcurrentJobs; i++)
+                await sem.WaitAsync(ct);
+
+            // Release them all back so the semaphore is in its original state.
+            sem.Release(_settings.MaxConcurrentJobs);
+        }
+
+        _logger.LogInformation("[OcrQueue] Drain complete — processor is paused.");
+    }
+
+    public void Resume()
+    {
+        _paused = false;
+        _logger.LogInformation("[OcrQueue] Processor resumed.");
+    }
 
     public OcrQueueProcessor(
         IOcrJobQueue jobQueue,
@@ -125,11 +156,21 @@ public sealed class OcrQueueProcessor : BackgroundService
     /// </summary>
     private async Task ProcessLoopAsync(CancellationToken ct)
     {
-        using var concurrencySemaphore = new SemaphoreSlim(
+        _concurrencySemaphore = new SemaphoreSlim(
             _settings.MaxConcurrentJobs, _settings.MaxConcurrentJobs);
+
+        using var sem = _concurrencySemaphore;
 
         while (!ct.IsCancellationRequested)
         {
+            // While paused, idle without dequeuing new jobs.
+            if (_paused)
+            {
+                try { await Task.Delay(100, ct); }
+                catch (OperationCanceledException) { break; }
+                continue;
+            }
+
             OcrJob job;
             try
             {
@@ -152,7 +193,7 @@ public sealed class OcrQueueProcessor : BackgroundService
             }
 
             // Acquire a concurrency slot.
-            await concurrencySemaphore.WaitAsync(ct);
+            await sem.WaitAsync(ct);
 
             // Fire-and-forget within the bounded semaphore so we can continue dequeueing.
             _ = Task.Run(async () =>
@@ -163,14 +204,14 @@ public sealed class OcrQueueProcessor : BackgroundService
                 }
                 finally
                 {
-                    concurrencySemaphore.Release();
+                    sem.Release();
                 }
             }, ct);
         }
 
         // Wait for in-flight jobs to finish before returning.
         for (var i = 0; i < _settings.MaxConcurrentJobs; i++)
-            await concurrencySemaphore.WaitAsync(CancellationToken.None);
+            await sem.WaitAsync(CancellationToken.None);
     }
 
     private async Task ProcessJobAsync(OcrJob job, CancellationToken ct)
@@ -179,18 +220,27 @@ public sealed class OcrQueueProcessor : BackgroundService
             "[OcrQueue] Starting job {JobId} — org: {OrgName}, invoice: {InvoiceId}, workflow: {Workflow}.",
             job.JobId, job.OrgName, job.InvoiceId, job.WorkflowKey);
 
-        await _repository.MarkProcessingAsync(job.JobId, job.OrgName, ct);
+        // Always use None for repository ops so DB state stays consistent even during shutdown.
+        await _repository.MarkProcessingAsync(job.JobId, job.OrgName, CancellationToken.None);
 
         try
         {
             var workflow = _workflowRegistry.Resolve(job.WorkflowKey);
             await workflow.ExecuteAsync(job, ct);
-            await _repository.MarkCompletedAsync(job.JobId, job.OrgName, ct);
+            await _repository.MarkCompletedAsync(job.JobId, job.OrgName, CancellationToken.None);
             _eventPublisher.OnJobCompleted(job);
 
             _logger.LogInformation(
                 "[OcrQueue] Job {JobId} completed — org: {OrgName}, invoice: {InvoiceId}.",
                 job.JobId, job.OrgName, job.InvoiceId);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Shutdown cancellation — reset to Queued so ScanAndRequeueAsync picks it up on restart.
+            _logger.LogWarning(
+                "[OcrQueue] Job {JobId} interrupted by shutdown — resetting to Queued for restart.",
+                job.JobId);
+            await _repository.MarkQueuedAsync(job.JobId, job.OrgName, CancellationToken.None);
         }
         catch (Exception ex)
         {

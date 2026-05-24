@@ -61,6 +61,12 @@ builder.Services.AddScoped<IDbContextFactory<KOCRDbContext>>(sp =>
         databaseSettings));
 builder.Services.AddScoped<DatabaseService>();
 
+// Allow in-flight OCR jobs to finish during a graceful shutdown (e.g. deployment).
+// The default 5 s is far too short for OCR; 2 minutes gives most jobs time to complete
+// or be safely reset to Queued for re-processing on the next startup.
+builder.Services.Configure<HostOptions>(opts =>
+    opts.ShutdownTimeout = TimeSpan.FromMinutes(2));
+
 // Central identity database — provider selected by DatabaseSettings.Provider
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
@@ -191,6 +197,7 @@ builder.Services.AddSingleton<IQueuedOcrWorkflow, OCRQueue.Workflows.TesseractOn
 builder.Services.AddSingleton<IQueuedOcrWorkflow, OCRQueue.Workflows.AzureOnlyOcrWorkflow>();
 builder.Services.AddSingleton<OcrWorkflowRegistry>();
 builder.Services.AddSingleton<OcrQueueProcessor>();
+builder.Services.AddSingleton<IOcrQueueProcessor>(sp => sp.GetRequiredService<OcrQueueProcessor>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<OcrQueueProcessor>());
 // Bridge: Rx streams → SignalR push
 builder.Services.AddHostedService<OcrSignalRBridge>();

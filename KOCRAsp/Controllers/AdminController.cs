@@ -14,6 +14,7 @@ public class AdminController : Controller
     private readonly ISuperAdminDataService _dataSvc;
     private readonly IConfiguration _configuration;
     private readonly IOcrJobQueue _ocrJobQueue;
+    private readonly IOcrQueueProcessor _ocrQueueProcessor;
     private readonly ILogger<AdminController> _logger;
 
     public AdminController(
@@ -21,13 +22,15 @@ public class AdminController : Controller
         ISuperAdminDataService dataSvc,
         IConfiguration configuration,
         IOcrJobQueue ocrJobQueue,
+        IOcrQueueProcessor ocrQueueProcessor,
         ILogger<AdminController> logger)
     {
-        _superAdminSvc = superAdminSvc;
-        _dataSvc       = dataSvc;
-        _configuration = configuration;
-        _ocrJobQueue   = ocrJobQueue;
-        _logger        = logger;
+        _superAdminSvc      = superAdminSvc;
+        _dataSvc            = dataSvc;
+        _configuration      = configuration;
+        _ocrJobQueue        = ocrJobQueue;
+        _ocrQueueProcessor  = ocrQueueProcessor;
+        _logger             = logger;
     }
 
     [HttpGet]
@@ -47,6 +50,7 @@ public class AdminController : Controller
             value = 14; // default fallback
         }
         ViewBag.DeletedOrgRetentionDays = value;
+        ViewBag.QueueIsPaused = _ocrQueueProcessor.IsPaused;
         return View(orgs);
     }
 
@@ -232,9 +236,35 @@ public class AdminController : Controller
             PerOrgCount     = _ocrJobQueue.CountPerOrg,
             PerOrgInvoices  = _ocrJobQueue.InvoicesPerOrg,
             OrgNames        = orgNames,
+            IsPaused        = _ocrQueueProcessor.IsPaused,
         };
 
         return View(vm);
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> PauseQueue()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            await _ocrQueueProcessor.PauseAndDrainAsync(cts.Token);
+            return Json(new { success = true, isPaused = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PauseQueue failed.");
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public IActionResult ResumeQueue()
+    {
+        _ocrQueueProcessor.Resume();
+        return Json(new { success = true, isPaused = false });
     }
 
     // Helper — resolves lazily to avoid circular ctor dependency
