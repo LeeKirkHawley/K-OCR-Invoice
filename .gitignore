@@ -19,7 +19,7 @@ appsettings.Production.json
 *.userosscache
 *.sln.docstates
 *.db
-startup-diag.txt
+./KOCRAsp/startup-diag.txt
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -380,3 +380,4 @@ K-OCR/kocr.db
 
 # User-specific settings overrides (may contain credentials)
 appsettings.*.user.json
+KOCRAsp/startup-diag.txt
