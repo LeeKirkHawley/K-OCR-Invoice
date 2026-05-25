@@ -321,14 +321,6 @@ public class BatchService : IBatchService, IAsyncDisposable
         return session?.BatchId;
     }
 
-    public async Task<int> GetBatchOcrdPageCountAsync(int batchId)
-    {
-        var result = await Db.Invoices
-            .Where(i => i.BatchId == batchId && i.IsFullyProcessed)
-            .SumAsync(i => (int?)i.TotalPages) ?? 0;
-        return result;
-    }
-
     public async Task<List<string>> GetFullyProcessedFileNamesAsync(int batchId)
     {
         return await Db.Invoices
@@ -374,7 +366,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         return 1;
     }
 
-    public async Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, int? guestPageLimit = null, ISet<string>? skipFileNames = null, string? workflowKey = null)
+    public async Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, ISet<string>? skipFileNames = null, string? workflowKey = null, int? maxPageCount = null, int? maxInvoicesPerBatch = null)
     {
         if (!_tenantContext.IsGuestOrganization &&
             !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
@@ -426,47 +418,10 @@ public class BatchService : IBatchService, IAsyncDisposable
                     skipFileNames.Count, filePaths.Count, batchId);
             }
 
-            // ── Guest org page limit ──────────────────────────────────────
-            var limitResult = TriggerOcrResult.Ok();
-            if (_tenantContext.IsGuestOrganization && guestPageLimit.HasValue)
-            {
-                var pagesAlreadyOcrd = await GetBatchOcrdPageCountAsync(batchId);
-                var remaining = guestPageLimit.Value - pagesAlreadyOcrd;
-
-                if (remaining <= 0)
-                {
-                    _logger.LogInformation(
-                        "TriggerOcrAsync: guest page limit reached for batch {BatchId}; skipping all {Count} file(s).",
-                        batchId, filePaths.Count);
-                    return TriggerOcrResult.LimitHit(filePaths.Count, guestPageLimit.Value);
-                }
-
-                var allowed = new List<string>();
-                var budgetPages = remaining;
-                foreach (var file in filePaths)
-                {
-                    var estimatedPages = EstimateFilePageCount(file);
-                    if (budgetPages <= 0) break;
-                    allowed.Add(file);
-                    budgetPages -= estimatedPages;
-                }
-
-                var skipped = filePaths.Count - allowed.Count;
-                if (skipped > 0)
-                {
-                    _logger.LogInformation(
-                        "TriggerOcrAsync: guest page limit truncated processing — {Allowed} file(s) will be OCR'd, {Skipped} skipped (batch {BatchId}).",
-                        allowed.Count, skipped, batchId);
-                    limitResult = TriggerOcrResult.LimitHit(skipped, guestPageLimit.Value);
-                }
-
-                filePaths = allowed;
-            }
-
             if (filePaths.Count == 0)
             {
                 _logger.LogInformation("TriggerOcrAsync: no files remaining to process in batch {BatchId}.", batchId);
-                return limitResult.GuestLimitReached ? limitResult : TriggerOcrResult.Skipped();
+                return TriggerOcrResult.Skipped();
             }
 
             _logger.LogInformation("TriggerOcrAsync: processing {Count} file(s) in batch {BatchId}.", filePaths.Count, batchId);
@@ -474,10 +429,36 @@ public class BatchService : IBatchService, IAsyncDisposable
             var orgId   = _tenantContext.OrganizationId   ?? string.Empty;
             var orgName = _tenantContext.OrganizationName ?? string.Empty;
 
-            // Look up Invoice.Id for each file path so we can track jobs per-invoice.
-            var invoiceIdByPath = await Db.Invoices
+            // Look up Invoice.Id and TotalPages for each file path.
+            var invoiceDataByPath = await Db.Invoices
                 .Where(i => i.BatchId == batchId && i.FilePath != null)
-                .ToDictionaryAsync(i => i.FilePath!, i => i.Id);
+                .ToDictionaryAsync(i => i.FilePath!, i => new { i.Id, i.TotalPages });
+
+            // Filter out invoices that exceed the per-invoice page limit.
+            if (maxPageCount.HasValue)
+            {
+                var overLimit = filePaths
+                    .Where(fp => invoiceDataByPath.TryGetValue(fp, out var d) && d.TotalPages > maxPageCount.Value)
+                    .ToList();
+                if (overLimit.Count > 0)
+                {
+                    _logger.LogInformation(
+                        "TriggerOcrAsync: {Count} file(s) exceed the max page count ({Max}) and will be skipped (batch {BatchId}).",
+                        overLimit.Count, maxPageCount.Value, batchId);
+                    filePaths = filePaths.Except(overLimit).ToList();
+                }
+            }
+
+            var invoiceIdByPath = invoiceDataByPath.ToDictionary(kv => kv.Key, kv => kv.Value.Id);
+
+            // Cap the number of invoices to OCR per batch.
+            if (maxInvoicesPerBatch.HasValue && filePaths.Count > maxInvoicesPerBatch.Value)
+            {
+                _logger.LogInformation(
+                    "TriggerOcrAsync: capping {Total} file(s) to {Max} per maxInvoicesPerBatch limit (batch {BatchId}).",
+                    filePaths.Count, maxInvoicesPerBatch.Value, batchId);
+                filePaths = filePaths.Take(maxInvoicesPerBatch.Value).ToList();
+            }
 
             var jobItems = filePaths
                 .Where(fp => invoiceIdByPath.ContainsKey(fp))
@@ -502,7 +483,7 @@ public class BatchService : IBatchService, IAsyncDisposable
                 await _stripeUsage.ReportUsageAsync(customerId, estimatedPages, idempotencyKey);
             }
 
-            return limitResult;
+            return TriggerOcrResult.Ok();
         }
         finally
         {
@@ -515,7 +496,8 @@ public class BatchService : IBatchService, IAsyncDisposable
     public async Task<UploadResult> UploadFilesToBatchAsync(
         int batchId,
         IReadOnlyList<FileUpload> files,
-        string userId)
+        string userId,
+        int? maxInvoicesPerBatch = null)
     {
         var batch = await Db.Batches.FindAsync(batchId);
         if (batch is null)
@@ -541,6 +523,23 @@ public class BatchService : IBatchService, IAsyncDisposable
                         .Where(i => i.BatchId == batchId && i.FilePath != null)
                         .Select(i => Path.GetFileName(i.FilePath!))
                         .ToListAsync();
+
+                    // Enforce per-batch invoice limit.
+                    int skippedByLimit = 0;
+                    IReadOnlyList<FileUpload> filesToUpload = files;
+                    if (maxInvoicesPerBatch.HasValue)
+                    {
+                        int slotsRemaining = maxInvoicesPerBatch.Value - existing.Count;
+                        if (slotsRemaining <= 0)
+                            return UploadResult.Error(
+                                $"This batch is at the maximum of {maxInvoicesPerBatch.Value} invoice(s). Create a new batch to continue.");
+                        if (files.Count > slotsRemaining)
+                        {
+                            skippedByLimit = files.Count - slotsRemaining;
+                            filesToUpload = files.Take(slotsRemaining).ToList();
+                        }
+                    }
+
                     var conflicts = existing
                         .Where(n => incomingNames.Contains(n ?? string.Empty))
                         .ToList();
@@ -555,7 +554,7 @@ public class BatchService : IBatchService, IAsyncDisposable
 
                     var uploaded = 0;
                     var uploadedFiles = new List<(string ClientFileName, string ClientPath, string ServerFileName, string ServerPath)>();
-                    foreach (var file in files)
+                    foreach (var file in filesToUpload)
                     {
                         var destPath = Path.Combine(invoicesFolder, file.FileName);
                         await using var dest = new FileStream(destPath, FileMode.Create, FileAccess.Write);
@@ -591,7 +590,7 @@ public class BatchService : IBatchService, IAsyncDisposable
                             uploadedFile.ServerPath);
                     }
 
-                    return UploadResult.Ok(uploaded);
+                    return UploadResult.Ok(uploaded, skippedByLimit);
                 }
                 catch (Exception ex)
                 {

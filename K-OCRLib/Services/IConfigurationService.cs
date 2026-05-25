@@ -25,12 +25,18 @@ public interface IConfigurationService
     string GetDefaultSettingsPath();
 
     /// <summary>
-    /// Returns the guest-org OCR page limit from settings. Synchronous for use in request pipelines.
-    /// </summary>
-    int GetGuestOcrPageLimit();
-
-    /// <summary>
     /// Returns the maximum number of active batches allowed for guest orgs from settings.
     /// </summary>
     int GetGuestMaxBatches();
+
+    /// <summary>
+    /// Returns the maximum number of pages per invoice for regular or guest users.
+    /// Invoices exceeding this limit are grayed out and skipped during OCR.
+    /// </summary>
+    int GetMaxPagesPerInvoice(bool isGuest);
+
+    /// <summary>
+    /// Returns the maximum number of invoices allowed per batch for regular or guest users.
+    /// </summary>
+    int GetMaxInvoicesPerBatch(bool isGuest);
 }

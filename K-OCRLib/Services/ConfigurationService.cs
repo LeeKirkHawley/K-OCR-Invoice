@@ -27,7 +27,7 @@ public class ConfigurationService : IConfigurationService
             MaxConcurrentRequests = 3,
             GuestAccountRetentionDays = 7,
             GuestMaxBatches = 2,
-            GuestOcrPageLimit = 20
+            Limits = new K_OCR.Configuration.LimitsSection()
         };
     }
 
@@ -91,18 +91,10 @@ public class ConfigurationService : IConfigurationService
 
     public async Task SaveSettingsAsync(AppSettings settings, string? path = null)
     {
-        if (IsDevelopment())
-        {
-            path = GetDevelopmentOverridePath();
-            var devJson = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(path, devJson);
-            return;
-        }
+        path ??= IsDevelopment() ? GetDevelopmentOverridePath() : GetDefaultSettingsPath();
 
-        path ??= GetDefaultSettingsPath();
-
-        // In Production, merge AppSettings fields into the existing file so
-        // that ASP.NET Core fields (AllowedHosts, Logging, Kocr, etc.) are preserved.
+        // Always use a JSON merge so that keys not owned by AppSettings
+        // (e.g. Stripe:*, OcrQueue:*, AllowedHosts) are preserved in the file.
         JsonObject root;
         if (File.Exists(path))
         {
@@ -130,46 +122,53 @@ public class ConfigurationService : IConfigurationService
         return Path.Combine(Directory.GetCurrentDirectory(), "appsettings.development.user.json");
     }
 
-    public int GetGuestOcrPageLimit()
-    {
-        try
-        {
-            var path = IsDevelopment()
-                ? (File.Exists(GetDevelopmentOverridePath()) ? GetDevelopmentOverridePath() : GetDefaultSettingsPath())
-                : GetDefaultSettingsPath();
-
-            if (!File.Exists(path))
-                return 20;
-
-            var json = File.ReadAllText(path);
-            var node = System.Text.Json.Nodes.JsonNode.Parse(json);
-            if (node?["GuestOcrPageLimit"] is { } val && val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
-                return (int)val;
-        }
-        catch { /* fall through */ }
-
-        return 20;
-    }
-
     public int GetGuestMaxBatches()
     {
         try
         {
-            var path = IsDevelopment()
-                ? (File.Exists(GetDevelopmentOverridePath()) ? GetDevelopmentOverridePath() : GetDefaultSettingsPath())
-                : GetDefaultSettingsPath();
+            var node = ParseSettingsNode();
+            if (node?["Limits"]?["Guest"]?["MaxBatches"] is { } v1 && v1.GetValueKind() == System.Text.Json.JsonValueKind.Number) return (int)v1;
+            if (node?["GuestMaxBatches"]                 is { } v2 && v2.GetValueKind() == System.Text.Json.JsonValueKind.Number) return (int)v2;
+        }
+        catch { /* fall through */ }
+        return 2;
+    }
 
-            if (!File.Exists(path))
-                return 2;
-
-            var json = File.ReadAllText(path);
-            var node = System.Text.Json.Nodes.JsonNode.Parse(json);
-            if (node?["GuestMaxBatches"] is { } val && val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
+    public int GetMaxPagesPerInvoice(bool isGuest)
+    {
+        try
+        {
+            var node = ParseSettingsNode();
+            var key = isGuest ? "Guest" : "User";
+            if (node?["Limits"]?[key]?["MaxPagesPerInvoice"] is { } val && val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
                 return (int)val;
         }
         catch { /* fall through */ }
+        return 20;
+    }
 
-        return 2;
+    public int GetMaxInvoicesPerBatch(bool isGuest)
+    {
+        try
+        {
+            var node = ParseSettingsNode();
+            var key = isGuest ? "Guest" : "User";
+            if (node?["Limits"]?[key]?["MaxInvoicesPerBatch"] is { } val && val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
+                return (int)val;
+        }
+        catch { /* fall through */ }
+        return isGuest ? 20 : 100;
+    }
+
+    private System.Text.Json.Nodes.JsonNode? ParseSettingsNode()
+    {
+        var path = IsDevelopment()
+            ? (File.Exists(GetDevelopmentOverridePath()) ? GetDevelopmentOverridePath() : GetDefaultSettingsPath())
+            : GetDefaultSettingsPath();
+
+        if (!File.Exists(path)) return null;
+        var json = File.ReadAllText(path);
+        return System.Text.Json.Nodes.JsonNode.Parse(json);
     }
 
     private static bool IsDevelopment()

@@ -28,16 +28,11 @@
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label asp-for="AzureCognitiveServicesKey" class="form-label">API Key</label>
-                    <input asp-for="AzureCognitiveServicesKey" type="password"
-                           class="form-control" autocomplete="new-password"
-                           placeholder="Azure Cognitive Services key" />
-                </div>
-                <div class="col-md-6">
                     <label asp-for="AzureCognitiveServicesEndpoint" class="form-label">Endpoint URL</label>
                     <input asp-for="AzureCognitiveServicesEndpoint" type="url"
                            class="form-control"
                            placeholder="https://your-resource.cognitiveservices.azure.com/" />
+                    <div class="form-text">The API key is managed via environment variable <code>AzureCognitiveServicesKey</code>.</div>
                 </div>
             </div>
         </div>
@@ -64,22 +59,46 @@
         </div>
     </div>
 
-    <!-- Guest Organization Limits -->
+    <!-- Limits -->
     <div class="card mb-3">
-        <div class="card-header"><strong>Guest Organization Limits</strong></div>
+        <div class="card-header"><strong>Limits</strong></div>
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-4">
-                    <label asp-for="GuestMaxBatches" class="form-label">Max Active Batches</label>
-                    <input asp-for="GuestMaxBatches" type="number"
-                           class="form-control" min="1" max="100" />
-                    <div class="form-text">Maximum number of active batches a guest organization can have.</div>
+                <div class="col-12">
+                    <h6 class="mb-2">Regular Users</h6>
                 </div>
                 <div class="col-md-4">
-                    <label asp-for="GuestOcrPageLimit" class="form-label">Max OCR Pages per Batch</label>
-                    <input asp-for="GuestOcrPageLimit" type="number"
+                    <label asp-for="Limits.User.MaxInvoicesPerBatch" class="form-label">Max Invoices per Batch</label>
+                    <input asp-for="Limits.User.MaxInvoicesPerBatch" type="number"
+                           class="form-control" min="1" max="10000" />
+                    <div class="form-text">Maximum number of invoices per batch for regular users.</div>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="Limits.User.MaxPagesPerInvoice" class="form-label">Max Pages per Invoice</label>
+                    <input asp-for="Limits.User.MaxPagesPerInvoice" type="number"
                            class="form-control" min="1" max="1000" />
-                    <div class="form-text">Maximum number of pages a guest organization can OCR in a single batch. Guest orgs are also limited to 2 batches.</div>
+                    <div class="form-text">Invoices exceeding this page count are grayed out and skipped during OCR.</div>
+                </div>
+                <div class="col-12 mt-3">
+                    <h6 class="mb-2">Guest Users</h6>
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="Limits.Guest.MaxBatches" class="form-label">Max Active Batches</label>
+                    <input asp-for="Limits.Guest.MaxBatches" type="number"
+                           class="form-control" min="1" max="100" />
+                    <div class="form-text">Maximum number of active batches a guest can have.</div>
+                </div>
+                <div class="col-md-3">
+                    <label asp-for="Limits.Guest.MaxInvoicesPerBatch" class="form-label">Max Invoices per Batch</label>
+                    <input asp-for="Limits.Guest.MaxInvoicesPerBatch" type="number"
+                           class="form-control" min="1" max="10000" />
+                    <div class="form-text">Maximum number of invoices per batch for guest users.</div>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="Limits.Guest.MaxPagesPerInvoice" class="form-label">Max Pages per Invoice</label>
+                    <input asp-for="Limits.Guest.MaxPagesPerInvoice" type="number"
+                           class="form-control" min="1" max="1000" />
+                    <div class="form-text">Invoices exceeding this page count are grayed out and skipped during OCR.</div>
                 </div>
             </div>
         </div>

@@ -12,4 +12,5 @@ public class HomeIndexViewModel
     public int CurrentPage { get; set; } = 1;
     public int PageSize { get; set; } = 25;
     public int TotalPages { get; set; }
+    public int MaxPagesPerInvoice { get; set; } = 20;
 }

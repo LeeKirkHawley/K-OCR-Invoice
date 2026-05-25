@@ -76,7 +76,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
         if (string.IsNullOrWhiteSpace(cs))
             throw new InvalidOperationException(
                 "Database:ConnectionString must be set when Provider is SqlServer. " +
-                "Ensure ASPNETCORE_ENVIRONMENT is set correctly and appsettings.Production.json is deployed.");
+                "Ensure ASPNETCORE_ENVIRONMENT is set correctly and Database:ConnectionString is configured.");
         options.UseSqlServer(cs);
     }
     else

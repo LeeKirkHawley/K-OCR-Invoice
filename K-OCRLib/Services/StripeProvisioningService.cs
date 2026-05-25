@@ -5,17 +5,27 @@ namespace K_OCR.Services;
 
 public class StripeProvisioningService : IStripeProvisioningService
 {
+    private readonly string _secretKey;
     private readonly ILogger<StripeProvisioningService> _logger;
 
     public StripeProvisioningService(IConfiguration configuration, ILogger<StripeProvisioningService> logger)
     {
         _logger = logger;
-        Stripe.StripeConfiguration.ApiKey = configuration["Stripe:SecretKey"]
-            ?? throw new InvalidOperationException("Stripe:SecretKey is not configured.");
+        _secretKey = configuration["Stripe:SecretKey"] ?? string.Empty;
+        if (string.IsNullOrEmpty(_secretKey))
+            _logger.LogWarning("Stripe:SecretKey is not configured. Stripe operations will fail if called.");
+    }
+
+    private void EnsureApiKey()
+    {
+        if (string.IsNullOrEmpty(_secretKey))
+            throw new InvalidOperationException("Stripe:SecretKey is not configured.");
+        Stripe.StripeConfiguration.ApiKey = _secretKey;
     }
 
     public async Task<string> CreateCustomerAsync(string orgId, string orgName)
     {
+        EnsureApiKey();
         var service = new Stripe.CustomerService();
         var customer = await service.CreateAsync(new Stripe.CustomerCreateOptions
         {
@@ -28,6 +38,7 @@ public class StripeProvisioningService : IStripeProvisioningService
 
     public async Task<StripeSubscriptionResult> CreateSubscriptionAsync(string stripeCustomerId, string priceId)
     {
+        EnsureApiKey();
         var service = new Stripe.SubscriptionService();
         var subscription = await service.CreateAsync(new Stripe.SubscriptionCreateOptions
         {
@@ -53,6 +64,7 @@ public class StripeProvisioningService : IStripeProvisioningService
 
     public async Task<string> GetSubscriptionStatusAsync(string stripeSubscriptionId)
     {
+        EnsureApiKey();
         var service = new Stripe.SubscriptionService();
         var subscription = await service.GetAsync(stripeSubscriptionId);
         _logger.LogInformation(

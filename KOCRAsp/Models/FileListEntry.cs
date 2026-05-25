@@ -9,6 +9,8 @@ public class FileListEntry
     public bool IsValidated { get; set; }
     public bool HasSuspectFields { get; set; }
     public bool IsSavedOrAccepted { get; set; }
+    public int TotalPages { get; set; } = 1;
+    public bool ExceedsPageLimit { get; set; }
 
     public string ProcessedDotClass => IsProcessed ? "dot-validated" : "dot-unprocessed";
     public string ProcessedDotTitle => IsProcessed ? "Processed" : "Not processed";

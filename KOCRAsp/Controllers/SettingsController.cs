@@ -31,6 +31,11 @@ public class SettingsController : Controller
     {
         try
         {
+            // Email is not part of the Settings form — preserve it fully from the stored file
+            // so that saving Settings doesn't wipe the Email config.
+            var existing = await _configSvc.LoadSettingsAsync();
+            model.Email = existing.Email;
+
             await _configSvc.SaveSettingsAsync(model);
             TempData["Success"] = "Settings saved successfully.";
         }

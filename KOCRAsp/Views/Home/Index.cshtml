@@ -62,11 +62,15 @@
             {
                 foreach (var file in Model.Files)
                 {
-                    <div class="file-list-item" data-filepath="@file.FilePath">
+                    var overLimitClass = file.ExceedsPageLimit ? " file-list-item--overlimit" : "";
+                    var overLimitAttr  = file.ExceedsPageLimit ? $" data-exceeds-limit=\"true\" title=\"This invoice has {file.TotalPages} pages and exceeds the {Model.MaxPagesPerInvoice}-page limit. It will not be OCR'd.\"" : "";
+                    <text>
+                    <div class="file-list-item@overLimitClass" data-filepath="@file.FilePath"@Html.Raw(overLimitAttr)>
                         <span class="file-status-dot @file.ProcessedDotClass"  title="@file.ProcessedDotTitle"></span>
                         <span class="file-status-dot @file.ValidationDotClass" title="@file.ValidationDotTitle"></span>
                         <span class="text-truncate" style="flex:1;min-width:0;" title="@file.FileName">@file.FileName</span>
                     </div>
+                    </text>
                 }
             }
         </div>
@@ -179,24 +183,6 @@
     </div>
 </div>
 
-<!-- Guest OCR page limit modal -->
-<div class="modal fade" id="guestLimitModal" tabindex="-1" aria-labelledby="guestLimitModalLabel" aria-modal="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-warning-subtle">
-                <h5 class="modal-title" id="guestLimitModalLabel">⚠️ Guest Account Limit Reached</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="guestLimitModalBody">
-                Your guest account OCR page limit has been reached.
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Re-OCR confirmation dialog -->
 <div class="modal fade" id="reOcrModal" tabindex="-1" aria-labelledby="reOcrModalLabel" aria-modal="true">
     <div class="modal-dialog">
@@ -230,8 +216,9 @@
     let _pageSize         = @Model.PageSize;
     let _refreshAbort     = null;
 
-    const _orgId          = '@Html.Raw(Model.OrgId)';
-    const _currentBatchId = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
+    const _orgId             = '@Html.Raw(Model.OrgId)';
+    const _currentBatchId    = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
+    const _maxPagesPerInvoice = @Model.MaxPagesPerInvoice;
 
     // ── Batch selector ──────────────────────────────────────────
     document.getElementById('batchSelector').addEventListener('change', function () {
@@ -257,6 +244,9 @@
             const result = await postForm('/home/uploadfiles', fd);
             if (result.success) {
                 showToast(`Uploaded ${result.filesUploaded} file(s).`);
+                if (result.filesSkippedByLimit > 0) {
+                    showToast(`${result.filesSkippedByLimit} file(s) were not uploaded: batch invoice limit reached.`, 'warning');
+                }
                 await refreshFileList();
                 await refreshBatchDropdown();
                 await updateExportButtonState();
@@ -319,9 +309,6 @@
                     hideOcrOverlay();
                     showToast('All files already processed — nothing to OCR.');
                 } else {
-                    if (result.guestLimitReached) {
-                        showGuestLimitDialog(result.limitMessage);
-                    }
                     showToast('Batch OCR started.');
                     startOcrPolling();
                 }
@@ -341,10 +328,11 @@
         if (!item) return;
         document.querySelectorAll('.file-list-item').forEach(el => el.classList.remove('active'));
         item.classList.add('active');
-        selectFile(item.dataset.filepath);
+        const exceedsLimit = item.dataset.exceedsLimit === 'true';
+        selectFile(item.dataset.filepath, exceedsLimit);
     });
 
-    async function selectFile(filePath) {
+    async function selectFile(filePath, exceedsLimit) {
         _currentFilePath  = filePath;
         _selectedFieldKey = null;
         loadDocumentPages(filePath);
@@ -360,7 +348,7 @@
             } else {
                 document.getElementById('invoiceFields').innerHTML =
                     '<p class="text-muted">No invoice data yet. Run OCR to process this file.</p>';
-                renderRunOcrButton(filePath);
+                renderRunOcrButton(filePath, exceedsLimit);
                 document.getElementById('validatedJsonContent').textContent = '';
                 updateValidationStatusLabel(null);
             }
@@ -431,13 +419,20 @@
         }
     }
 
-    function renderRunOcrButton(filePath) {
+    function renderRunOcrButton(filePath, exceedsLimit) {
         const container = document.getElementById('invoiceFields');
         const btn = document.createElement('button');
         btn.id = 'runOcrBtn';
-        btn.className = 'btn btn-sm btn-primary mt-2';
-        btn.textContent = '▶ Run OCR';
-        btn.onclick = () => runOcrOnFile(filePath, btn);
+        if (exceedsLimit) {
+            btn.className = 'btn btn-sm btn-secondary mt-2';
+            btn.textContent = '▶ Run OCR';
+            btn.disabled = true;
+            btn.title = `This invoice exceeds the ${_maxPagesPerInvoice}-page limit and cannot be OCR'd.`;
+        } else {
+            btn.className = 'btn btn-sm btn-primary mt-2';
+            btn.textContent = '▶ Run OCR';
+            btn.onclick = () => runOcrOnFile(filePath, btn);
+        }
         container.appendChild(btn);
     }
 
@@ -448,8 +443,8 @@
             const fd = new FormData();
             fd.append('filePath', filePath);
             const result = await postForm('/home/startocr', fd);
-            if (result.guestLimitReached) {
-                showGuestLimitDialog(result.limitMessage);
+            if (result.pageLimitExceeded) {
+                showToast(result.error ?? 'Invoice exceeds page limit.', 'error');
                 setButtonLoading(btn, false);
                 return;
             }
@@ -472,13 +467,6 @@
         } finally {
             hideOcrOverlay();
         }
-    }
-
-    function showGuestLimitDialog(message) {
-        const body = document.getElementById('guestLimitModalBody');
-        if (body && message) body.textContent = message;
-        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('guestLimitModal'));
-        modal.show();
     }
 
     const HEADER_FIELDS = [
@@ -1067,8 +1055,13 @@
         }
         let html = '';
         for (const file of files) {
-            const active = _currentFilePath === file.filePath ? ' active' : '';
-            html += `<div class="file-list-item${active}" data-filepath="${escapeHtml(file.filePath)}">
+            const active       = _currentFilePath === file.filePath ? ' active' : '';
+            const overLimit    = file.exceedsPageLimit;
+            const overLimitCls = overLimit ? ' file-list-item--overlimit' : '';
+            const overLimitAttr = overLimit
+                ? ` data-exceeds-limit="true" title="This invoice has ${file.totalPages} pages and exceeds the ${_maxPagesPerInvoice}-page limit. It will not be OCR'd."`
+                : '';
+            html += `<div class="file-list-item${active}${overLimitCls}" data-filepath="${escapeHtml(file.filePath)}"${overLimitAttr}>
                 <span class="file-status-dot ${escapeHtml(file.processedDotClass ?? '')}"
                       title="${escapeHtml(file.processedDotTitle ?? '')}"></span>
                 <span class="file-status-dot ${escapeHtml(file.validationDotClass ?? '')}"

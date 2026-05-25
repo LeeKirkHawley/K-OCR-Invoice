@@ -6,20 +6,28 @@ namespace K_OCR.Services;
 
 public class StripeUsageService : IStripeUsageService
 {
+    private readonly string _secretKey;
     private readonly string _meterEventName;
     private readonly ILogger<StripeUsageService> _logger;
 
     public StripeUsageService(IConfiguration configuration, ILogger<StripeUsageService> logger)
     {
         _logger = logger;
-        Stripe.StripeConfiguration.ApiKey = configuration["Stripe:SecretKey"]
-            ?? throw new InvalidOperationException("Stripe:SecretKey is not configured.");
-        _meterEventName = configuration["Stripe:MeterEventName"]
-            ?? throw new InvalidOperationException("Stripe:MeterEventName is not configured.");
+        _secretKey      = configuration["Stripe:SecretKey"] ?? string.Empty;
+        _meterEventName = configuration["Stripe:MeterEventName"] ?? string.Empty;
+        if (string.IsNullOrEmpty(_secretKey) || string.IsNullOrEmpty(_meterEventName))
+            _logger.LogWarning("Stripe is not fully configured. Usage reporting will be skipped.");
     }
 
     public async Task ReportUsageAsync(string stripeCustomerId, long pageCount, string? idempotencyKey = null)
     {
+        if (string.IsNullOrEmpty(_secretKey) || string.IsNullOrEmpty(_meterEventName))
+        {
+            _logger.LogDebug("Stripe not configured — skipping usage report for customer {CustomerId}.", stripeCustomerId);
+            return;
+        }
+
+        Stripe.StripeConfiguration.ApiKey = _secretKey;
         try
         {
             var service = new MeterEventService();

@@ -86,10 +86,11 @@ public class HomeController : Controller
             currentBatch = batches.FirstOrDefault(b => b.BatchId == currentBatchId);
 
         const int defaultPageSize = 25;
+        var maxPagesPerInvoice = _configSvc.GetMaxPagesPerInvoice(_tenantContext.IsGuestOrganization);
         var files = new List<FileListEntry>();
         int totalFiles = 0, currentPage = 1, totalPages = 0;
         if (currentBatch != null)
-            (files, totalFiles, currentPage, totalPages) = await BuildPagedFileListAsync(currentBatch, 1, defaultPageSize);
+            (files, totalFiles, currentPage, totalPages) = await BuildPagedFileListAsync(currentBatch, 1, defaultPageSize, maxPagesPerInvoice);
 
         return View(new HomeIndexViewModel
         {
@@ -100,7 +101,8 @@ public class HomeController : Controller
             TotalFiles = totalFiles,
             CurrentPage = currentPage,
             PageSize = defaultPageSize,
-            TotalPages = totalPages
+            TotalPages = totalPages,
+            MaxPagesPerInvoice = maxPagesPerInvoice
         });
     }
 
@@ -136,7 +138,9 @@ public class HomeController : Controller
             })
             .ToList();
 
-        var result = await _batchSvc.UploadFilesToBatchAsync(batchId, uploads, userId);
+        var result = await _batchSvc.UploadFilesToBatchAsync(
+            batchId, uploads, userId,
+            _tenantContext.IsGuestOrganization ? _configSvc.GetMaxInvoicesPerBatch(true) : (int?)null);
 
         if (result.Success && result.FilesUploaded > 0)
         {
@@ -155,6 +159,7 @@ public class HomeController : Controller
         {
             success = result.Success,
             filesUploaded = result.FilesUploaded,
+            filesSkippedByLimit = result.FilesSkippedByLimit,
             error = result.ErrorMessage,
             conflicts = result.ConflictingFileNames
         });
@@ -174,27 +179,17 @@ public class HomeController : Controller
             !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
             return Json(new { success = false, error = "OCR is unavailable: subscription inactive." });
 
-        // For guest orgs, pre-check the per-batch page limit before calling Azure.
-        if (_tenantContext.IsGuestOrganization)
+        // Per-invoice page limit check.
+        var invoice0 = await _dbSvc.GetInvoiceByFilePathAsync(filePath);
+        var maxPages = _configSvc.GetMaxPagesPerInvoice(_tenantContext.IsGuestOrganization);
+        if (invoice0 != null && invoice0.TotalPages > maxPages)
         {
-            var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
-            if (int.TryParse(currentBatchIdStr, out int currentBatchId))
+            return Json(new
             {
-                var pageLimit = _configSvc.GetGuestOcrPageLimit();
-                var pagesOcrd = await _batchSvc.GetBatchOcrdPageCountAsync(currentBatchId);
-                var remaining = pageLimit - pagesOcrd;
-
-                if (remaining <= 0)
-                {
-                    return Json(new
-                    {
-                        success           = false,
-                        guestLimitReached = true,
-                        limitMessage      = $"Your guest account is limited to {pageLimit} OCR pages per batch. " +
-                                            "Contact us to upgrade to a full account for unlimited OCR."
-                    });
-                }
-            }
+                success          = false,
+                pageLimitExceeded = true,
+                error            = $"This invoice has {invoice0.TotalPages} pages, which exceeds the limit of {maxPages}. It cannot be OCR'd."
+            });
         }
 
         try
@@ -252,25 +247,7 @@ public class HomeController : Controller
                 await _stripeUsage.ReportUsageAsync(customerId, invoice?.PageCount ?? 1, idempotencyKey);
             }
 
-            bool guestLimitReached = false;
-            string? guestLimitMessage = null;
-            if (_tenantContext.IsGuestOrganization)
-            {
-                var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
-                if (int.TryParse(currentBatchIdStr, out int currentBatchId))
-                {
-                    var pageLimit = _configSvc.GetGuestOcrPageLimit();
-                    var pagesOcrd = await _batchSvc.GetBatchOcrdPageCountAsync(currentBatchId);
-                    if (pagesOcrd >= pageLimit)
-                    {
-                        guestLimitReached = true;
-                        guestLimitMessage = $"Your guest account is limited to {pageLimit} OCR pages per batch. " +
-                                            "Contact us to upgrade to a full account for unlimited OCR.";
-                    }
-                }
-            }
-
-            return Json(new { success = true, invoice, guestLimitReached, guestLimitMessage });
+            return Json(new { success = true, invoice });
         }
         catch (Exception ex)
         {
@@ -305,9 +282,10 @@ public class HomeController : Controller
                 workflowKey   = orgConfig.OcrWorkflowKey;
             }
 
-            int? guestPageLimit = _tenantContext.IsGuestOrganization
-                ? _configSvc.GetGuestOcrPageLimit()
-                : null;
+            int maxPageCount = _configSvc.GetMaxPagesPerInvoice(_tenantContext.IsGuestOrganization);
+            int? maxInvoicesPerBatch = _tenantContext.IsGuestOrganization
+                ? _configSvc.GetMaxInvoicesPerBatch(true)
+                : (int?)null;
 
             ISet<string>? skipFileNames = null;
             if (skipAlreadyOcrd)
@@ -317,16 +295,14 @@ public class HomeController : Controller
             }
             HttpContext.Session.SetInt32("OcrSkipBaseline", skipFileNames?.Count ?? 0);
 
-            var ocrResult = await _batchSvc.TriggerOcrAsync(batchId, minConfidence, guestPageLimit, skipFileNames, workflowKey);
+            var ocrResult = await _batchSvc.TriggerOcrAsync(batchId, minConfidence, skipFileNames, workflowKey, maxPageCount, maxInvoicesPerBatch);
 
             // Action logging (OCRed) is now deferred to OcrQueueProcessor completion — OCR runs asynchronously.
 
             return Json(new
             {
                 success           = true,
-                allSkipped        = ocrResult.AllSkipped,
-                guestLimitReached = ocrResult.GuestLimitReached,
-                limitMessage      = ocrResult.LimitMessage
+                allSkipped = ocrResult.AllSkipped
             });
         }
         catch (Exception ex)
@@ -491,7 +467,7 @@ public class HomeController : Controller
         var batch = batches.FirstOrDefault(b => b.BatchId == batchId);
         if (batch == null) return Json(EmptyResult(pageSize));
 
-        var (files, total, actualPage, totalPages) = await BuildPagedFileListAsync(batch, page, pageSize);
+        var (files, total, actualPage, totalPages) = await BuildPagedFileListAsync(batch, page, pageSize, _configSvc.GetMaxPagesPerInvoice(_tenantContext.IsGuestOrganization));
         return Json(new { items = files, total, page = actualPage, pageSize, totalPages });
     }
 
@@ -630,7 +606,7 @@ public class HomeController : Controller
     }
 
     private async Task<(List<FileListEntry> Items, int Total, int Page, int TotalPages)> BuildPagedFileListAsync(
-        BatchSummary batch, int page, int pageSize)
+        BatchSummary batch, int page, int pageSize, int maxPageCount = 20)
     {
         var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
         if (!Directory.Exists(invoicesFolder))
@@ -644,11 +620,11 @@ public class HomeController : Controller
         page = Math.Clamp(page, 1, Math.Max(1, totalPages));
 
         var pagePaths = allFilePaths.Skip((page - 1) * pageSize).Take(pageSize);
-        var items = await BuildFileListForPathsAsync(pagePaths);
+        var items = await BuildFileListForPathsAsync(pagePaths, maxPageCount);
         return (items, total, page, totalPages);
     }
 
-    private async Task<List<FileListEntry>> BuildFileListForPathsAsync(IEnumerable<string> filePaths)
+    private async Task<List<FileListEntry>> BuildFileListForPathsAsync(IEnumerable<string> filePaths, int maxPageCount = 20)
     {
         var entries = new List<FileListEntry>();
         foreach (var fp in filePaths)
@@ -658,6 +634,7 @@ public class HomeController : Controller
             if (invoice != null)
             {
                 entry.IsProcessed = true;
+                entry.TotalPages = invoice.TotalPages;
                 if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
                 {
                     InvoiceDto? dto = null;
@@ -683,6 +660,7 @@ public class HomeController : Controller
                     }
                 }
             }
+            entry.ExceedsPageLimit = entry.TotalPages > maxPageCount;
             entries.Add(entry);
         }
         return entries;

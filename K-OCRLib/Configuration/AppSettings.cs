@@ -11,17 +11,13 @@ public class AppSettings
     public int GuestAccountRetentionDays { get; set; } = 7;
     public int DeletedBatchRetentionDays { get; set; } = 14;
 
-    /// <summary>
-    /// Maximum number of active batches allowed for guest organizations.
-    /// Superadmin-configurable. Defaults to 2.
-    /// </summary>
-    public int GuestMaxBatches { get; set; } = 2;
+    /// <summary>Per-user-type limits for batches, invoices, and pages.</summary>
+    public LimitsSection Limits { get; set; } = new();
 
-    /// <summary>
-    /// Maximum number of pages that can be OCR'd per batch for guest organizations.
-    /// Superadmin-configurable. Defaults to 20.
-    /// </summary>
-    public int GuestOcrPageLimit { get; set; } = 20;
+    // ── Legacy flat properties kept for JSON forward-compat deserialization ──
+    // These were migrated into Limits.Guest.*. Reading is now done via Limits.
+    // The properties remain so old appsettings.json files still deserialize cleanly.
+    public int GuestMaxBatches { get; set; } = 2;
 
     /// <summary>
     /// When true, a batch is soft-deleted automatically after it is successfully exported
@@ -43,6 +39,39 @@ public class AppSettings
 
     // Database configuration
     public DatabaseSettings? Database { get; set; }
+}
+
+/// <summary>Configurable limits for regular users and guest users.</summary>
+public class LimitsSection
+{
+    public UserLimits User { get; set; } = new();
+    public GuestLimits Guest { get; set; } = new();
+}
+
+public class UserLimits
+{
+    /// <summary>Maximum invoices per batch for regular users. Defaults to 100.</summary>
+    public int MaxInvoicesPerBatch { get; set; } = 100;
+
+    /// <summary>
+    /// Maximum pages per invoice for regular users. Invoices exceeding this limit
+    /// are grayed out and skipped during OCR. Defaults to 20.
+    /// </summary>
+    public int MaxPagesPerInvoice { get; set; } = 20;
+}
+
+public class GuestLimits
+{
+    /// <summary>Maximum active batches for guest users. Defaults to 2.</summary>
+    public int MaxBatches { get; set; } = 2;
+
+    /// <summary>Maximum invoices per batch for guest users. Defaults to 20.</summary>
+    public int MaxInvoicesPerBatch { get; set; } = 20;
+
+    /// <summary>Maximum pages per invoice for guest users. Invoices exceeding this limit
+    /// are grayed out and skipped during OCR. Defaults to 20.
+    /// </summary>
+    public int MaxPagesPerInvoice { get; set; } = 20;
 }
 
 public class DatabaseSettings
@@ -78,3 +107,4 @@ public class EmailSettings
     public string? FromAddress { get; set; }
     public string? FromName { get; set; } = "K-OCR";
 }
+
