@@ -350,10 +350,27 @@ public class BatchService : IBatchService, IAsyncDisposable
         }
     }
 
+    private static int EstimateTiffPageCount(string filePath)
+    {
+        try
+        {
+            using var codec = SkiaSharp.SKCodec.Create(filePath);
+            return codec is not null && codec.FrameCount > 0 ? codec.FrameCount : 1;
+        }
+        catch
+        {
+            return 1;
+        }
+    }
+
     private static int EstimateFilePageCount(string filePath)
     {
-        if (Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+        var ext = Path.GetExtension(filePath);
+        if (ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase))
             return EstimatePdfPageCount(filePath);
+        if (ext.Equals(".tif", StringComparison.OrdinalIgnoreCase) ||
+            ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase))
+            return EstimateTiffPageCount(filePath);
         return 1;
     }
 
@@ -549,6 +566,7 @@ public class BatchService : IBatchService, IAsyncDisposable
                             BatchId       = batchId,
                             FilePath      = destPath,
                             UploadedAtUtc = DateTime.UtcNow,
+                            TotalPages    = EstimateFilePageCount(destPath),
                         });
                         uploadedFiles.Add((
                             file.FileName,
