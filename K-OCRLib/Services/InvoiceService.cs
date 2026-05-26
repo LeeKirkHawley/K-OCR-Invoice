@@ -184,19 +184,28 @@ namespace K_OCR.Services
                     var horizontalDist = wordX - labelX;
                     if (horizontalDist < 0 || horizontalDist > 500) continue;
                     
-                    // Try to parse as currency
-                    var cleaned = word.text.Replace("$", "").Replace(",", "").Replace(" ", "").Trim();
-                    if (decimal.TryParse(cleaned, out var value))
+                    // Try to parse as currency, including negative amounts such as refunds.
+                    var parsedCurrency = CurrencyAmountParser.Parse(word.text);
+                    decimal value;
+                    if (parsedCurrency.HasValue)
                     {
-                        // Prefer the closest value
-                        var distance = Math.Sqrt(horizontalDist * horizontalDist + Math.Pow(wordY - labelY, 2));
-                        if (distance < bestDistance)
-                        {
-                            bestDistance = distance;
-                            bestValue = value;
-                            bestPolygon = word.polygon;
-                            bestPageNumber = word.pageNumber;
-                        }
+                        value = parsedCurrency.Value;
+                    }
+                    else
+                    {
+                        var cleaned = word.text.Replace("$", "").Replace(",", "").Replace(" ", "").Trim();
+                        if (!decimal.TryParse(cleaned, out value))
+                            continue;
+                    }
+
+                    // Prefer the closest value
+                    var distance = Math.Sqrt(horizontalDist * horizontalDist + Math.Pow(wordY - labelY, 2));
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        bestValue = value;
+                        bestPolygon = word.polygon;
+                        bestPageNumber = word.pageNumber;
                     }
                 }
                 

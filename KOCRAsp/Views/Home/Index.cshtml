@@ -69,8 +69,9 @@
                          data-filepath="@file.FilePath"@Html.Raw(overLimitAttr)
                          role="button"
                          tabindex="0"
-                         onclick="handleFileListItemClick(this)"
-                         onkeydown="handleFileListItemKeydown(event, this)">
+                         onclick="handleFileListItemClick(this, event)"
+                         onkeydown="handleFileListItemKeydown(event, this)"
+                         oncontextmenu="return handleFileListItemContextMenu(event, this);">
                         <span class="file-status-dot @file.ProcessedDotClass"  title="@file.ProcessedDotTitle"></span>
                         <span class="file-queue-indicator" style="display:none;" title="Queued for OCR">Q</span>
                         <span class="file-status-dot @file.ValidationDotClass" title="@file.ValidationDotTitle"></span>
@@ -156,6 +157,11 @@
     </div>
 
 </div>
+
+<div id="invoiceContextMenu" class="invoice-context-menu" style="display:none;">
+    <button type="button" id="invoiceMenuRemoveBtn" class="invoice-context-item">Remove Invoice from Batch</button>
+    <button type="button" id="invoiceMenuMoveBtn" class="invoice-context-item">Move Invoice to another Batch</button>
+</div>
 <!-- OCR In Progress overlay -->
 <div id="ocrOverlay">
     <div class="spinner-border text-light ocr-spinner" role="status">
@@ -210,6 +216,28 @@
     </div>
 </div>
 
+<div class="modal fade" id="moveInvoiceModal" tabindex="-1" aria-labelledby="moveInvoiceModalLabel" aria-modal="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="moveInvoiceModalLabel">Move Invoice to Batch</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label for="moveInvoiceBatchSelect" class="form-label">Select target batch</label>
+                <select id="moveInvoiceBatchSelect" class="form-select form-select-sm"></select>
+                <p id="moveInvoiceNoBatches" class="text-muted small mt-2 mb-0" style="display:none;">
+                    No other active batches are available.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="moveInvoiceConfirmBtn">Move</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 @section Scripts {
 <script src="~/lib/signalr/signalr.min.js"></script>
@@ -221,6 +249,8 @@
     let _currentPage      = @Model.CurrentPage;
     let _pageSize         = @Model.PageSize;
     let _refreshAbort     = null;
+    let _contextMenuFilePath = null;
+    let _pendingMoveFilePath = null;
 
     const _queuedFilePathKeys = new Set();
 
@@ -247,6 +277,33 @@
         if (!key) return null;
         return Array.from(document.querySelectorAll('.file-list-item'))
             .find(item => normalizeFilePathKey(item.dataset.filepath) === key) ?? null;
+    }
+
+    function hideInvoiceContextMenu() {
+        const menu = document.getElementById('invoiceContextMenu');
+        if (!menu) return;
+        menu.style.display = 'none';
+        _contextMenuFilePath = null;
+    }
+
+    function showInvoiceContextMenu(x, y, filePath) {
+        const menu = document.getElementById('invoiceContextMenu');
+        if (!menu) return;
+
+        _contextMenuFilePath = filePath;
+        menu.style.display = 'block';
+
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const menuRect = menu.getBoundingClientRect();
+
+        let left = x;
+        let top = y;
+        if (left + menuRect.width > viewportWidth - 8) left = viewportWidth - menuRect.width - 8;
+        if (top + menuRect.height > viewportHeight - 8) top = viewportHeight - menuRect.height - 8;
+
+        menu.style.left = `${Math.max(8, left)}px`;
+        menu.style.top = `${Math.max(8, top)}px`;
     }
 
     const _orgId             = '@Html.Raw(Model.OrgId)';
@@ -331,6 +388,64 @@
         startBatchOcr(false);
     });
 
+    document.getElementById('invoiceMenuRemoveBtn').addEventListener('click', async function () {
+        const filePath = _contextMenuFilePath;
+        hideInvoiceContextMenu();
+        if (!filePath) return;
+
+        try {
+            await removeInvoiceFromBatch(filePath);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+
+    document.getElementById('invoiceMenuMoveBtn').addEventListener('click', async function () {
+        const filePath = _contextMenuFilePath;
+        hideInvoiceContextMenu();
+        if (!filePath) return;
+
+        await openMoveInvoiceModal(filePath);
+    });
+
+    document.getElementById('moveInvoiceConfirmBtn').addEventListener('click', async function () {
+        if (!_pendingMoveFilePath) return;
+
+        const targetBatchId = parseInt(document.getElementById('moveInvoiceBatchSelect').value, 10);
+        if (!targetBatchId) {
+            showToast('Select a target batch.', 'warning');
+            return;
+        }
+
+        try {
+            await moveInvoiceToBatch(_pendingMoveFilePath, targetBatchId);
+            bootstrap.Modal.getInstance(document.getElementById('moveInvoiceModal'))?.hide();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+
+    document.getElementById('moveInvoiceModal').addEventListener('hidden.bs.modal', () => {
+        _pendingMoveFilePath = null;
+    });
+
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('invoiceContextMenu');
+        if (!menu || menu.style.display === 'none') return;
+        const target = e.target instanceof Node ? e.target : null;
+        if (!target || !menu.contains(target)) hideInvoiceContextMenu();
+    });
+
+    document.addEventListener('contextmenu', (e) => {
+        const target = e.target instanceof Element ? e.target : null;
+        if (target?.closest('.file-list-item') || target?.closest('#invoiceContextMenu')) return;
+        hideInvoiceContextMenu();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideInvoiceContextMenu();
+    });
+
     async function startBatchOcr(skipAlreadyOcrd) {
         showOcrOverlay();
         try {
@@ -366,7 +481,8 @@
         selectFile(item.dataset.filepath, exceedsLimit);
     }
 
-    window.handleFileListItemClick = function (item) {
+    window.handleFileListItemClick = function (item, event) {
+        if (event && typeof event.button === 'number' && event.button !== 0) return;
         activateFileListItem(item);
     };
 
@@ -375,6 +491,31 @@
         event.preventDefault();
         activateFileListItem(item);
     };
+
+    function handleFileListItemContextMenu(event, item) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        showInvoiceContextMenu(event?.clientX ?? 0, event?.clientY ?? 0, item?.dataset?.filepath);
+        return false;
+    }
+
+    function resetInvoiceSelection() {
+        _currentFilePath = null;
+        _currentInvoice = null;
+        _selectedFieldKey = null;
+
+        document.getElementById('invoiceFields').innerHTML =
+            '<p class="text-muted small">Select a file to view invoice data.</p>';
+        document.getElementById('rawJsonContent').textContent = '';
+        document.getElementById('validatedJsonContent').textContent = '';
+        updateValidationStatusLabel(null);
+
+        document.getElementById('viewerPagesContainer').innerHTML = '';
+        document.getElementById('viewerToolbar').style.display = 'none';
+        document.getElementById('noDocMsg').style.display = '';
+    }
 
     async function selectFile(filePath, exceedsLimit) {
         _currentFilePath  = filePath;
@@ -1054,6 +1195,76 @@
         }
     };
 
+    async function openMoveInvoiceModal(filePath) {
+        const select = document.getElementById('moveInvoiceBatchSelect');
+        const noBatches = document.getElementById('moveInvoiceNoBatches');
+        const confirmBtn = document.getElementById('moveInvoiceConfirmBtn');
+
+        _pendingMoveFilePath = filePath;
+        select.innerHTML = '';
+
+        try {
+            const resp = await fetch('/home/getbatches');
+            const batches = await resp.json();
+            const currentBatchId = Number(document.getElementById('batchSelector').value || 0);
+            const candidates = (batches ?? []).filter(b => Number(b.batchId) !== currentBatchId);
+
+            if (candidates.length === 0) {
+                noBatches.style.display = '';
+                confirmBtn.disabled = true;
+            } else {
+                noBatches.style.display = 'none';
+                confirmBtn.disabled = false;
+                for (const batch of candidates) {
+                    const opt = document.createElement('option');
+                    opt.value = String(batch.batchId);
+                    opt.textContent = batch.name;
+                    select.appendChild(opt);
+                }
+            }
+
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('moveInvoiceModal')).show();
+        } catch (err) {
+            showToast('Failed to load batches: ' + err.message, 'error');
+        }
+    }
+
+    async function removeInvoiceFromBatch(filePath) {
+        if (!confirm('Remove this invoice from the current batch?')) return;
+
+        const fd = new FormData();
+        fd.append('filePath', filePath);
+        const result = await postForm('/home/removeinvoicefrombatch', fd);
+        if (!result.success)
+            throw new Error(result.error ?? 'Remove failed.');
+
+        clearFileQueued(filePath);
+        if (normalizeFilePathKey(_currentFilePath) === normalizeFilePathKey(filePath))
+            resetInvoiceSelection();
+
+        await refreshFileList();
+        await updateExportButtonState();
+        showToast('Invoice removed from batch.');
+    }
+
+    async function moveInvoiceToBatch(filePath, targetBatchId) {
+        const fd = new FormData();
+        fd.append('filePath', filePath);
+        fd.append('targetBatchId', targetBatchId);
+
+        const result = await postForm('/home/moveinvoicetobatch', fd);
+        if (!result.success)
+            throw new Error(result.error ?? 'Move failed.');
+
+        clearFileQueued(filePath);
+        if (normalizeFilePathKey(_currentFilePath) === normalizeFilePathKey(filePath))
+            resetInvoiceSelection();
+
+        await refreshFileList();
+        await updateExportButtonState();
+        showToast('Invoice moved to target batch.');
+    }
+
     async function updateExportButtonState() {
         const btn = document.getElementById('exportDropdownBtn');
         if (!btn) return;
@@ -1113,8 +1324,9 @@
                           data-filepath="${escapeHtml(file.filePath)}"${overLimitAttr}
                           role="button"
                           tabindex="0"
-                          onclick="handleFileListItemClick(this)"
-                          onkeydown="handleFileListItemKeydown(event, this)">
+                          onclick="handleFileListItemClick(this, event)"
+                          onkeydown="handleFileListItemKeydown(event, this)"
+                          oncontextmenu="return handleFileListItemContextMenu(event, this);">
                 <span class="file-status-dot ${escapeHtml(file.processedDotClass ?? '')}"
                       title="${escapeHtml(file.processedDotTitle ?? '')}"></span>
                 <span class="file-queue-indicator" style="${isFileQueued(file.filePath) ? '' : 'display:none;'}"

@@ -1,7 +1,9 @@
 using System.Security.Claims;
+using K_OCR.Data;
 using K_OCR.Models;
 using K_OCR.Services;
 using KOCRAsp.Models;
+using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 
 namespace KOCRAsp.Services;
@@ -28,6 +30,8 @@ public interface IHomePageService
     Task AcceptValidationAsync(string filePath, string batchName, string orgUser);
     Task<FileListEntry?> BuildInvoiceDotStateAsync(int invoiceId);
     Task<List<(string FileName, InvoiceDto Invoice)>> LoadBatchInvoicesAsync(BatchSummary batch);
+    Task RemoveInvoiceFromBatchAsync(string filePath, int sourceBatchId, string batchName, string orgUser);
+    Task MoveInvoiceToBatchAsync(string filePath, int sourceBatchId, int targetBatchId, string orgUser);
 }
 
 public sealed class HomePageService : IHomePageService
@@ -42,6 +46,7 @@ public sealed class HomePageService : IHomePageService
     private readonly IConfigurationService _configSvc;
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly IInvoiceActionService _invoiceActionSvc;
+    private readonly IDbContextFactory<KOCRDbContext> _dbFactory;
 
     public HomePageService(
         IBatchService batchSvc,
@@ -50,7 +55,8 @@ public sealed class HomePageService : IHomePageService
         IInvoiceProcessingService ocrSvc,
         IConfigurationService configSvc,
         IOrgConfigService orgConfigSvc,
-        IInvoiceActionService invoiceActionSvc)
+        IInvoiceActionService invoiceActionSvc,
+        IDbContextFactory<KOCRDbContext> dbFactory)
     {
         _batchSvc = batchSvc;
         _fileSvc = fileSvc;
@@ -59,6 +65,7 @@ public sealed class HomePageService : IHomePageService
         _configSvc = configSvc;
         _orgConfigSvc = orgConfigSvc;
         _invoiceActionSvc = invoiceActionSvc;
+        _dbFactory = dbFactory;
     }
 
     public async Task<IReadOnlyList<BatchSummary>> GetBatchesForOrgAsync(string orgId) =>
@@ -216,6 +223,114 @@ public sealed class HomePageService : IHomePageService
                 result.Add((Path.GetFileName(fp), inv));
         }
         return result;
+    }
+
+    public async Task RemoveInvoiceFromBatchAsync(string filePath, int sourceBatchId, string batchName, string orgUser)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new InvalidOperationException("File path required.");
+
+        var fileExists = File.Exists(filePath);
+        await using var db = _dbFactory.CreateDbContext();
+
+        var invoice = await db.Invoices.FirstOrDefaultAsync(i => i.BatchId == sourceBatchId && i.FilePath == filePath);
+        var jobs = await db.OcrJobs
+            .Where(j => j.BatchId == sourceBatchId && j.FilePath == filePath)
+            .ToListAsync();
+
+        if (!fileExists && invoice == null && jobs.Count == 0)
+            throw new InvalidOperationException("Invoice file not found in the current batch.");
+
+        if (fileExists)
+            File.Delete(filePath);
+
+        if (jobs.Count > 0)
+            db.OcrJobs.RemoveRange(jobs);
+
+        if (invoice != null)
+            db.Invoices.Remove(invoice);
+
+        await db.SaveChangesAsync();
+        await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Removed, Path.GetFileName(filePath), batchName, orgUser);
+    }
+
+    public async Task MoveInvoiceToBatchAsync(string filePath, int sourceBatchId, int targetBatchId, string orgUser)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new InvalidOperationException("File path required.");
+
+        if (sourceBatchId == targetBatchId)
+            throw new InvalidOperationException("Target batch must be different from the current batch.");
+
+        var sourceBatch = await _batchSvc.GetBatchDetailAsync(sourceBatchId)
+            ?? throw new InvalidOperationException("Current batch no longer exists.");
+        var targetBatch = await _batchSvc.GetBatchDetailAsync(targetBatchId)
+            ?? throw new InvalidOperationException("Target batch not found.");
+
+        var sourcePath = Path.GetFullPath(filePath);
+        if (!File.Exists(sourcePath))
+            throw new InvalidOperationException("Invoice file not found in the current batch.");
+
+        var targetInvoicesDir = Path.Combine(targetBatch.FolderPath, "Invoices");
+        Directory.CreateDirectory(targetInvoicesDir);
+
+        var fileName = Path.GetFileName(sourcePath);
+        var targetPath = Path.Combine(targetInvoicesDir, fileName);
+        if (File.Exists(targetPath))
+            throw new InvalidOperationException($"Target batch already contains '{fileName}'.");
+
+        await using var db = _dbFactory.CreateDbContext();
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var fileMoved = false;
+
+        try
+        {
+            File.Move(sourcePath, targetPath);
+            fileMoved = true;
+
+            var invoice = await db.Invoices.FirstOrDefaultAsync(i => i.BatchId == sourceBatchId && i.FilePath == sourcePath);
+            if (invoice != null)
+            {
+                invoice.BatchId = targetBatchId;
+                invoice.FilePath = targetPath;
+            }
+
+            var jobs = await db.OcrJobs
+                .Where(j => j.BatchId == sourceBatchId && j.FilePath == sourcePath)
+                .ToListAsync();
+            foreach (var job in jobs)
+            {
+                job.BatchId = targetBatchId;
+                job.FilePath = targetPath;
+            }
+
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                await tx.RollbackAsync();
+            }
+            catch
+            {
+                // Best-effort rollback; primary error is preserved below.
+            }
+
+            if (fileMoved && !File.Exists(sourcePath) && File.Exists(targetPath))
+            {
+                File.Move(targetPath, sourcePath);
+            }
+
+            throw new InvalidOperationException("Moving invoice failed and was rolled back.", ex);
+        }
+
+        await _invoiceActionSvc.LogAsync(
+            InvoiceActionTypes.MovedToBatch,
+            fileName,
+            $"{sourceBatch.Name} -> {targetBatch.Name}",
+            orgUser);
     }
 
     private async Task<List<FileListEntry>> BuildFileListForPathsAsync(IEnumerable<string> filePaths, int maxPageCount)

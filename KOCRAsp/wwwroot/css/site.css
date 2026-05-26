@@ -143,6 +143,31 @@
 .file-list-item--overlimit { opacity: 0.45; cursor: pointer; }
 .file-list-item--overlimit:hover { background: transparent; }
 
+.invoice-context-menu {
+    position: fixed;
+    z-index: 11000;
+    min-width: 220px;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+    padding: 4px 0;
+}
+
+.invoice-context-item {
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
+    padding: 7px 10px;
+    font-size: 12px;
+    color: #212529;
+}
+
+.invoice-context-item:hover {
+    background: #f1f3f5;
+}
+
 /* ── Document viewer ──────────────────────────────────────────── */
 .viewer-toolbar {
     gap: 6px;

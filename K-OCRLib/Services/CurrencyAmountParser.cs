@@ -12,12 +12,7 @@ public static class CurrencyAmountParser
     // Matches a string that looks like a monetary amount, optionally preceded by a
     // currency symbol or ISO code: e.g. "$1,234.56", "USD 1.234,56", "€1 234.00"
     private static readonly Regex _moneyPattern = new(
-        @"^\s*(?:[A-Z]{2,3}\$?|[$£€¥₹₩₺₽¢₴₦])\s*([\d][\d\s,.']*)\s*$",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    // Removes everything that is not a digit, comma, period, or whitespace
-    private static readonly Regex _stripLeading = new(
-        @"^[\s$£€¥₹₩₺₽¢₴₦A-Z]*",
+        @"^\s*(?<open>\()?\s*(?<sign1>-)?\s*(?:[A-Z]{2,3}\$?|[$£€¥₹₩₺₽¢₴₦])\s*(?<sign2>-)?\s*(?<num>[\d][\d\s,.']*)\s*(?<close>\))?\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -31,19 +26,11 @@ public static class CurrencyAmountParser
 
         var trimmed = raw.Trim();
 
-        // Only proceed when the string looks like a monetary amount
-        if (!_moneyPattern.IsMatch(trimmed)) return null;
+        var match = _moneyPattern.Match(trimmed);
+        if (!match.Success) return null;
+        if (match.Groups["open"].Success != match.Groups["close"].Success) return null;
 
-        // Strip leading symbols / currency codes
-        var digits = _stripLeading.Replace(trimmed, string.Empty)
-                                  .TrimEnd()
-                                  // Remove trailing ISO codes or symbols too
-                                  .TrimEnd('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-                                           'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-                                           'U', 'V', 'W', 'X', 'Y', 'Z', ' ', '$', '£', '€',
-                                           '¥', '₹', '₩', '₺', '₽', '¢', '₴', '₦')
-                                  .Trim();
-
+        var digits = match.Groups["num"].Value;
         if (string.IsNullOrEmpty(digits)) return null;
 
         // Remove internal whitespace (e.g. "1 234.56")
@@ -87,9 +74,13 @@ public static class CurrencyAmountParser
             normalised = digits;
         }
 
+        var isNegative = match.Groups["open"].Success
+            || match.Groups["sign1"].Success
+            || match.Groups["sign2"].Success;
+
         return decimal.TryParse(normalised, System.Globalization.NumberStyles.Number,
                                 System.Globalization.CultureInfo.InvariantCulture, out var result)
-            ? result
+            ? (isNegative ? -result : result)
             : null;
     }
 }

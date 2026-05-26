@@ -69,6 +69,29 @@ public class ValidationServiceTests
     }
 
     [Fact]
+    public void LineItemValidationService_ValidatesMathWithNegativeAdjustments()
+    {
+        var service = new LineItemValidationService();
+        var invoice = new InvoiceDto
+        {
+            Subtotal = 80m,
+            TotalTax = 0m,
+            Shipping = -5m,
+            Total = 75m,
+            Items =
+            [
+                new InvoiceItemDto { Amount = 100m },
+                new InvoiceItemDto { Amount = -20m }
+            ]
+        };
+
+        service.ValidateInvoiceMath(invoice);
+
+        Assert.True(invoice.MathConfirmed["Subtotal"]);
+        Assert.True(invoice.MathConfirmed["Total"]);
+    }
+
+    [Fact]
     public void InvoiceValidationService_ValidatesAgainstTesseractText()
     {
         var service = new InvoiceValidationService();

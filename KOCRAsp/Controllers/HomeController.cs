@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text;
+using System.Linq;
 using ClosedXML.Excel;
 using K_OCR.Data;
 using K_OCR.Models;
@@ -245,7 +246,9 @@ public class HomeController : Controller
             return Json(new List<object>());
 
         var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
-        var batches = await _homePageSvc.GetBatchesForOrgAsync(orgId);
+        var batches = (await _homePageSvc.GetBatchesForOrgAsync(orgId))
+            .Where(b => !b.IsMarkedForDeletion)
+            .ToList();
         
         var result = batches.Select(b => new
         {
@@ -319,6 +322,69 @@ public class HomeController : Controller
             return Json(new { success = false, error = "No processed invoice for this file." });
 
         return Json(new { success = true, invoice });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveInvoiceFromBatch(string filePath)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            return Json(new { success = false, error = "File path required." });
+
+        var batch = await GetCurrentBatchAsync();
+        if (batch == null)
+            return Json(new { success = false, error = "No batch selected." });
+
+        try
+        {
+            var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            await _homePageSvc.RemoveInvoiceFromBatchAsync(filePath, batch.BatchId, batch.Name, orgUser);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "RemoveInvoiceFromBatch failed for {FilePath}", filePath);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MoveInvoiceToBatch(string filePath, int targetBatchId)
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            return Json(new { success = false, error = "File path required." });
+
+        if (targetBatchId <= 0)
+            return Json(new { success = false, error = "Target batch required." });
+
+        var sourceBatch = await GetCurrentBatchAsync();
+        if (sourceBatch == null)
+            return Json(new { success = false, error = "No batch selected." });
+
+        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        var targetBatch = (await _homePageSvc.GetBatchesForOrgAsync(orgId))
+            .FirstOrDefault(b => b.BatchId == targetBatchId && !b.IsMarkedForDeletion);
+        if (targetBatch == null)
+            return Json(new { success = false, error = "Target batch not found." });
+
+        try
+        {
+            var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            await _homePageSvc.MoveInvoiceToBatchAsync(filePath, sourceBatch.BatchId, targetBatchId, orgUser);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MoveInvoiceToBatch failed for {FilePath} -> {TargetBatchId}", filePath, targetBatchId);
+            return Json(new { success = false, error = ex.Message });
+        }
     }
 
     [HttpPost]
