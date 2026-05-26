@@ -86,7 +86,7 @@ public class OcrQueueProcessorTests
     public async Task PauseAndDrainAsync_WithSemaphoreAcquiresAndReleasesSlots()
     {
         var processor = CreateProcessor();
-        var sem = new SemaphoreSlim(_settings.MaxConcurrentJobs, _settings.MaxConcurrentJobs);
+        var sem = new SemaphoreSlim(0, _settings.MaxConcurrentJobs);
 
         // Simulate the processor's semaphore initialization by reflection
         var semField = typeof(OcrQueueProcessor).GetField(
@@ -94,13 +94,16 @@ public class OcrQueueProcessorTests
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         semField?.SetValue(processor, sem);
 
-        // Acquire some slots to simulate in-flight jobs
-        await sem.WaitAsync();
-        await sem.WaitAsync();
-        // One slot should be free
+        // Simulate two in-flight jobs completing after pause is requested.
+        var releaseTask = Task.Run(async () =>
+        {
+            await Task.Delay(50);
+            sem.Release(2);
+        });
 
-        // Now pause and drain — this should acquire all 2 slots and release them back
+        // Now pause and drain — this should wait for both releases, then return the semaphore to full capacity.
         await processor.PauseAndDrainAsync();
+        await releaseTask;
 
         // Semaphore should be back to full capacity
         Assert.Equal(_settings.MaxConcurrentJobs, sem.CurrentCount);

@@ -1,0 +1,150 @@
+using K_OCR.Identity;
+using K_OCR.Models;
+using K_OCR.Services;
+using K_OCR.Services.Workflow;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Moq;
+
+namespace K_OCRLib.Tests;
+
+public class WorkflowAndPipelineTests
+{
+    [Fact]
+    public async Task InvoiceProcessingService_ProcessFileAsync_RunsWorkflowAndReturnsJson()
+    {
+        var invoice = new InvoiceDto { VendorName = "Acme Corp" };
+        var workflow = CreateWorkflow(invoice);
+        var service = new InvoiceProcessingService(
+            Mock.Of<IFileService>(),
+            workflow,
+            new ConfigurationBuilder().Build(),
+            Mock.Of<ILogger<InvoiceProcessingService>>());
+
+        var result = await service.ProcessFileAsync("invoice.pdf", "artifacts", 0.9, new Organization(), new Batch());
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Context);
+        Assert.Contains("Acme Corp", result.Json);
+    }
+
+    [Fact]
+    public async Task AzureOcrStep_DelegatesToInvoiceService()
+    {
+        var invoiceSvc = new Mock<IInvoiceService>();
+        invoiceSvc.Setup(s => s.RunAzureInvoiceParse("invoice.pdf"))
+            .ReturnsAsync([new InvoiceDto { InvoiceId = "INV-1" }]);
+
+        var step = new AzureOcrStep(invoiceSvc.Object, Mock.Of<ILogger<AzureOcrStep>>());
+        var context = new PipelineContext { InputPath = "invoice.pdf" };
+
+        await step.ExecuteAsync(context);
+
+        Assert.Single(context.Layout!);
+        Assert.Equal("INV-1", context.Layout![0].InvoiceId);
+    }
+
+    [Fact]
+    public async Task TesseractOcrStep_CatchesServiceExceptions()
+    {
+        var tess = new Mock<ITesseractValidationService>();
+        tess.Setup(s => s.ExtractTextAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("boom"));
+
+        var step = new TesseractOcrStep(tess.Object, Mock.Of<ILogger<TesseractOcrStep>>());
+        var context = new PipelineContext { InputPath = "invoice.pdf" };
+
+        await step.ExecuteAsync(context);
+
+        Assert.Null(context.TesseractOcrText);
+    }
+
+    [Fact]
+    public async Task TesseractValidationStep_SkipsWhenNoText()
+    {
+        var validation = new Mock<IInvoiceValidationService>();
+        var step = new TesseractValidationStep(validation.Object);
+
+        await step.ExecuteAsync(new PipelineContext { Layout = [new InvoiceDto()], TesseractOcrText = null });
+
+        validation.Verify(v => v.ValidateAgainstTesseract(It.IsAny<InvoiceDto>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ConfidenceValidationStep_UsesOverrideThreshold()
+    {
+        var validation = new Mock<IConfidenceValidationService>();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MinConfidenceThreshold"] = "0.75"
+            })
+            .Build();
+
+        var step = new ConfidenceValidationStep(validation.Object, config);
+        var invoice = new InvoiceDto();
+
+        await step.ExecuteAsync(new PipelineContext
+        {
+            Layout = [invoice],
+            MinConfidenceThreshold = 0.9
+        });
+
+        validation.Verify(v => v.ValidateConfidence(invoice, 0.9), Times.Once);
+    }
+
+    [Fact]
+    public async Task EnrichmentStep_DelegatesToInvoiceEnrichmentService()
+    {
+        var enrichment = new Mock<IInvoiceEnrichmentService>();
+        var step = new EnrichmentStep(enrichment.Object);
+        var invoice = new InvoiceDto();
+
+        await step.ExecuteAsync(new PipelineContext
+        {
+            Layout = [invoice],
+            TesseractOcrText = "USD"
+        });
+
+        enrichment.Verify(s => s.DetectCountryAndCurrency(invoice, "USD"), Times.Once);
+    }
+
+    [Fact]
+    public async Task SaveContextStep_WritesPipelineContext()
+    {
+        var fileService = new Mock<IFileService>();
+        var step = new SaveContextStep(fileService.Object);
+        var context = new PipelineContext { InputPath = "invoice.pdf" };
+
+        await step.ExecuteAsync(context);
+
+        fileService.Verify(s => s.SaveContextAsync("invoice.pdf", context), Times.Once);
+    }
+
+    private static InvoiceProcessingWorkflow CreateWorkflow(InvoiceDto invoice)
+    {
+        var invoiceService = new Mock<IInvoiceService>();
+        invoiceService.Setup(s => s.RunAzureInvoiceParse("invoice.pdf"))
+            .ReturnsAsync([invoice]);
+
+        var tessService = new Mock<ITesseractValidationService>();
+        tessService.Setup(s => s.ExtractTextAsync("invoice.pdf", "artifacts", It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Acme Corp");
+
+        var validation = new Mock<IInvoiceValidationService>();
+        var lineItems = new Mock<ILineItemValidationService>();
+        var confidence = new Mock<IConfidenceValidationService>();
+        var enrichment = new Mock<IInvoiceEnrichmentService>();
+        var fileService = new Mock<IFileService>();
+
+        return new InvoiceProcessingWorkflow(
+            new AzureOcrStep(invoiceService.Object, Mock.Of<ILogger<AzureOcrStep>>()),
+            new TesseractOcrStep(tessService.Object, Mock.Of<ILogger<TesseractOcrStep>>()),
+            new TesseractValidationStep(validation.Object),
+            new LineItemValidationStep(lineItems.Object),
+            new ConfidenceValidationStep(confidence.Object, new ConfigurationBuilder().Build()),
+            new EnrichmentStep(enrichment.Object),
+            new SaveContextStep(fileService.Object),
+            Mock.Of<ILogger<InvoiceProcessingWorkflow>>());
+    }
+}

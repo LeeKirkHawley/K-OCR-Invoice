@@ -16,6 +16,18 @@ namespace K_OCR.Database
               "ApplicationDbContext is configured directly in Program.cs using DatabaseSettings.ConnectionString.")]
     public static class DatabaseConfiguration
     {
+        private sealed class OptionsDbContextFactory : IDbContextFactory<KOCRDbContext>
+        {
+            private readonly DbContextOptions<KOCRDbContext> _options;
+
+            public OptionsDbContextFactory(DbContextOptions<KOCRDbContext> options)
+            {
+                _options = options;
+            }
+
+            public KOCRDbContext CreateDbContext() => new(_options);
+        }
+
         public static IServiceCollection AddKOCRDatabase(
             this IServiceCollection services,
             IConfiguration configuration)
@@ -39,6 +51,8 @@ namespace K_OCR.Database
                     options.EnableDetailedErrors();
             });
 
+            services.AddSingleton<IDbContextFactory<KOCRDbContext>>(sp =>
+                new OptionsDbContextFactory(sp.GetRequiredService<DbContextOptions<KOCRDbContext>>()));
             services.AddSingleton<DatabaseService>();
 
             return services;
@@ -51,6 +65,8 @@ namespace K_OCR.Database
             services.AddDbContext<KOCRDbContext>(options =>
                 options.UseSqlite(connectionString));
 
+            services.AddSingleton<IDbContextFactory<KOCRDbContext>>(sp =>
+                new OptionsDbContextFactory(sp.GetRequiredService<DbContextOptions<KOCRDbContext>>()));
             services.AddSingleton<DatabaseService>();
 
             return services;
