@@ -1,4 +1,7 @@
+using K_OCR.Configuration;
+using K_OCR.Data;
 using K_OCR.Models;
+using K_OCR.Security;
 using K_OCR.Services;
 using KOCRAsp.Controllers;
 using KOCRAsp.Services;
@@ -17,6 +20,8 @@ public class BatchControllerTests
     private readonly Mock<ILogger<BatchController>> _mockLogger;
     private readonly Mock<IBatchActionService> _mockBatchActionSvc;
     private readonly Mock<IBatchNotificationService> _mockBatchNotificationSvc;
+    private readonly Mock<ITenantContext> _mockTenantContext;
+    private readonly Mock<IConfigurationService> _mockConfigSvc;
     private readonly BatchController _controller;
     private readonly IBatchChangeNotifier _notifier = new BatchChangeNotifier();
 
@@ -30,13 +35,17 @@ public class BatchControllerTests
         _mockLogger               = new Mock<ILogger<BatchController>>();
         _mockBatchActionSvc       = new Mock<IBatchActionService>();
         _mockBatchNotificationSvc = new Mock<IBatchNotificationService>();
+        _mockTenantContext        = new Mock<ITenantContext>();
+        _mockConfigSvc            = new Mock<IConfigurationService>();
         _notifier = new BatchChangeNotifier();
         _controller = new BatchController(
             _mockBatchSvc.Object,
             _notifier,
             _mockBatchActionSvc.Object,
             _mockBatchNotificationSvc.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _mockTenantContext.Object,
+            _mockConfigSvc.Object);
         _controller.ControllerContext = ControllerTestHelper.CreateControllerContext(
             userId: UserId, orgId: OrgId, orgName: OrgName);
         _controller.TempData = new TempDataDictionary(

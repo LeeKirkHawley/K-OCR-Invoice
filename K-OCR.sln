@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KOCRAsp.Tests", "KOCRAsp.Te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OCRQueue", "OCRQueue\OCRQueue.csproj", "{017E0C15-E66F-48C9-8C34-CB0D664FF7AF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OCRQueue.Tests", "OCRQueue.Tests\OCRQueue.Tests.csproj", "{EAF3EC25-A25E-4C5A-B347-F132156B6E95}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -97,6 +99,18 @@ Global
 		{017E0C15-E66F-48C9-8C34-CB0D664FF7AF}.Release|x64.Build.0 = Release|Any CPU
 		{017E0C15-E66F-48C9-8C34-CB0D664FF7AF}.Release|x86.ActiveCfg = Release|Any CPU
 		{017E0C15-E66F-48C9-8C34-CB0D664FF7AF}.Release|x86.Build.0 = Release|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Debug|x64.Build.0 = Debug|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Debug|x86.Build.0 = Debug|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Release|x64.ActiveCfg = Release|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Release|x64.Build.0 = Release|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Release|x86.ActiveCfg = Release|Any CPU
+		{EAF3EC25-A25E-4C5A-B347-F132156B6E95}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -26,6 +26,8 @@ public class HomeControllerTests
     private readonly Mock<IConfigurationService> _mockConfigSvc;
     private readonly Mock<IBatchActionService> _mockBatchActionSvc;
     private readonly Mock<IBatchNotificationService> _mockBatchNotificationSvc;
+    private readonly Mock<IReportingService> _mockReportingSvc;
+    private readonly Mock<IStripeUsageService> _mockStripeUsage;
     private readonly Mock<ILogger<HomeController>> _mockLogger;
     private readonly DatabaseService _dbSvc;
     private readonly IBatchChangeNotifier _batchNotifier;
@@ -47,6 +49,8 @@ public class HomeControllerTests
         _mockConfigSvc         = new Mock<IConfigurationService>();
         _mockBatchActionSvc    = new Mock<IBatchActionService>();
         _mockBatchNotificationSvc = new Mock<IBatchNotificationService>();
+        _mockReportingSvc      = new Mock<IReportingService>();
+        _mockStripeUsage       = new Mock<IStripeUsageService>();
         _mockLogger            = new Mock<ILogger<HomeController>>();
         _batchNotifier         = new BatchChangeNotifier();
 
@@ -73,6 +77,8 @@ public class HomeControllerTests
             _mockBatchActionSvc.Object,
             _batchNotifier,
             _mockBatchNotificationSvc.Object,
+            _mockReportingSvc.Object,
+            _mockStripeUsage.Object,
             _mockLogger.Object);
     }
 
@@ -129,27 +135,113 @@ public class HomeControllerTests
     {
         SetControllerContext();
 
-        var processingResult = new ProcessingResult
+        // Mock tenant context to mark org as guest (bypasses subscription check)
+        _mockTenantContext.Setup(t => t.IsGuestOrganization).Returns(true);
+        _mockTenantContext.Setup(t => t.StripeSubscriptionStatus).Returns("active");
+
+        // Mock config service to return max pages
+        _mockConfigSvc
+            .Setup(s => s.GetMaxPagesPerInvoice(true))
+            .Returns(100);
+
+        // Set up DatabaseService with a temporary SQLite database file
+        var dbPath = Path.Combine(Path.GetTempPath(), $"test-{Guid.NewGuid()}.db");
+        var options = new DbContextOptionsBuilder<KOCRDbContext>()
+            .UseSqlite($"Data Source={dbPath}")
+            .Options;
+
+        // Create and seed the database schema
+        using (var context = new KOCRDbContext(options))
         {
-            Context = new K_OCR.Models.PipelineContext(),
-            Json = "{}"
-        };
-        _mockOcrSvc
-            .Setup(s => s.ProcessFileAsync(@"C:\invoices\file.pdf", @"C:\Artifacts", 0.8))
-            .ReturnsAsync(processingResult);
+            context.Database.EnsureCreated();
+        }
 
-        var invoice = new InvoiceDto { VendorName = "Acme Corp" };
-        _mockOcrSvc
-            .Setup(s => s.LoadInvoiceAsync(@"C:\invoices\file.pdf"))
-            .ReturnsAsync(invoice);
+        try
+        {
+            var mockContextFactory = new Mock<IDbContextFactory<KOCRDbContext>>();
+            var createdContexts = new List<KOCRDbContext>();
+            mockContextFactory
+                .Setup(f => f.CreateDbContext())
+                .Returns(() =>
+                {
+                    var ctx = new KOCRDbContext(options);
+                    createdContexts.Add(ctx);
+                    return ctx;
+                });
 
-        var result = await _controller.StartOcr(@"C:\invoices\file.pdf");
+            var dbSvc = new DatabaseService(mockContextFactory.Object, Mock.Of<ILogger<DatabaseService>>());
+            var testController = new HomeController(
+                _mockOcrSvc.Object,
+                _mockBatchSvc.Object,
+                _mockFileSvc.Object,
+                _mockExportSvc.Object,
+                dbSvc,
+                _mockOrgConfigSvc.Object,
+                _mockTenantContext.Object,
+                _mockInvoiceActionSvc.Object,
+                _mockConfigSvc.Object,
+                _mockBatchActionSvc.Object,
+                _batchNotifier,
+                _mockBatchNotificationSvc.Object,
+                _mockReportingSvc.Object,
+                _mockStripeUsage.Object,
+                _mockLogger.Object);
+            testController.ControllerContext = _controller.ControllerContext;
 
-        var json = Assert.IsType<JsonResult>(result);
-        var value = json.Value!;
-        var successProp = value.GetType().GetProperty("success");
-        Assert.NotNull(successProp);
-        Assert.True((bool)successProp.GetValue(value)!);
+            var processingResult = new ProcessingResult
+            {
+                Context = new K_OCR.Models.PipelineContext(),
+                Json = "{}"
+            };
+            _mockOcrSvc
+                .Setup(s => s.ProcessFileAsync(@"C:\invoices\file.pdf", @"C:\Artifacts", 0.8))
+                .ReturnsAsync(processingResult);
+
+            var invoice = new InvoiceDto { VendorName = "Acme Corp", PageCount = 5 };
+            _mockOcrSvc
+                .Setup(s => s.LoadInvoiceAsync(@"C:\invoices\file.pdf"))
+                .ReturnsAsync(invoice);
+
+            // Mock invoice action service to record the OCR action
+            _mockInvoiceActionSvc
+                .Setup(s => s.LogAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
+                .Returns(Task.CompletedTask);
+
+            // Mock reporting service
+            _mockReportingSvc
+                .Setup(s => s.RecordBatchOcrEventAsync(It.IsAny<K_OCR.Models.BatchOcrReportRequest>()))
+                .Returns(Task.CompletedTask);
+
+            var result = await testController.StartOcr(@"C:\invoices\file.pdf");
+
+            var json = Assert.IsType<JsonResult>(result);
+            var value = json.Value!;
+            var successProp = value.GetType().GetProperty("success");
+            Assert.NotNull(successProp);
+            Assert.True((bool)successProp.GetValue(value)!);
+
+            // Clean up contexts
+            foreach (var ctx in createdContexts)
+            {
+                ctx?.Dispose();
+            }
+        }
+        finally
+        {
+            // Cleanup - wait a bit to allow file locks to be released
+            System.Threading.Thread.Sleep(100);
+            if (File.Exists(dbPath))
+            {
+                try
+                {
+                    File.Delete(dbPath);
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
+            }
+        }
     }
 
     [Fact]

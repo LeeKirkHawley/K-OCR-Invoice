@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using OCRQueue.Abstractions;
 
 namespace KOCRAsp.Tests.Controllers;
 
@@ -15,6 +16,8 @@ public class AdminControllerTests
     private readonly Mock<ISuperAdminService> _mockSuperAdminSvc;
     private readonly Mock<ISuperAdminDataService> _mockDataSvc;
     private readonly Mock<ILogger<AdminController>> _mockLogger;
+    private readonly Mock<IOcrJobQueue> _mockOcrJobQueue;
+    private readonly Mock<IOcrQueueProcessor> _mockOcrQueueProcessor;
     private readonly IConfiguration _configuration;
     private readonly AdminController _controller;
 
@@ -23,6 +26,8 @@ public class AdminControllerTests
         _mockSuperAdminSvc = new Mock<ISuperAdminService>();
         _mockDataSvc = new Mock<ISuperAdminDataService>();
         _mockLogger = new Mock<ILogger<AdminController>>();
+        _mockOcrJobQueue = new Mock<IOcrJobQueue>();
+        _mockOcrQueueProcessor = new Mock<IOcrQueueProcessor>();
 
         _configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -35,6 +40,8 @@ public class AdminControllerTests
             _mockSuperAdminSvc.Object,
             _mockDataSvc.Object,
             _configuration,
+            _mockOcrJobQueue.Object,
+            _mockOcrQueueProcessor.Object,
             _mockLogger.Object);
 
         _controller.ControllerContext = ControllerTestHelper.CreateControllerContext(role: "SuperAdmin");
