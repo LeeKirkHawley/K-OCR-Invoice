@@ -302,7 +302,8 @@ public class HomeController : Controller
             return Json(new
             {
                 success           = true,
-                allSkipped = ocrResult.AllSkipped
+                allSkipped        = ocrResult.AllSkipped,
+                queuedFilePaths   = ocrResult.QueuedFilePaths,
             });
         }
         catch (Exception ex)

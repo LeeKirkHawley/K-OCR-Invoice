@@ -483,7 +483,8 @@ public class BatchService : IBatchService, IAsyncDisposable
                 await _stripeUsage.ReportUsageAsync(customerId, estimatedPages, idempotencyKey);
             }
 
-            return TriggerOcrResult.Ok();
+            var enqueuedPaths = jobItems.Select(j => j.Item1).ToList();
+            return TriggerOcrResult.Ok(enqueuedPaths);
         }
         finally
         {

@@ -269,7 +269,7 @@ using (var scope = app.Services.CreateScope())
 // ── HTTP pipeline ────────────────────────────────────────────────────────────
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/error");
+    app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/error/{0}");

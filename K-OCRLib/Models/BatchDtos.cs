@@ -83,6 +83,10 @@ public class TriggerOcrResult
     /// <summary>True when every file in the batch was already processed and nothing was OCR'd.</summary>
     public bool AllSkipped { get; init; }
 
-    public static TriggerOcrResult Ok() => new();
+    /// <summary>File paths that were successfully enqueued for OCR in this run.</summary>
+    public IReadOnlyList<string> QueuedFilePaths { get; init; } = [];
+
+    public static TriggerOcrResult Ok(IReadOnlyList<string>? queuedFilePaths = null) =>
+        new() { QueuedFilePaths = queuedFilePaths ?? [] };
     public static TriggerOcrResult Skipped() => new() { AllSkipped = true };
 }

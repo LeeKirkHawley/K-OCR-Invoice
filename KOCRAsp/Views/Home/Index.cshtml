@@ -67,6 +67,7 @@
                     <text>
                     <div class="file-list-item@overLimitClass" data-filepath="@file.FilePath"@Html.Raw(overLimitAttr)>
                         <span class="file-status-dot @file.ProcessedDotClass"  title="@file.ProcessedDotTitle"></span>
+                        <span class="file-queue-indicator" style="display:none;" title="Queued for OCR">Q</span>
                         <span class="file-status-dot @file.ValidationDotClass" title="@file.ValidationDotTitle"></span>
                         <span class="text-truncate" style="flex:1;min-width:0;" title="@file.FileName">@file.FileName</span>
                     </div>
@@ -216,6 +217,33 @@
     let _pageSize         = @Model.PageSize;
     let _refreshAbort     = null;
 
+    const _queuedFilePathKeys = new Set();
+
+    function normalizeFilePathKey(filePath) {
+        return String(filePath ?? '').replaceAll('/', '\\').toLowerCase();
+    }
+
+    function markFileQueued(filePath) {
+        const key = normalizeFilePathKey(filePath);
+        if (key) _queuedFilePathKeys.add(key);
+    }
+
+    function clearFileQueued(filePath) {
+        const key = normalizeFilePathKey(filePath);
+        if (key) _queuedFilePathKeys.delete(key);
+    }
+
+    function isFileQueued(filePath) {
+        return _queuedFilePathKeys.has(normalizeFilePathKey(filePath));
+    }
+
+    function findFileListItem(filePath) {
+        const key = normalizeFilePathKey(filePath);
+        if (!key) return null;
+        return Array.from(document.querySelectorAll('.file-list-item'))
+            .find(item => normalizeFilePathKey(item.dataset.filepath) === key) ?? null;
+    }
+
     const _orgId             = '@Html.Raw(Model.OrgId)';
     const _currentBatchId    = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
     const _maxPagesPerInvoice = @Model.MaxPagesPerInvoice;
@@ -309,6 +337,8 @@
                     hideOcrOverlay();
                     showToast('All files already processed — nothing to OCR.');
                 } else {
+                    (result.queuedFilePaths ?? []).forEach(markFileQueued);
+                    markQueueIndicators();
                     showToast('Batch OCR started.');
                     startOcrPolling();
                 }
@@ -437,6 +467,10 @@
     }
 
     async function runOcrOnFile(filePath, btn) {
+        if (isFileQueued(filePath)) {
+            showToast('This invoice is already queued for OCR.', 'warning');
+            return;
+        }
         setButtonLoading(btn, true);
         showOcrOverlay();
         try {
@@ -1064,6 +1098,8 @@
             html += `<div class="file-list-item${active}${overLimitCls}" data-filepath="${escapeHtml(file.filePath)}"${overLimitAttr}>
                 <span class="file-status-dot ${escapeHtml(file.processedDotClass ?? '')}"
                       title="${escapeHtml(file.processedDotTitle ?? '')}"></span>
+                <span class="file-queue-indicator" style="${isFileQueued(file.filePath) ? '' : 'display:none;'}"
+                      title="Queued for OCR">Q</span>
                 <span class="file-status-dot ${escapeHtml(file.validationDotClass ?? '')}"
                       title="${escapeHtml(file.validationDotTitle ?? '')}"></span>
                 <span class="text-truncate" style="flex:1;min-width:0;"
@@ -1134,7 +1170,7 @@
             if (!resp.ok) return;
             const data = await resp.json();
             if (data.error || !data.filePath) return;
-            const item = document.querySelector(`.file-list-item[data-filepath="${CSS.escape(data.filePath)}"]`);
+            const item = findFileListItem(data.filePath);
             if (!item) return;
             const dots = item.querySelectorAll('.file-status-dot');
             if (dots.length >= 1) {
@@ -1145,7 +1181,20 @@
                 dots[1].className = `file-status-dot ${data.validationDotClass ?? ''}`.trim();
                 dots[1].title = data.validationDotTitle ?? '';
             }
+            // Remove Q indicator now that OCR is done
+            clearFileQueued(data.filePath);
+            const qEl = item.querySelector('.file-queue-indicator');
+            if (qEl) qEl.style.display = 'none';
         } catch { /* ignore */ }
+    }
+
+    function markQueueIndicators() {
+        document.querySelectorAll('.file-list-item').forEach(item => {
+            const fp  = item.dataset.filepath;
+            const qEl = item.querySelector('.file-queue-indicator');
+            if (!qEl) return;
+            qEl.style.display = isFileQueued(fp) ? '' : 'none';
+        });
     }
 
     function initOcrSignalR() {

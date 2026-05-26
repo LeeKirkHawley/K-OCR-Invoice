@@ -45,6 +45,14 @@
     background-color: #6c757d;
 }
 
+.file-queue-indicator {
+    color: #dc3545;
+    font-weight: 700;
+    font-size: 9px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
 /* ── 3-pane shell ─────────────────────────────────────────────── */
 .kocr-shell {
     display: grid;
