@@ -14,9 +14,6 @@ using OCRQueue.Services;
 using Serilog;
 
 
-// TEMPORARY STARTUP DIAGNOSTIC — remove after debugging
-try { File.WriteAllText("startup-diag.txt", $"Managed code started at {DateTime.UtcNow:O}"); } catch { }
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Load the per-user settings file from %AppData%\K-OCR so IConfiguration always
@@ -157,6 +154,9 @@ builder.Services.AddScoped<ISuperAdminDataService, SuperAdminDataService>();
 builder.Services.AddScoped<IOrganizationAdminService, OrganizationAdminService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IBatchNotificationService, BatchNotificationService>();
+builder.Services.AddScoped<IHomePageService, HomePageService>();
+builder.Services.AddScoped<IHomeOcrService, HomeOcrService>();
+builder.Services.AddScoped<IHomeExportService, HomeExportService>();
 builder.Services.AddScoped<IBatchCleanupService>(sp =>
     new BatchCleanupService(
         sp.GetRequiredService<IPathService>(),

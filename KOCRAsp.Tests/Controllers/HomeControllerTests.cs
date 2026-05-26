@@ -1,14 +1,11 @@
-using K_OCR.Configuration;
-using K_OCR.Data;
 using K_OCR.Models;
+using K_OCR.Data;
 using K_OCR.Services;
 using KOCRAsp.Controllers;
 using KOCRAsp.Models;
 using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -16,70 +13,34 @@ namespace KOCRAsp.Tests.Controllers;
 
 public class HomeControllerTests
 {
-    private readonly Mock<IInvoiceProcessingService> _mockOcrSvc;
-    private readonly Mock<IBatchService> _mockBatchSvc;
-    private readonly Mock<IFileService> _mockFileSvc;
-    private readonly Mock<IDocumentExportService> _mockExportSvc;
-    private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
+    private readonly Mock<IHomePageService> _mockHomePageSvc;
+    private readonly Mock<IHomeOcrService> _mockHomeOcrSvc;
+    private readonly Mock<IHomeExportService> _mockHomeExportSvc;
     private readonly Mock<ITenantContext> _mockTenantContext;
-    private readonly Mock<IInvoiceActionService> _mockInvoiceActionSvc;
-    private readonly Mock<IConfigurationService> _mockConfigSvc;
-    private readonly Mock<IBatchActionService> _mockBatchActionSvc;
-    private readonly Mock<IBatchNotificationService> _mockBatchNotificationSvc;
-    private readonly Mock<IReportingService> _mockReportingSvc;
-    private readonly Mock<IStripeUsageService> _mockStripeUsage;
-    private readonly Mock<ILogger<HomeController>> _mockLogger;
-    private readonly DatabaseService _dbSvc;
-    private readonly IBatchChangeNotifier _batchNotifier;
     private readonly HomeController _controller;
 
     private const string UserId = "user-id-123";
-    private const string OrgId  = "org-id-123";
+    private const string OrgId = "org-id-123";
     private const string OrgName = "TestOrg";
 
     public HomeControllerTests()
     {
-        _mockOcrSvc            = new Mock<IInvoiceProcessingService>();
-        _mockBatchSvc          = new Mock<IBatchService>();
-        _mockFileSvc           = new Mock<IFileService>();
-        _mockExportSvc         = new Mock<IDocumentExportService>();
-        _mockOrgConfigSvc      = new Mock<IOrgConfigService>();
-        _mockTenantContext     = new Mock<ITenantContext>();
-        _mockInvoiceActionSvc  = new Mock<IInvoiceActionService>();
-        _mockConfigSvc         = new Mock<IConfigurationService>();
-        _mockBatchActionSvc    = new Mock<IBatchActionService>();
-        _mockBatchNotificationSvc = new Mock<IBatchNotificationService>();
-        _mockReportingSvc      = new Mock<IReportingService>();
-        _mockStripeUsage       = new Mock<IStripeUsageService>();
-        _mockLogger            = new Mock<ILogger<HomeController>>();
-        _batchNotifier         = new BatchChangeNotifier();
+        _mockHomePageSvc = new Mock<IHomePageService>();
+        _mockHomeOcrSvc = new Mock<IHomeOcrService>();
+        _mockHomeExportSvc = new Mock<IHomeExportService>();
+        _mockTenantContext = new Mock<ITenantContext>();
 
+        _mockTenantContext.Setup(t => t.OrganizationId).Returns(OrgId);
         _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
-        _mockOrgConfigSvc.Setup(s => s.LoadAsync(OrgName))
-                         .ReturnsAsync(new OrgConfig { MinConfidenceThreshold = 0.8 });
-        _mockConfigSvc.Setup(s => s.LoadSettingsAsync(null))
-                      .ReturnsAsync(new AppSettings());
-
-        // DatabaseService is a concrete class; construct it with a mock factory.
-        var mockContextFactory = new Mock<IDbContextFactory<KOCRDbContext>>();
-        _dbSvc = new DatabaseService(mockContextFactory.Object, Mock.Of<ILogger<DatabaseService>>());
+        _mockTenantContext.Setup(t => t.IsGuestOrganization).Returns(false);
+        _mockTenantContext.Setup(t => t.StripeSubscriptionStatus).Returns("active");
 
         _controller = new HomeController(
-            _mockOcrSvc.Object,
-            _mockBatchSvc.Object,
-            _mockFileSvc.Object,
-            _mockExportSvc.Object,
-            _dbSvc,
-            _mockOrgConfigSvc.Object,
+            _mockHomePageSvc.Object,
+            _mockHomeOcrSvc.Object,
+            _mockHomeExportSvc.Object,
             _mockTenantContext.Object,
-            _mockInvoiceActionSvc.Object,
-            _mockConfigSvc.Object,
-            _mockBatchActionSvc.Object,
-            _batchNotifier,
-            _mockBatchNotificationSvc.Object,
-            _mockReportingSvc.Object,
-            _mockStripeUsage.Object,
-            _mockLogger.Object);
+            Mock.Of<ILogger<HomeController>>());
     }
 
     private void SetControllerContext(string? currentBatchId = null)
@@ -96,12 +57,11 @@ public class HomeControllerTests
         {
             new BatchSummary { BatchId = 1, Name = "Batch A", OrganizationId = OrgId }
         };
-        _mockBatchSvc
+        _mockHomePageSvc
             .Setup(s => s.GetBatchesForOrgAsync(OrgId))
             .ReturnsAsync(batches);
 
-        // No current batch in session → BuildFileListAsync not called
-        SetControllerContext(currentBatchId: null);
+        SetControllerContext();
 
         var result = await _controller.Index();
 
@@ -114,8 +74,7 @@ public class HomeControllerTests
     [Fact]
     public async Task GetFiles_ReturnsPaginatedShape()
     {
-        // No current batch in session → returns empty paginated result
-        SetControllerContext(currentBatchId: null);
+        SetControllerContext();
 
         var result = await _controller.GetFiles();
 
@@ -135,113 +94,22 @@ public class HomeControllerTests
     {
         SetControllerContext();
 
-        // Mock tenant context to mark org as guest (bypasses subscription check)
-        _mockTenantContext.Setup(t => t.IsGuestOrganization).Returns(true);
-        _mockTenantContext.Setup(t => t.StripeSubscriptionStatus).Returns("active");
+        var invoice = new InvoiceDto { VendorName = "Acme Corp", PageCount = 5 };
+        _mockHomeOcrSvc
+            .Setup(s => s.StartOcrAsync(
+                @"C:\invoices\file.pdf",
+                It.IsAny<HomeTenantInfo>(),
+                UserId,
+                It.IsAny<BatchSummary?>()))
+            .ReturnsAsync(new HomeSingleOcrResult(true, Invoice: invoice));
 
-        // Mock config service to return max pages
-        _mockConfigSvc
-            .Setup(s => s.GetMaxPagesPerInvoice(true))
-            .Returns(100);
+        var result = await _controller.StartOcr(@"C:\invoices\file.pdf");
 
-        // Set up DatabaseService with a temporary SQLite database file
-        var dbPath = Path.Combine(Path.GetTempPath(), $"test-{Guid.NewGuid()}.db");
-        var options = new DbContextOptionsBuilder<KOCRDbContext>()
-            .UseSqlite($"Data Source={dbPath}")
-            .Options;
-
-        // Create and seed the database schema
-        using (var context = new KOCRDbContext(options))
-        {
-            context.Database.EnsureCreated();
-        }
-
-        try
-        {
-            var mockContextFactory = new Mock<IDbContextFactory<KOCRDbContext>>();
-            var createdContexts = new List<KOCRDbContext>();
-            mockContextFactory
-                .Setup(f => f.CreateDbContext())
-                .Returns(() =>
-                {
-                    var ctx = new KOCRDbContext(options);
-                    createdContexts.Add(ctx);
-                    return ctx;
-                });
-
-            var dbSvc = new DatabaseService(mockContextFactory.Object, Mock.Of<ILogger<DatabaseService>>());
-            var testController = new HomeController(
-                _mockOcrSvc.Object,
-                _mockBatchSvc.Object,
-                _mockFileSvc.Object,
-                _mockExportSvc.Object,
-                dbSvc,
-                _mockOrgConfigSvc.Object,
-                _mockTenantContext.Object,
-                _mockInvoiceActionSvc.Object,
-                _mockConfigSvc.Object,
-                _mockBatchActionSvc.Object,
-                _batchNotifier,
-                _mockBatchNotificationSvc.Object,
-                _mockReportingSvc.Object,
-                _mockStripeUsage.Object,
-                _mockLogger.Object);
-            testController.ControllerContext = _controller.ControllerContext;
-
-            var processingResult = new ProcessingResult
-            {
-                Context = new K_OCR.Models.PipelineContext(),
-                Json = "{}"
-            };
-            _mockOcrSvc
-                .Setup(s => s.ProcessFileAsync(@"C:\invoices\file.pdf", @"C:\Artifacts", 0.8))
-                .ReturnsAsync(processingResult);
-
-            var invoice = new InvoiceDto { VendorName = "Acme Corp", PageCount = 5 };
-            _mockOcrSvc
-                .Setup(s => s.LoadInvoiceAsync(@"C:\invoices\file.pdf"))
-                .ReturnsAsync(invoice);
-
-            // Mock invoice action service to record the OCR action
-            _mockInvoiceActionSvc
-                .Setup(s => s.LogAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
-                .Returns(Task.CompletedTask);
-
-            // Mock reporting service
-            _mockReportingSvc
-                .Setup(s => s.RecordBatchOcrEventAsync(It.IsAny<K_OCR.Models.BatchOcrReportRequest>()))
-                .Returns(Task.CompletedTask);
-
-            var result = await testController.StartOcr(@"C:\invoices\file.pdf");
-
-            var json = Assert.IsType<JsonResult>(result);
-            var value = json.Value!;
-            var successProp = value.GetType().GetProperty("success");
-            Assert.NotNull(successProp);
-            Assert.True((bool)successProp.GetValue(value)!);
-
-            // Clean up contexts
-            foreach (var ctx in createdContexts)
-            {
-                ctx?.Dispose();
-            }
-        }
-        finally
-        {
-            // Cleanup - wait a bit to allow file locks to be released
-            System.Threading.Thread.Sleep(100);
-            if (File.Exists(dbPath))
-            {
-                try
-                {
-                    File.Delete(dbPath);
-                }
-                catch
-                {
-                    // Ignore cleanup errors
-                }
-            }
-        }
+        var json = Assert.IsType<JsonResult>(result);
+        var value = json.Value!;
+        var successProp = value.GetType().GetProperty("success");
+        Assert.NotNull(successProp);
+        Assert.True((bool)successProp.GetValue(value)!);
     }
 
     [Fact]
@@ -250,16 +118,12 @@ public class HomeControllerTests
         SetControllerContext();
 
         var invoice = new InvoiceDto { VendorName = "Acme Corp" };
-        _mockOcrSvc
+        _mockHomePageSvc
             .Setup(s => s.LoadInvoiceAsync(@"C:\invoices\file.pdf"))
             .ReturnsAsync(invoice);
-
-        // Callback writes a minimal placeholder DOCX so File.ReadAllBytesAsync succeeds
-        _mockExportSvc
-            .Setup(s => s.ExportToDocxAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .Callback<string, string>((_, outputPath) =>
-                System.IO.File.WriteAllBytes(outputPath, new byte[] { 0x50, 0x4B, 0x03, 0x04 }))
-            .Returns(Task.CompletedTask);
+        _mockHomeExportSvc
+            .Setup(s => s.BuildDocxAsync(@"C:\invoices\file.pdf", invoice))
+            .ReturnsAsync(new byte[] { 0x50, 0x4B, 0x03, 0x04 });
 
         var result = await _controller.ExportDocx(@"C:\invoices\file.pdf");
 

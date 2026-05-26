@@ -139,7 +139,8 @@
 }
 .file-list-item:hover   { background: #e9ecef; }
 .file-list-item.active  { background: #cfe2ff; }
-.file-list-item--overlimit { opacity: 0.45; cursor: default; }
+.file-list-item:focus   { outline: 2px solid #0d6efd; outline-offset: -2px; }
+.file-list-item--overlimit { opacity: 0.45; cursor: pointer; }
 .file-list-item--overlimit:hover { background: transparent; }
 
 /* ── Document viewer ──────────────────────────────────────────── */

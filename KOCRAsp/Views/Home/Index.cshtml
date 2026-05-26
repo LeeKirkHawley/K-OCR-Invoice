@@ -65,7 +65,12 @@
                     var overLimitClass = file.ExceedsPageLimit ? " file-list-item--overlimit" : "";
                     var overLimitAttr  = file.ExceedsPageLimit ? $" data-exceeds-limit=\"true\" title=\"This invoice has {file.TotalPages} pages and exceeds the {Model.MaxPagesPerInvoice}-page limit. It will not be OCR'd.\"" : "";
                     <text>
-                    <div class="file-list-item@overLimitClass" data-filepath="@file.FilePath"@Html.Raw(overLimitAttr)>
+                    <div class="file-list-item@overLimitClass"
+                         data-filepath="@file.FilePath"@Html.Raw(overLimitAttr)
+                         role="button"
+                         tabindex="0"
+                         onclick="handleFileListItemClick(this)"
+                         onkeydown="handleFileListItemKeydown(event, this)">
                         <span class="file-status-dot @file.ProcessedDotClass"  title="@file.ProcessedDotTitle"></span>
                         <span class="file-queue-indicator" style="display:none;" title="Queued for OCR">Q</span>
                         <span class="file-status-dot @file.ValidationDotClass" title="@file.ValidationDotTitle"></span>
@@ -353,14 +358,23 @@
     }
 
     // ── File click ──────────────────────────────────────────────
-    document.getElementById('fileListContainer').addEventListener('click', function (e) {
-        const item = e.target.closest('.file-list-item');
+    function activateFileListItem(item) {
         if (!item) return;
         document.querySelectorAll('.file-list-item').forEach(el => el.classList.remove('active'));
         item.classList.add('active');
         const exceedsLimit = item.dataset.exceedsLimit === 'true';
         selectFile(item.dataset.filepath, exceedsLimit);
-    });
+    }
+
+    window.handleFileListItemClick = function (item) {
+        activateFileListItem(item);
+    };
+
+    window.handleFileListItemKeydown = function (event, item) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        activateFileListItem(item);
+    };
 
     async function selectFile(filePath, exceedsLimit) {
         _currentFilePath  = filePath;
@@ -1095,7 +1109,12 @@
             const overLimitAttr = overLimit
                 ? ` data-exceeds-limit="true" title="This invoice has ${file.totalPages} pages and exceeds the ${_maxPagesPerInvoice}-page limit. It will not be OCR'd."`
                 : '';
-            html += `<div class="file-list-item${active}${overLimitCls}" data-filepath="${escapeHtml(file.filePath)}"${overLimitAttr}>
+            html += `<div class="file-list-item${active}${overLimitCls}"
+                          data-filepath="${escapeHtml(file.filePath)}"${overLimitAttr}
+                          role="button"
+                          tabindex="0"
+                          onclick="handleFileListItemClick(this)"
+                          onkeydown="handleFileListItemKeydown(event, this)">
                 <span class="file-status-dot ${escapeHtml(file.processedDotClass ?? '')}"
                       title="${escapeHtml(file.processedDotTitle ?? '')}"></span>
                 <span class="file-queue-indicator" style="${isFileQueued(file.filePath) ? '' : 'display:none;'}"

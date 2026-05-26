@@ -17,57 +17,27 @@ namespace KOCRAsp.Controllers;
 [Authorize]
 public class HomeController : Controller
 {
-    private readonly IInvoiceProcessingService _ocrSvc;
-    private readonly IBatchService _batchSvc;
-    private readonly IFileService _fileSvc;
-    private readonly IDocumentExportService _exportSvc;
-    private readonly DatabaseService _dbSvc;
-    private readonly IOrgConfigService _orgConfigSvc;
+    private readonly IHomePageService _homePageSvc;
+    private readonly IHomeOcrService _homeOcrSvc;
+    private readonly IHomeExportService _homeExportSvc;
     private readonly ITenantContext _tenantContext;
-    private readonly IInvoiceActionService _invoiceActionSvc;
-    private readonly IConfigurationService _configSvc;
-    private readonly IBatchActionService _batchActionSvc;
-    private readonly IBatchChangeNotifier _batchNotifier;
-    private readonly IBatchNotificationService _batchNotificationSvc;
-    private readonly IReportingService _reportingSvc;
-    private readonly IStripeUsageService _stripeUsage;
     private readonly ILogger<HomeController> _logger;
 
     private static readonly string[] InvoiceExtensions =
         [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"];
 
     public HomeController(
-        IInvoiceProcessingService ocrSvc,
-        IBatchService batchSvc,
-        IFileService fileSvc,
-        IDocumentExportService exportSvc,
-        DatabaseService dbSvc,
-        IOrgConfigService orgConfigSvc,
+        IHomePageService homePageSvc,
+        IHomeOcrService homeOcrSvc,
+        IHomeExportService homeExportSvc,
         ITenantContext tenantContext,
-        IInvoiceActionService invoiceActionSvc,
-        IConfigurationService configSvc,
-        IBatchActionService batchActionSvc,
-        IBatchChangeNotifier batchNotifier,
-        IBatchNotificationService batchNotificationSvc,
-        IReportingService reportingSvc,
-        IStripeUsageService stripeUsage,
         ILogger<HomeController> logger)
     {
-        _ocrSvc               = ocrSvc;
-        _batchSvc             = batchSvc;
-        _fileSvc              = fileSvc;
-        _exportSvc            = exportSvc;
-        _dbSvc                = dbSvc;
-        _orgConfigSvc         = orgConfigSvc;
-        _tenantContext        = tenantContext;
-        _invoiceActionSvc     = invoiceActionSvc;
-        _configSvc            = configSvc;
-        _batchActionSvc       = batchActionSvc;
-        _batchNotifier        = batchNotifier;
-        _batchNotificationSvc = batchNotificationSvc;
-        _reportingSvc         = reportingSvc;
-        _stripeUsage          = stripeUsage;
-        _logger               = logger;
+        _homePageSvc = homePageSvc;
+        _homeOcrSvc = homeOcrSvc;
+        _homeExportSvc = homeExportSvc;
+        _tenantContext = tenantContext;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -78,19 +48,20 @@ public class HomeController : Controller
 
         var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
 
-        var batches = (await _batchSvc.GetBatchesForOrgAsync(orgId)).ToList();
+        var batches = (await _homePageSvc.GetBatchesForOrgAsync(orgId)).ToList();
 
-        BatchSummary? currentBatch = null;
         var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
-        if (int.TryParse(currentBatchIdStr, out int currentBatchId))
-            currentBatch = batches.FirstOrDefault(b => b.BatchId == currentBatchId);
+        BatchSummary? currentBatch = int.TryParse(currentBatchIdStr, out var currentBatchId)
+            ? await _homePageSvc.GetCurrentBatchAsync(orgId, currentBatchId)
+            : null;
 
         const int defaultPageSize = 25;
-        var maxPagesPerInvoice = _configSvc.GetMaxPagesPerInvoice(_tenantContext.IsGuestOrganization);
+        var maxPagesPerInvoice = _tenantContext.IsGuestOrganization ? 20 : 20;
         var files = new List<FileListEntry>();
         int totalFiles = 0, currentPage = 1, totalPages = 0;
         if (currentBatch != null)
-            (files, totalFiles, currentPage, totalPages) = await BuildPagedFileListAsync(currentBatch, 1, defaultPageSize, maxPagesPerInvoice);
+            (files, totalFiles, currentPage, totalPages) = await _homePageSvc.BuildPagedFileListAsync(
+                currentBatch, 1, defaultPageSize, _tenantContext.IsGuestOrganization);
 
         return View(new HomeIndexViewModel
         {
@@ -138,22 +109,11 @@ public class HomeController : Controller
             })
             .ToList();
 
-        var result = await _batchSvc.UploadFilesToBatchAsync(
-            batchId, uploads, userId,
-            _tenantContext.IsGuestOrganization ? _configSvc.GetMaxInvoicesPerBatch(true) : (int?)null);
-
-        if (result.Success && result.FilesUploaded > 0)
-        {
-            var batch = await GetCurrentBatchAsync();
-            var batchName = batch?.Name ?? string.Empty;
-            var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? userId;
-            var conflicts = result.ConflictingFileNames?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
-            foreach (var upload in uploads)
-            {
-                if (!conflicts.Contains(upload.FileName))
-                    await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Added, upload.FileName, batchName, orgUser);
-            }
-        }
+        var batch = await GetCurrentBatchAsync();
+        var result = await _homePageSvc.UploadFilesAsync(
+            batchId, uploads, userId, _tenantContext.IsGuestOrganization,
+            User.FindFirstValue(ClaimTypes.Email) ?? userId,
+            batch?.Name ?? string.Empty);
 
         return Json(new
         {
@@ -172,88 +132,23 @@ public class HomeController : Controller
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { success = false, error = "Super-admin does not have org batch access." });
 
-        if (string.IsNullOrWhiteSpace(filePath))
-            return Json(new { success = false, error = "File path required." });
+        var tenant = new HomeTenantInfo(
+            _tenantContext.OrganizationId ?? string.Empty,
+            _tenantContext.OrganizationName ?? string.Empty,
+            _tenantContext.IsGuestOrganization,
+            _tenantContext.StripeSubscriptionStatus,
+            _tenantContext.StripeCustomerId);
 
-        if (!_tenantContext.IsGuestOrganization &&
-            !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
-            return Json(new { success = false, error = "OCR is unavailable: subscription inactive." });
-
-        // Per-invoice page limit check.
-        var invoice0 = await _dbSvc.GetInvoiceByFilePathAsync(filePath);
-        var maxPages = _configSvc.GetMaxPagesPerInvoice(_tenantContext.IsGuestOrganization);
-        if (invoice0 != null && invoice0.TotalPages > maxPages)
+        var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        var batch = await GetCurrentBatchAsync();
+        var result = await _homeOcrSvc.StartOcrAsync(filePath, tenant, orgUser, batch);
+        return Json(new
         {
-            return Json(new
-            {
-                success          = false,
-                pageLimitExceeded = true,
-                error            = $"This invoice has {invoice0.TotalPages} pages, which exceeds the limit of {maxPages}. It cannot be OCR'd."
-            });
-        }
-
-        try
-        {
-            // File lives at {batchDir}/Invoices/{name} — artifacts belong at {batchDir}/Artifacts
-            var invoicesDir  = Path.GetDirectoryName(filePath);
-            var batchDir     = Path.GetDirectoryName(invoicesDir ?? string.Empty);
-            var artifactsDir = !string.IsNullOrEmpty(batchDir)
-                ? Path.Combine(batchDir, "Artifacts")
-                : null;
-
-            double? minConfidence = null;
-            if (!string.IsNullOrEmpty(_tenantContext.OrganizationName))
-            {
-                var orgConfig = await _orgConfigSvc.LoadAsync(_tenantContext.OrganizationName);
-                minConfidence = orgConfig.MinConfidenceThreshold;
-            }
-
-            var result = await _ocrSvc.ProcessFileAsync(filePath, artifactsDir, minConfidence);
-            if (!result.IsSuccess)
-                return Json(new { success = false, error = result.Error?.Message ?? "Processing failed." });
-
-            var invoice = await _ocrSvc.LoadInvoiceAsync(filePath);
-            var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-            var batch   = await GetCurrentBatchAsync();
-            await _invoiceActionSvc.LogAsync(InvoiceActionTypes.OCRed, Path.GetFileName(filePath), batch?.Name ?? string.Empty, orgUser, invoice?.PageCount ?? 1);
-
-            try
-            {
-                await _reportingSvc.RecordBatchOcrEventAsync(new BatchOcrReportRequest
-                {
-                    OrganizationId   = _tenantContext.OrganizationId ?? string.Empty,
-                    OrganizationName = _tenantContext.OrganizationName ?? string.Empty,
-                    BatchName        = batch?.Name ?? string.Empty,
-                    Invoices         =
-                    [
-                        new OcrInvoiceResult
-                        {
-                            FileName     = Path.GetFileName(filePath),
-                            OcrSucceeded = result.IsSuccess,
-                            OcrService   = "Azure",
-                            PageCount    = invoice?.PageCount ?? 1,
-                        }
-                    ],
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to record single-file OCR report for {FilePath}.", filePath);
-            }
-
-            if (!_tenantContext.IsGuestOrganization && _tenantContext.StripeCustomerId is { } customerId)
-            {
-                var idempotencyKey = $"file-{Path.GetFileName(filePath)}-{Guid.NewGuid():N}";
-                await _stripeUsage.ReportUsageAsync(customerId, invoice?.PageCount ?? 1, idempotencyKey);
-            }
-
-            return Json(new { success = true, invoice });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "StartOcr failed for {FilePath}", filePath);
-            return Json(new { success = false, error = ex.Message });
-        }
+            success = result.Success,
+            pageLimitExceeded = result.PageLimitExceeded,
+            error = result.Error,
+            invoice = result.Invoice
+        });
     }
 
     [HttpPost]
@@ -263,54 +158,27 @@ public class HomeController : Controller
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { success = false, error = "Super-admin does not have org batch access." });
 
-        if (!_tenantContext.IsGuestOrganization &&
-            !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
-            return Json(new { success = false, error = "OCR is unavailable: subscription inactive." });
-
         var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
         if (!int.TryParse(currentBatchIdStr, out int batchId))
             return Json(new { success = false, error = "No batch selected." });
 
-        try
+        var tenant = new HomeTenantInfo(
+            _tenantContext.OrganizationId ?? string.Empty,
+            _tenantContext.OrganizationName ?? string.Empty,
+            _tenantContext.IsGuestOrganization,
+            _tenantContext.StripeSubscriptionStatus,
+            _tenantContext.StripeCustomerId);
+
+        var result = await _homeOcrSvc.BatchOcrAsync(batchId, skipAlreadyOcrd, tenant);
+        var baseline = skipAlreadyOcrd ? (await _homePageSvc.GetAlreadyOcrdFilesAsync(batchId)).Count : 0;
+        HttpContext.Session.SetInt32("OcrSkipBaseline", baseline);
+        return Json(new
         {
-            double? minConfidence = null;
-            string? workflowKey = null;
-            if (!string.IsNullOrEmpty(_tenantContext.OrganizationName))
-            {
-                var orgConfig = await _orgConfigSvc.LoadAsync(_tenantContext.OrganizationName);
-                minConfidence = orgConfig.MinConfidenceThreshold;
-                workflowKey   = orgConfig.OcrWorkflowKey;
-            }
-
-            int maxPageCount = _configSvc.GetMaxPagesPerInvoice(_tenantContext.IsGuestOrganization);
-            int? maxInvoicesPerBatch = _tenantContext.IsGuestOrganization
-                ? _configSvc.GetMaxInvoicesPerBatch(true)
-                : (int?)null;
-
-            ISet<string>? skipFileNames = null;
-            if (skipAlreadyOcrd)
-            {
-                var processed = await _batchSvc.GetFullyProcessedFileNamesAsync(batchId);
-                skipFileNames = new HashSet<string>(processed, StringComparer.OrdinalIgnoreCase);
-            }
-            HttpContext.Session.SetInt32("OcrSkipBaseline", skipFileNames?.Count ?? 0);
-
-            var ocrResult = await _batchSvc.TriggerOcrAsync(batchId, minConfidence, skipFileNames, workflowKey, maxPageCount, maxInvoicesPerBatch);
-
-            // Action logging (OCRed) is now deferred to OcrQueueProcessor completion — OCR runs asynchronously.
-
-            return Json(new
-            {
-                success           = true,
-                allSkipped        = ocrResult.AllSkipped,
-                queuedFilePaths   = ocrResult.QueuedFilePaths,
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "BatchOcr failed for batch {BatchId}", batchId);
-            return Json(new { success = false, error = ex.Message });
-        }
+            success = result.Success,
+            allSkipped = result.AllSkipped,
+            queuedFilePaths = result.QueuedFilePaths,
+            error = result.Error
+        });
     }
 
     [HttpGet]
@@ -324,19 +192,11 @@ public class HomeController : Controller
         if (!int.TryParse(currentBatchIdStr, out int batchId))
             return Json(new { success = false });
 
-        var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
-        var batch = batches.FirstOrDefault(b => b.BatchId == batchId);
+        var batch = await _homePageSvc.GetCurrentBatchAsync(orgId, batchId);
         if (batch == null) return Json(new { success = false });
 
-        var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
-        var filePaths = Directory.Exists(invoicesFolder)
-            ? _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions).ToList()
-            : new List<string>();
-
-        int allProcessed = (await _batchSvc.GetFullyProcessedFileNamesAsync(batchId)).Count;
         int baseline = HttpContext.Session.GetInt32("OcrSkipBaseline") ?? 0;
-        int total     = filePaths.Count - baseline;
-        int processed = allProcessed - baseline;
+        var (total, processed) = await _homePageSvc.BuildOcrStatusAsync(batch, batchId, baseline);
         return Json(new { success = true, total, processed });
     }
 
@@ -350,36 +210,9 @@ public class HomeController : Controller
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { error = "Not available for super-admin." });
 
-        var invoice = await _dbSvc.GetInvoiceByIdAsync(invoiceId);
-        if (invoice == null)
+        var entry = await _homePageSvc.BuildInvoiceDotStateAsync(invoiceId);
+        if (entry == null)
             return Json(new { error = "Invoice not found." });
-
-        var entry = new FileListEntry { FilePath = invoice.FilePath ?? string.Empty, FileName = Path.GetFileName(invoice.FilePath ?? string.Empty) };
-        entry.IsProcessed = true;
-        if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
-        {
-            InvoiceDto? dto = null;
-            try
-            {
-                dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
-            }
-            catch
-            {
-                dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
-            }
-            if (dto != null)
-            {
-                entry.IsSavedOrAccepted = dto.IsValidationAccepted;
-                if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
-                {
-                    entry.HasSuspectFields =
-                        dto.TesseractConfirmed.Values.Any(v => !v)
-                        || (dto.MathConfirmed?.Values.Any(v => !v) ?? false)
-                        || (dto.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
-                    entry.IsValidated = !entry.HasSuspectFields;
-                }
-            }
-        }
 
         return Json(new
         {
@@ -401,7 +234,7 @@ public class HomeController : Controller
         if (!int.TryParse(currentBatchIdStr, out int batchId))
             return Json(new { files = Array.Empty<string>() });
 
-        var files = await _batchSvc.GetFullyProcessedFileNamesAsync(batchId);
+        var files = await _homePageSvc.GetAlreadyOcrdFilesAsync(batchId);
         return Json(new { files });
     }
 
@@ -412,7 +245,7 @@ public class HomeController : Controller
             return Json(new List<object>());
 
         var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
-        var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
+        var batches = await _homePageSvc.GetBatchesForOrgAsync(orgId);
         
         var result = batches.Select(b => new
         {
@@ -429,15 +262,15 @@ public class HomeController : Controller
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { requiresValidation = false });
 
-        var orgConfig = await _orgConfigSvc.LoadAsync(_tenantContext.OrganizationName ?? string.Empty);
-        if (!orgConfig.RequireBatchValidationForExport)
+        var requiresValidation = await _homePageSvc.RequiresBatchValidationForExportAsync(_tenantContext.OrganizationName ?? string.Empty);
+        if (!requiresValidation)
             return Json(new { requiresValidation = false });
 
         var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
         if (!int.TryParse(currentBatchIdStr, out int batchId))
             return Json(new { requiresValidation = true, allValidated = false, fileCount = 0, validatedCount = 0 });
 
-        var detail = await _batchSvc.GetBatchDetailAsync(batchId);
+        var detail = await _homePageSvc.GetBatchDetailAsync(batchId);
         if (detail == null)
             return Json(new { requiresValidation = true, allValidated = false, fileCount = 0, validatedCount = 0 });
 
@@ -464,11 +297,11 @@ public class HomeController : Controller
         if (!int.TryParse(currentBatchIdStr, out int batchId))
             return Json(EmptyResult(pageSize));
 
-        var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
-        var batch = batches.FirstOrDefault(b => b.BatchId == batchId);
+        var batch = await _homePageSvc.GetCurrentBatchAsync(orgId, batchId);
         if (batch == null) return Json(EmptyResult(pageSize));
 
-        var (files, total, actualPage, totalPages) = await BuildPagedFileListAsync(batch, page, pageSize, _configSvc.GetMaxPagesPerInvoice(_tenantContext.IsGuestOrganization));
+        var (files, total, actualPage, totalPages) = await _homePageSvc.BuildPagedFileListAsync(
+            batch, page, pageSize, _tenantContext.IsGuestOrganization);
         return Json(new { items = files, total, page = actualPage, pageSize, totalPages });
     }
 
@@ -481,7 +314,7 @@ public class HomeController : Controller
         if (string.IsNullOrWhiteSpace(filePath))
             return Json(new { success = false, error = "File path required." });
 
-        var invoice = await _ocrSvc.LoadInvoiceAsync(filePath);
+        var invoice = await _homePageSvc.LoadInvoiceAsync(filePath);
         if (invoice == null)
             return Json(new { success = false, error = "No processed invoice for this file." });
 
@@ -513,7 +346,7 @@ public class HomeController : Controller
 
         try
         {
-            await _ocrSvc.SaveInvoiceAsync(request.FilePath, request.Invoice);
+            await _homePageSvc.SaveInvoiceAsync(request.FilePath, request.Invoice);
             return Json(new { success = true });
         }
         catch (Exception ex)
@@ -535,16 +368,9 @@ public class HomeController : Controller
 
         try
         {
-            var invoice = await _ocrSvc.LoadInvoiceAsync(filePath);
-            if (invoice == null)
-                return Json(new { success = false, error = "No processed invoice for this file." });
-
-            invoice.IsValidationAccepted = true;
-            await _ocrSvc.SaveInvoiceAsync(filePath, invoice);
-
             var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             var batch   = await GetCurrentBatchAsync();
-            await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Validated, Path.GetFileName(filePath), batch?.Name ?? string.Empty, orgUser);
+            await _homePageSvc.AcceptValidationAsync(filePath, batch?.Name ?? string.Empty, orgUser);
 
             return Json(new { success = true });
         }
@@ -564,26 +390,15 @@ public class HomeController : Controller
         if (string.IsNullOrWhiteSpace(filePath))
             return BadRequest("File path required.");
 
-        var invoice = await _ocrSvc.LoadInvoiceAsync(filePath);
+        var invoice = await _homePageSvc.LoadInvoiceAsync(filePath);
         if (invoice == null)
             return NotFound("No processed invoice for this file.");
 
-        var json = JsonConvert.SerializeObject(StripBboxFields(invoice));
-        var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.docx");
-        try
-        {
-            await _exportSvc.ExportToDocxAsync(json, tempPath);
-            var bytes = await System.IO.File.ReadAllBytesAsync(tempPath);
-            var downloadName = Path.GetFileNameWithoutExtension(filePath) + ".docx";
-            return File(bytes,
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                downloadName);
-        }
-        finally
-        {
-            if (System.IO.File.Exists(tempPath))
-                System.IO.File.Delete(tempPath);
-        }
+        var bytes = await _homeExportSvc.BuildDocxAsync(filePath, invoice);
+        var downloadName = Path.GetFileNameWithoutExtension(filePath) + ".docx";
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            downloadName);
     }
 
     [HttpGet]
@@ -593,102 +408,13 @@ public class HomeController : Controller
         return View();
     }
 
-    private static JObject StripBboxFields(InvoiceDto invoice)
-    {
-        var jObj = JObject.FromObject(invoice);
-        jObj.Remove("FieldBoundingBoxes");
-        jObj.Remove("OriginalPageWidth");
-        jObj.Remove("OriginalPageHeight");
-        jObj.Remove("PageCount");
-        if (jObj["Items"] is JArray items)
-            foreach (var item in items.OfType<JObject>())
-                item.Remove("BoundingBoxes");
-        return jObj;
-    }
-
-    private async Task<(List<FileListEntry> Items, int Total, int Page, int TotalPages)> BuildPagedFileListAsync(
-        BatchSummary batch, int page, int pageSize, int maxPageCount = 20)
-    {
-        var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
-        if (!Directory.Exists(invoicesFolder))
-            return (new List<FileListEntry>(), 0, 1, 0);
-
-        var allFilePaths = _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions).ToList();
-        var total = allFilePaths.Count;
-
-        pageSize = Math.Clamp(pageSize, 1, 100);
-        int totalPages = total == 0 ? 0 : (int)Math.Ceiling((double)total / pageSize);
-        page = Math.Clamp(page, 1, Math.Max(1, totalPages));
-
-        var pagePaths = allFilePaths.Skip((page - 1) * pageSize).Take(pageSize);
-        var items = await BuildFileListForPathsAsync(pagePaths, maxPageCount);
-        return (items, total, page, totalPages);
-    }
-
-    private async Task<List<FileListEntry>> BuildFileListForPathsAsync(IEnumerable<string> filePaths, int maxPageCount = 20)
-    {
-        var entries = new List<FileListEntry>();
-        foreach (var fp in filePaths)
-        {
-            var entry = new FileListEntry { FilePath = fp, FileName = Path.GetFileName(fp) };
-            var invoice = await _dbSvc.GetInvoiceByFilePathAsync(fp);
-            if (invoice != null)
-            {
-                entry.IsProcessed = true;
-                entry.TotalPages = invoice.TotalPages;
-                if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
-                {
-                    InvoiceDto? dto = null;
-                    try
-                    {
-                        dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
-                    }
-                    catch
-                    {
-                        dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
-                    }
-                    if (dto != null)
-                    {
-                        entry.IsSavedOrAccepted = dto.IsValidationAccepted;
-                        if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
-                        {
-                            entry.HasSuspectFields =
-                                dto.TesseractConfirmed.Values.Any(v => !v)
-                                || (dto.MathConfirmed?.Values.Any(v => !v) ?? false)
-                                || (dto.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
-                            entry.IsValidated = !entry.HasSuspectFields;
-                        }
-                    }
-                }
-            }
-            entry.ExceedsPageLimit = entry.TotalPages > maxPageCount;
-            entries.Add(entry);
-        }
-        return entries;
-    }
-
     private async Task<BatchSummary?> GetCurrentBatchAsync()
     {
         var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
         var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
-        if (!int.TryParse(currentBatchIdStr, out int batchId)) return null;
-        var batches = await _batchSvc.GetBatchesForOrgAsync(orgId);
-        var batch = batches.FirstOrDefault(b => b.BatchId == batchId);
-        return batch is { IsMarkedForDeletion: false } ? batch : null;
-    }
-
-    private async Task<List<(string FileName, InvoiceDto Invoice)>> LoadBatchInvoicesAsync(BatchSummary batch)
-    {
-        var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
-        if (!Directory.Exists(invoicesFolder)) return new();
-        var filePaths = _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions);
-        var result = new List<(string, InvoiceDto)>();
-        foreach (var fp in filePaths)
-        {
-            var inv = await _ocrSvc.LoadInvoiceAsync(fp);
-            if (inv != null) result.Add((Path.GetFileName(fp), inv));
-        }
-        return result;
+        return int.TryParse(currentBatchIdStr, out int batchId)
+            ? await _homePageSvc.GetCurrentBatchAsync(orgId, batchId)
+            : null;
     }
 
     [HttpPost]
@@ -701,17 +427,21 @@ public class HomeController : Controller
         var batch = await GetCurrentBatchAsync();
         if (batch == null) return BadRequest("No batch selected.");
 
-        var invoices = await LoadBatchInvoicesAsync(batch);
-        var payload = invoices.Select(t => new { fileName = t.FileName, invoice = StripBboxFields(t.Invoice) }).ToList();
-        var json = JsonConvert.SerializeObject(payload, Formatting.Indented);
+        var invoices = await _homePageSvc.LoadBatchInvoicesAsync(batch);
+        var json = _homeExportSvc.BuildBatchJson(invoices);
         var bytes = Encoding.UTF8.GetBytes(json);
         var name = Path.GetFileName(batch.FolderPath.TrimEnd(Path.DirectorySeparatorChar));
 
         var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        foreach (var (fn, _) in invoices)
-            await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Exported, fn, batch.Name, orgUser);
+        await _homeExportSvc.LogBatchExportAsync(batch, invoices, orgUser);
 
-        await TrySoftDeleteBatchAfterExportAsync(batch);
+        await _homeExportSvc.TrySoftDeleteBatchAfterExportAsync(
+            batch,
+            User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
+            User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty,
+            User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+            orgUser);
+        HttpContext.Session.Remove("CurrentBatchId");
 
         return File(bytes, "application/json", $"{name}.json");
     }
@@ -726,112 +456,23 @@ public class HomeController : Controller
         var batch = await GetCurrentBatchAsync();
         if (batch == null) return BadRequest("No batch selected.");
 
-        var invoices = await LoadBatchInvoicesAsync(batch);
-
-        using var wb = new XLWorkbook();
-
-        // Sheet 1: header fields
-        var ws = wb.Worksheets.Add("Invoices");
-        string[] hdrs = ["File", "Vendor", "Customer", "Invoice #", "Invoice Date",
-                         "Due Date", "PO #", "Subtotal", "Tax", "Shipping", "Total"];
-        for (int c = 0; c < hdrs.Length; c++)
-        {
-            var cell = ws.Cell(1, c + 1);
-            cell.Value = hdrs[c];
-            cell.Style.Font.Bold = true;
-        }
-        for (int r = 0; r < invoices.Count; r++)
-        {
-            var (fn, inv) = invoices[r];
-            int row = r + 2;
-            ws.Cell(row, 1).Value  = fn;
-            ws.Cell(row, 2).Value  = inv.VendorName;
-            ws.Cell(row, 3).Value  = inv.CustomerName;
-            ws.Cell(row, 4).Value  = inv.InvoiceId;
-            ws.Cell(row, 5).Value  = inv.InvoiceDate;
-            ws.Cell(row, 6).Value  = inv.DueDate;
-            ws.Cell(row, 7).Value  = inv.PurchaseOrder;
-            ws.Cell(row, 8).Value  = inv.Subtotal.HasValue  ? (double)inv.Subtotal.Value  : (double?)null;
-            ws.Cell(row, 9).Value  = inv.TotalTax.HasValue  ? (double)inv.TotalTax.Value  : (double?)null;
-            ws.Cell(row, 10).Value = inv.Shipping.HasValue  ? (double)inv.Shipping.Value  : (double?)null;
-            ws.Cell(row, 11).Value = inv.Total.HasValue     ? (double)inv.Total.Value     : (double?)null;
-        }
-        ws.Columns().AdjustToContents();
-
-        // Sheet 2: line items
-        var ws2 = wb.Worksheets.Add("Line Items");
-        string[] hdrs2 = ["File", "Line #", "Description", "Quantity", "Unit Price", "Amount"];
-        for (int c = 0; c < hdrs2.Length; c++)
-        {
-            var cell = ws2.Cell(1, c + 1);
-            cell.Value = hdrs2[c];
-            cell.Style.Font.Bold = true;
-        }
-        int row2 = 2;
-        foreach (var (fn, inv) in invoices)
-        {
-            for (int i = 0; i < inv.Items.Count; i++)
-            {
-                var item = inv.Items[i];
-                ws2.Cell(row2, 1).Value = fn;
-                ws2.Cell(row2, 2).Value = i + 1;
-                ws2.Cell(row2, 3).Value = item.Description;
-                ws2.Cell(row2, 4).Value = item.Quantity.HasValue   ? (double)item.Quantity.Value   : (double?)null;
-                ws2.Cell(row2, 5).Value = item.UnitPrice.HasValue  ? (double)item.UnitPrice.Value  : (double?)null;
-                ws2.Cell(row2, 6).Value = item.Amount.HasValue     ? (double)item.Amount.Value     : (double?)null;
-                row2++;
-            }
-        }
-        ws2.Columns().AdjustToContents();
-
-        using var ms = new MemoryStream();
-        wb.SaveAs(ms);
+        var invoices = await _homePageSvc.LoadBatchInvoicesAsync(batch);
+        var bytes = _homeExportSvc.BuildBatchExcel(invoices);
         var name = Path.GetFileName(batch.FolderPath.TrimEnd(Path.DirectorySeparatorChar));
 
         var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        foreach (var (fn, _) in invoices)
-            await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Exported, fn, batch.Name, orgUser);
+        await _homeExportSvc.LogBatchExportAsync(batch, invoices, orgUser);
 
-        await TrySoftDeleteBatchAfterExportAsync(batch);
+        await _homeExportSvc.TrySoftDeleteBatchAfterExportAsync(
+            batch,
+            User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
+            User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty,
+            User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+            orgUser);
+        HttpContext.Session.Remove("CurrentBatchId");
 
-        return File(ms.ToArray(),
+        return File(bytes,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"{name}.xlsx");
-    }
-
-    private async Task TrySoftDeleteBatchAfterExportAsync(BatchSummary batch)
-    {
-        try
-        {
-            var settings = await _configSvc.LoadSettingsAsync();
-            if (!settings.SoftDeleteBatchOnExport)
-                return;
-
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-            await _batchSvc.DeleteBatchAsync(batch.BatchId, userId);
-
-            HttpContext.Session.Remove("CurrentBatchId");
-
-            var orgId  = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
-            var orgName = User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty;
-            var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-            _batchNotifier.Notify(orgId);
-            await _batchActionSvc.LogAsync(
-                BatchActionTypes.MarkedForDeletion, batch.Name, orgName, orgUser);
-            try
-            {
-                await _batchNotificationSvc.NotifyBatchSoftDeletedAsync(orgId, batch.Name);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send soft-delete notification for batch '{Batch}' in org {OrgId}", batch.Name, orgId);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Post-export soft-delete failed for batch {BatchId} ({BatchName}); export file was still returned.",
-                batch.BatchId, batch.Name);
-        }
     }
 }
