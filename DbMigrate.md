@@ -142,7 +142,7 @@ A standalone console application (`K-OCR-DbMigrate`) will be created in the solu
 
 #### Tool/Project
 
-- New `K-OCR-DbMigrate` console project (net8.0)
+- New `K-OCR-DbMigrate` console project (net10.0)
 - References:
   - `Microsoft.Data.Sqlite`
   - `Microsoft.Data.SqlClient`
