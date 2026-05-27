@@ -73,6 +73,16 @@ public class AdminController : Controller
                 stripeProvisioningError = result.StripeProvisioningError
             });
         }
+        catch (DuplicateOrganizationNameException ex)
+        {
+            _logger.LogWarning(ex, "CreateOrganization rejected duplicate org name {Name}", request.Name);
+            return Json(new
+            {
+                success = false,
+                duplicateName = true,
+                error = ex.Message
+            });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "CreateOrganization failed for {Name}", request.Name);

@@ -80,4 +80,37 @@ public class AdminControllerTests
         var returned = Assert.IsAssignableFrom<BatchDetail[]>(json.Value);
         Assert.Equal(2, returned.Length);
     }
+
+    [Fact]
+    public async Task CreateOrganization_DuplicateName_ReturnsDuplicateFlag()
+    {
+        var request = new CreateOrganizationRequest
+        {
+            Name = "Acme",
+            Description = "Desc",
+            AdminEmail = "admin@acme.com",
+            AdminName = "Admin"
+        };
+
+        _mockSuperAdminSvc
+            .Setup(s => s.CreateOrganizationAsync(It.IsAny<CreateOrganizationRequest>(), It.IsAny<string?>()))
+            .ThrowsAsync(new DuplicateOrganizationNameException("An organization named \"Acme\" already exists."));
+
+        var result = await _controller.CreateOrganization(request);
+
+        var json = Assert.IsType<JsonResult>(result);
+        var value = json.Value!;
+
+        var successProp = value.GetType().GetProperty("success");
+        Assert.NotNull(successProp);
+        Assert.False((bool)successProp!.GetValue(value)!);
+
+        var duplicateProp = value.GetType().GetProperty("duplicateName");
+        Assert.NotNull(duplicateProp);
+        Assert.True((bool)duplicateProp!.GetValue(value)!);
+
+        var errorProp = value.GetType().GetProperty("error");
+        Assert.NotNull(errorProp);
+        Assert.Equal("An organization named \"Acme\" already exists.", (string)errorProp!.GetValue(value)!);
+    }
 }

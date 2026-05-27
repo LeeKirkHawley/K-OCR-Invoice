@@ -287,6 +287,13 @@
                 }
                 location.reload();
             } else {
+                if (result.duplicateName) {
+                    alert(result.error ?? 'An organization with that name already exists.');
+                    const orgNameInput = document.getElementById('orgName');
+                    orgNameInput.focus();
+                    orgNameInput.select();
+                    return;
+                }
                 showToast(result.error ?? 'Create failed.', 'error');
             }
         } catch (err) {
