@@ -78,7 +78,7 @@ public class BatchCleanupServiceTests
                 Assert.Equal(orgFolderName, actions[0].Organization);
                 Assert.Equal("System", actions[0].OrgUser);
 
-                var logPath = Path.Combine(orgFolder, "activity.log");
+                var logPath = Path.Combine(orgFolder, $"activity-{DateTime.UtcNow:yyyyMMdd}.log");
                 Assert.True(File.Exists(logPath));
                 var logText = await File.ReadAllTextAsync(logPath);
                 Assert.Contains("BatchDeleted", logText);

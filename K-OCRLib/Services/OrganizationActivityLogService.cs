@@ -15,15 +15,21 @@ public interface IOrganizationActivityLogService
 
 public sealed class OrganizationActivityLogService : IOrganizationActivityLogService
 {
+    private const int RetainedLogFiles = 7;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly IPathService _pathService;
     private readonly ILogger<OrganizationActivityLogService> _logger;
+    private readonly Func<DateTime> _utcNow;
 
-    public OrganizationActivityLogService(IPathService pathService, ILogger<OrganizationActivityLogService> logger)
+    public OrganizationActivityLogService(
+        IPathService pathService,
+        ILogger<OrganizationActivityLogService> logger,
+        Func<DateTime>? utcNow = null)
     {
         _pathService = pathService;
         _logger = logger;
+        _utcNow = utcNow ?? (() => DateTime.UtcNow);
     }
 
     public Task LogBatchCreatedAsync(string organizationName, string batchName, string orgUser) =>
@@ -53,8 +59,9 @@ public sealed class OrganizationActivityLogService : IOrganizationActivityLogSer
         }
 
         var orgFolder = _pathService.GetOrgFolderPath(organizationName);
-        var logPath = Path.Combine(orgFolder, "activity.log");
-        var gate = Locks.GetOrAdd(logPath, _ => new SemaphoreSlim(1, 1));
+        var utcNow = _utcNow();
+        var logPath = GetDailyLogPath(orgFolder, utcNow);
+        var gate = Locks.GetOrAdd(orgFolder, _ => new SemaphoreSlim(1, 1));
         var acquired = false;
 
         try
@@ -63,8 +70,9 @@ public sealed class OrganizationActivityLogService : IOrganizationActivityLogSer
             await gate.WaitAsync();
             acquired = true;
 
-            var line = $"{DateTime.UtcNow:O} | {eventName} | {details}{Environment.NewLine}";
+            var line = $"{utcNow:O} | {eventName} | {details}{Environment.NewLine}";
             await File.AppendAllTextAsync(logPath, line);
+            PruneOldLogFiles(orgFolder);
         }
         catch (Exception ex)
         {
@@ -74,6 +82,42 @@ public sealed class OrganizationActivityLogService : IOrganizationActivityLogSer
         {
             if (acquired)
                 gate.Release();
+        }
+    }
+
+    private static string GetDailyLogPath(string orgFolder, DateTime utcNow) =>
+        Path.Combine(orgFolder, $"activity-{utcNow:yyyyMMdd}.log");
+
+    private static void PruneOldLogFiles(string orgFolder)
+    {
+        var files = new List<(string Path, DateTime Date)>();
+        foreach (var path in Directory.EnumerateFiles(orgFolder, "activity-*.log"))
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            var datePart = name["activity-".Length..];
+            if (DateTime.TryParseExact(
+                    datePart,
+                    "yyyyMMdd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None,
+                    out var dt))
+            {
+                files.Add((path, dt));
+            }
+        }
+
+        files = files.OrderByDescending(x => x.Date).ToList();
+
+        foreach (var oldFile in files.Skip(RetainedLogFiles))
+        {
+            try
+            {
+                File.Delete(oldFile.Path);
+            }
+            catch
+            {
+                // Retention should never block the write path.
+            }
         }
     }
 }

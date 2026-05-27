@@ -248,7 +248,7 @@ public class BatchAndCleanupTests
             Assert.Empty(await verify.Batches.ToListAsync());
             Assert.Single(await verify.BatchActions.ToListAsync());
 
-            var logPath = Path.Combine(orgFolder, "activity.log");
+            var logPath = Path.Combine(orgFolder, $"activity-{DateTime.UtcNow:yyyyMMdd}.log");
             Assert.True(File.Exists(logPath));
             Assert.Contains("BatchDeleted", await File.ReadAllTextAsync(logPath));
         }
