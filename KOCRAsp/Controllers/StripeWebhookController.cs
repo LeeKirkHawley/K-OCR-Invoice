@@ -6,6 +6,7 @@ using K_OCR.Data;
 namespace KOCRAsp.Controllers;
 
 [ApiController]
+[Route("Payment/StripeEvents")]
 [Route("api/webhook/stripe")]
 [IgnoreAntiforgeryToken]
 public class StripeWebhookController : ControllerBase
