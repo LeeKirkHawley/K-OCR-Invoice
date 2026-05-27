@@ -128,6 +128,12 @@ builder.Services.ConfigureApplicationCookie(options =>
 // Persist keys to the project root so they survive app restarts and TFM changes.
 var keysFolder = Path.Combine(builder.Environment.ContentRootPath, "DataProtection-Keys");
 Directory.CreateDirectory(keysFolder);
+var seededKeyXml = configuration["DataProtection:KeyRingXml"];
+if (!string.IsNullOrWhiteSpace(seededKeyXml))
+{
+    var seededKeyPath = Path.Combine(keysFolder, "seeded-key.xml");
+    File.WriteAllText(seededKeyPath, seededKeyXml);
+}
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(keysFolder))
     .SetApplicationName("KOCRAsp");
@@ -242,7 +248,7 @@ using (var scope = app.Services.CreateScope())
     {
         var identityDb = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         identityDb.Database.Migrate();
-        await EnsureSuperAdminAsync(scope.ServiceProvider);
+        await EnsureSuperAdminAsync(scope.ServiceProvider, configuration);
     }
     catch (Exception ex)
     {
@@ -387,7 +393,7 @@ app.MapGet("/api/image", async (string path, IImageService imageSvc) =>
 
 app.Run();
 
-static async Task EnsureSuperAdminAsync(IServiceProvider services)
+static async Task EnsureSuperAdminAsync(IServiceProvider services, IConfiguration configuration)
 {
     var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
@@ -396,9 +402,13 @@ static async Task EnsureSuperAdminAsync(IServiceProvider services)
         if (!await roleManager.RoleExistsAsync(role))
             await roleManager.CreateAsync(new IdentityRole(role));
 
-    const string superAdminUserName = "superadmin";
-    const string superAdminPassword = "baadf00d";
-    const string superAdminEmail    = "leekirkhawley@gmail.com";
+    var superAdminConfig = configuration.GetSection("Bootstrap:SuperAdmin");
+    var superAdminUserName = superAdminConfig["UserName"] ?? "superadmin";
+    var superAdminPassword = superAdminConfig["Password"];
+    var superAdminEmail    = superAdminConfig["Email"] ?? "leekirkhawley@gmail.com";
+
+    if (string.IsNullOrWhiteSpace(superAdminPassword))
+        throw new InvalidOperationException("Bootstrap:SuperAdmin:Password must be configured.");
 
     var superAdmin = await userManager.FindByNameAsync(superAdminUserName);
     if (superAdmin is null)

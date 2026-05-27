@@ -37,6 +37,8 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_DEFAULT_PRICE_ID: ${{ secrets.STRIPE_DEFAULT_PRICE_ID }}
           STRIPE_METER_EVENT_NAME: ${{ secrets.STRIPE_METER_EVENT_NAME }}
+          SUPERADMIN_PASSWORD: ${{ secrets.SUPERADMIN_PASSWORD }}
+          DATA_PROTECTION_KEY_XML: ${{ secrets.DATA_PROTECTION_KEY_XML }}
         run: |
           python3 << 'EOF'
           import json, os
@@ -88,6 +90,16 @@ jobs:
               "MeterEventName":   os.environ["STRIPE_METER_EVENT_NAME"],
               "DefaultPriceId":   os.environ["STRIPE_DEFAULT_PRICE_ID"],
               "Prices":           stripe.get("Prices", {})
+            },
+            "Bootstrap": {
+              "SuperAdmin": {
+                "UserName": "superadmin",
+                "Email": "leekirkhawley@gmail.com",
+                "Password": os.environ["SUPERADMIN_PASSWORD"]
+              }
+            },
+            "DataProtection": {
+              "KeyRingXml": os.environ["DATA_PROTECTION_KEY_XML"]
             }
           }
 
