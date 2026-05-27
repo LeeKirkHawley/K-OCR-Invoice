@@ -1,16 +1,20 @@
 @using Microsoft.AspNetCore.Antiforgery
 @using K_OCR.Security
+@using KOCRAsp.Infrastructure
 @inject IAntiforgery Antiforgery
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
 @{
     var hideNav = ViewData["HideNav"] as bool? == true;
     var allowIndexing = ViewData["AllowIndexing"] as bool? == true;
     var pageTitle = ViewData["Title"] as string;
+    var request = ViewContext.HttpContext.Request;
+    var canonicalPath = UrlCanonicalizer.GetCanonicalPath(request.Path.Value ?? string.Empty);
     var resolvedTitle = string.IsNullOrWhiteSpace(pageTitle)
         ? "Hardscrabble Invoice"
         : pageTitle == "Hardscrabble Invoice"
             ? pageTitle
             : $"{pageTitle} – Hardscrabble Invoice";
+    var canonicalUrl = $"{request.Scheme}://{request.Host}{request.PathBase}{canonicalPath}";
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -19,6 +23,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@resolvedTitle</title>
     <meta name="robots" content="@(allowIndexing ? "index,follow" : "noindex,nofollow")" />
+    <link rel="canonical" href="@canonicalUrl" />
     <meta name="request-verification-token"
           content="@Antiforgery.GetAndStoreTokens(ViewContext.HttpContext).RequestToken" />
     <link rel="stylesheet"
@@ -317,4 +322,3 @@
     }
 </body>
 </html>
-

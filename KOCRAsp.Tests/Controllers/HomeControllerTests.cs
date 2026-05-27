@@ -58,7 +58,14 @@ public class HomeControllerTests
     {
         _controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext { User = new System.Security.Claims.ClaimsPrincipal() }
+            HttpContext = new DefaultHttpContext
+            {
+                User = new System.Security.Claims.ClaimsPrincipal(),
+                Request =
+                {
+                    Path = "/"
+                }
+            }
         };
     }
 
@@ -71,6 +78,18 @@ public class HomeControllerTests
 
         var viewResult = Assert.IsType<ViewResult>(result);
         Assert.Equal("Landing", viewResult.ViewName);
+    }
+
+    [Fact]
+    public async Task Index_Anonymous_DuplicateRouteRedirectsToRoot()
+    {
+        SetAnonymousControllerContext();
+        _controller.ControllerContext.HttpContext.Request.Path = "/Home/Index";
+
+        var result = await _controller.Index();
+
+        var redirect = Assert.IsType<RedirectResult>(result);
+        Assert.Equal("/", redirect.Url);
     }
 
     [Fact]

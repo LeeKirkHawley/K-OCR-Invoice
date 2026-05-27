@@ -31,6 +31,7 @@ public static class ControllerTestHelper
         var user = new ClaimsPrincipal(identity);
 
         var httpContext = new DefaultHttpContext { User = user };
+        httpContext.Request.Path = "/";
         if (session != null)
             httpContext.Session = session;
 

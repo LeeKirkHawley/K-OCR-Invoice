@@ -3,6 +3,7 @@ using K_OCR.Data;
 using K_OCR.Identity;
 using K_OCR.Security;
 using K_OCR.Services;
+using KOCRAsp.Infrastructure;
 using KOCRAsp.Hubs;
 using KOCRAsp.Identity;
 using KOCRAsp.Services;
@@ -283,6 +284,18 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/error/{0}");
 app.UseHttpsRedirection();
+app.Use(async (context, next) =>
+{
+    if ((HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method)) &&
+        UrlCanonicalizer.NeedsRedirect(context.Request.Path.Value ?? string.Empty, out var canonicalPath))
+    {
+        var location = canonicalPath + context.Request.QueryString;
+        context.Response.Redirect(location, permanent: true);
+        return;
+    }
+
+    await next();
+});
 app.UseStaticFiles();
 app.UseRouting();
 app.UseSession();
@@ -303,6 +316,48 @@ if (startupError.HasError)
     app.Run();
     return;
 }
+
+app.MapGet("/robots.txt", (HttpContext context) =>
+{
+    var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}";
+    var robots = $"""
+User-agent: *
+Disallow: /admin/
+Disallow: /auth/
+Disallow: /batch/
+Disallow: /emailconfig/
+Disallow: /orgconfig/
+Disallow: /settings/
+Disallow: /api/
+Disallow: /hubs/
+Disallow: /error
+Allow: /css/
+Allow: /js/
+Allow: /lib/
+Allow: /
+
+Sitemap: {baseUrl}/sitemap.xml
+""";
+
+    return Results.Text(robots, "text/plain; charset=utf-8");
+});
+
+app.MapGet("/sitemap.xml", (HttpContext context) =>
+{
+    var baseUrl = $"{context.Request.Scheme}://{context.Request.Host}";
+    var sitemap = $"""
+<?xml version="1.0" encoding="utf-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>{baseUrl}/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
+""";
+
+    return Results.Text(sitemap, "application/xml; charset=utf-8");
+});
 
 app.MapControllerRoute(
     name: "default",

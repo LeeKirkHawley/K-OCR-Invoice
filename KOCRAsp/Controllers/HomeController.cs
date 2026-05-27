@@ -48,6 +48,9 @@ public class HomeController : Controller
     [AllowAnonymous]
     public async Task<IActionResult> Index()
     {
+        if (!string.Equals(Request.Path.Value, "/", StringComparison.Ordinal))
+            return Redirect("/");
+
         if (User.Identity?.IsAuthenticated != true)
         {
             ViewData["Title"] = "Hardscrabble Invoice";
