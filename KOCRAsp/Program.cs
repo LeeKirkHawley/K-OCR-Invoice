@@ -246,8 +246,8 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        Log.Logger.Fatal(ex, "Fatal error during Identity initialization");
-        throw;
+        startupError.SetError($"Identity initialization failed: {ex.Message}");
+        Log.Logger.Fatal(ex, "Identity initialization failed");
     }
 }
 
@@ -261,8 +261,8 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        Log.Logger.Fatal(ex, "Fatal error during Reporting DB initialization");
-        throw;
+        startupError.SetError($"Reporting DB initialization failed: {ex.Message}");
+        Log.Logger.Fatal(ex, "Reporting DB initialization failed");
     }
 }
 
@@ -279,6 +279,21 @@ app.UseRouting();
 app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
+
+if (startupError.HasError)
+{
+    // Keep the process alive and surface the startup failure directly over HTTP
+    // so shared-host IIS deployments don't collapse to an opaque blank 500 page.
+    app.Run(async context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "text/plain; charset=utf-8";
+        await context.Response.WriteAsync(
+            "Application startup failed.\n\n" + startupError.ErrorMessage);
+    });
+    app.Run();
+    return;
+}
 
 app.MapControllerRoute(
     name: "default",

@@ -21,8 +21,8 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore KOCRAsp/KOCRAsp.csproj
 
-      - name: Publish (Release, self-contained win-x86)
-        run: dotnet publish KOCRAsp/KOCRAsp.csproj -c Release -r win-x86 --self-contained true -o ./publish --nologo
+      - name: Publish (Release, framework-dependent)
+        run: dotnet publish KOCRAsp/KOCRAsp.csproj -c Release --self-contained false -o ./publish --nologo
 
       - name: Ensure logs directory
         run: mkdir -p ./publish/logs
@@ -110,7 +110,8 @@ jobs:
                 <handlers>
                   <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
                 </handlers>
-                <aspNetCore processPath=".\\KOCRAsp.exe"
+                <aspNetCore processPath="dotnet"
+                            arguments=".\\KOCRAsp.dll"
                             stdoutLogEnabled="true"
                             stdoutLogFile=".\\logs\\stdout"
                             hostingModel="outofprocess">
