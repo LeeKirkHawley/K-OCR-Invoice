@@ -196,6 +196,14 @@
     font-weight: 500;
 }
 
+.viewer-currency-label {
+    margin-left: auto;
+    font-size: 12px;
+    color: #495057;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .viewer-scroll {
     flex: 1;
     overflow-y: auto;

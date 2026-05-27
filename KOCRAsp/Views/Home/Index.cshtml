@@ -110,6 +110,7 @@
             <button class="viewer-btn" id="zoomInBtn"   title="Zoom in">+</button>
             <button class="viewer-btn viewer-btn-fit" id="zoomFitWBtn" title="Fit to width">⊞ Fit W</button>
             <button class="viewer-btn viewer-btn-fit" id="zoomFitHBtn" title="Fit to height">↕ Fit H</button>
+            <span class="viewer-currency-label" id="viewerCurrencyLabel" style="display:none;"></span>
         </div>
         <div class="viewer-scroll" id="viewerScroll">
             <div class="viewer-placeholder" id="noDocMsg">Select a file to view the document</div>
@@ -515,11 +516,13 @@
         document.getElementById('viewerPagesContainer').innerHTML = '';
         document.getElementById('viewerToolbar').style.display = 'none';
         document.getElementById('noDocMsg').style.display = '';
+        updateViewerCurrencyLabel(null);
     }
 
     async function selectFile(filePath, exceedsLimit) {
         _currentFilePath  = filePath;
         _selectedFieldKey = null;
+        updateViewerCurrencyLabel(null);
         loadDocumentPages(filePath);
         try {
             const result = await fetch('/home/getinvoice?filePath=' + encodeURIComponent(filePath));
@@ -528,6 +531,7 @@
                 _currentInvoice = data.invoice;
                 renderInvoiceFields(data.invoice);
                 updateValidationStatusLabel(data.invoice);
+                updateViewerCurrencyLabel(data.invoice);
                 document.getElementById('validatedJsonContent').textContent =
                     data.invoice.isValidationAccepted ? JSON.stringify(stripBboxFields(data.invoice), null, 2) : '';
             } else {
@@ -641,6 +645,7 @@
                 _currentInvoice = result.invoice;
                 renderInvoiceFields(result.invoice);
                 updateValidationStatusLabel(result.invoice);
+                updateViewerCurrencyLabel(result.invoice);
                 document.getElementById('validatedJsonContent').textContent = '';
                 document.getElementById('rawJsonContent').textContent =
                     JSON.stringify(stripBboxFields(result.invoice), null, 2);
@@ -844,6 +849,22 @@
             el.textContent = 'Not Validated';
             el.className = 'validation-status-label is-not-validated';
         }
+    }
+
+    function updateViewerCurrencyLabel(inv) {
+        const el = document.getElementById('viewerCurrencyLabel');
+        if (!el) return;
+
+        const code = String(inv?.currencyCode ?? '').trim().toUpperCase();
+        if (!code) {
+            el.style.display = '';
+            el.textContent = 'CUR: -';
+            return;
+        }
+
+        const shortCode = code.length >= 2 ? code.slice(0, 2) : code;
+        el.textContent = `CUR: ${shortCode}`;
+        el.style.display = '';
     }
 
     // ── Two-way field / bbox highlighting ──────────────────────────────────────
