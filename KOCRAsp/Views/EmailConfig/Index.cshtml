@@ -2,9 +2,10 @@
 @model EmailSettings
 @{
     ViewData["Title"] = "Email Configuration";
+    ViewData["MetaDescription"] = "Configure SMTP email settings for Hardscrabble Invoice.";
 }
 
-<h4 class="mb-4">Email Configuration</h4>
+<h1 class="h4 mb-4">Email Configuration</h1>
 
 @if (TempData["Success"] is string ok)
 {

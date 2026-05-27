@@ -4,13 +4,14 @@
 @model OrgConfig
 @{
     ViewData["Title"] = "Organization Configuration";
+    ViewData["MetaDescription"] = "Manage organization users and validation settings in Hardscrabble Invoice.";
     var allOrgs       = ViewBag.AllOrgs as OrganizationOverview[];
     var selectedOrgId = ViewBag.SelectedOrgId as string;
     var orgName       = ViewBag.OrgName as string;
     bool isSuperAdmin = User.IsInRole(RoleNames.SuperAdmin);
 }
 
-<h4 class="mb-4">Organization Configuration</h4>
+<h1 class="h4 mb-4">Organization Configuration</h1>
 
 @if (TempData["Success"] is string ok)
 {

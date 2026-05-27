@@ -3,11 +3,12 @@
 @model OrganizationOverview[]
 @{
     ViewData["Title"] = "Admin Console";
+    ViewData["MetaDescription"] = "Administer organizations and queue settings in Hardscrabble Invoice.";
     var batches = (ViewBag.Batches as BatchDetail[]) ?? Array.Empty<BatchDetail>();
     var deletedOrgRetentionDays = (int)(ViewBag.DeletedOrgRetentionDays ?? 14);
 }
 
-<h4 class="mb-4">Admin Console</h4>
+<h1 class="h4 mb-4">Admin Console</h1>
 
 <!-- Create org panel -->
 <div class="card mb-4">

@@ -2,9 +2,10 @@
 @model AppSettings
 @{
     ViewData["Title"] = "Settings";
+    ViewData["MetaDescription"] = "Configure OCR, retention, and application settings for Hardscrabble Invoice.";
 }
 
-<h4 class="mb-4">Settings</h4>
+<h1 class="h4 mb-4">Settings</h1>
 
 @if (TempData["Success"] is string ok)
 {
