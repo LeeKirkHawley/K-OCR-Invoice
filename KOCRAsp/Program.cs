@@ -407,12 +407,12 @@ static async Task EnsureSuperAdminAsync(IServiceProvider services, IConfiguratio
     var superAdminPassword = superAdminConfig["Password"];
     var superAdminEmail    = superAdminConfig["Email"] ?? "leekirkhawley@gmail.com";
 
-    if (string.IsNullOrWhiteSpace(superAdminPassword))
-        throw new InvalidOperationException("Bootstrap:SuperAdmin:Password must be configured.");
-
     var superAdmin = await userManager.FindByNameAsync(superAdminUserName);
     if (superAdmin is null)
     {
+        if (string.IsNullOrWhiteSpace(superAdminPassword))
+            throw new InvalidOperationException("Bootstrap:SuperAdmin:Password must be configured when creating the super-admin user.");
+
         superAdmin = new ApplicationUser
         {
             UserName       = superAdminUserName,
