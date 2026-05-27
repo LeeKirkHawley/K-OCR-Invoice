@@ -129,7 +129,8 @@ builder.Services.ConfigureApplicationCookie(options =>
 var keysFolder = Path.Combine(builder.Environment.ContentRootPath, "DataProtection-Keys");
 Directory.CreateDirectory(keysFolder);
 var seededKeyXml = configuration["DataProtection:KeyRingXml"];
-if (!string.IsNullOrWhiteSpace(seededKeyXml))
+var existingKeyFiles = Directory.GetFiles(keysFolder, "*.xml", SearchOption.TopDirectoryOnly);
+if (!string.IsNullOrWhiteSpace(seededKeyXml) && existingKeyFiles.Length == 0)
 {
     var seededKeyPath = Path.Combine(keysFolder, "seeded-key.xml");
     File.WriteAllText(seededKeyPath, seededKeyXml);
