@@ -5,6 +5,7 @@ using KOCRAsp.Controllers;
 using KOCRAsp.Models;
 using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -51,6 +52,25 @@ public class HomeControllerTests
         var session = ControllerTestHelper.CreateMockSession(currentBatchId);
         _controller.ControllerContext = ControllerTestHelper.CreateControllerContext(
             userId: UserId, orgId: OrgId, session: session.Object);
+    }
+
+    private void SetAnonymousControllerContext()
+    {
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = new System.Security.Claims.ClaimsPrincipal() }
+        };
+    }
+
+    [Fact]
+    public async Task Index_Anonymous_ReturnsLandingView()
+    {
+        SetAnonymousControllerContext();
+
+        var result = await _controller.Index();
+
+        var viewResult = Assert.IsType<ViewResult>(result);
+        Assert.Equal("Landing", viewResult.ViewName);
     }
 
     [Fact]

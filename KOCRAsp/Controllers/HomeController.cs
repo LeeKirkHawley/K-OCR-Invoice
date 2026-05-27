@@ -45,8 +45,17 @@ public class HomeController : Controller
     }
 
     [HttpGet]
+    [AllowAnonymous]
     public async Task<IActionResult> Index()
     {
+        if (User.Identity?.IsAuthenticated != true)
+        {
+            ViewData["Title"] = "Hardscrabble Invoice";
+            ViewData["HideNav"] = true;
+            ViewData["AllowIndexing"] = true;
+            return View("Landing");
+        }
+
         if (User.IsInRole(RoleNames.SuperAdmin))
             return RedirectToAction("Index", "Admin");
 

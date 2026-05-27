@@ -1,0 +1,17 @@
+@{
+    ViewData["Title"] = "Hardscrabble Invoice";
+    ViewData["HideNav"] = true;
+    ViewData["AllowIndexing"] = true;
+    Layout = "_Layout";
+}
+
+<section class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
+    <div class="text-center px-3" style="max-width: 720px;">
+        <p class="text-uppercase text-muted small mb-2">Invoice processing</p>
+        <h1 class="display-4 fw-bold mb-3">Hardscrabble Invoice</h1>
+        <p class="lead text-muted mb-4">
+            Sign in to upload, review, and process invoices.
+        </p>
+        <a class="btn btn-primary btn-lg" asp-controller="Auth" asp-action="Login">Log in</a>
+    </div>
+</section>

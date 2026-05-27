@@ -49,7 +49,9 @@ public class AuthController : Controller
     public IActionResult Login(string? returnUrl = null)
     {
         if (User.Identity?.IsAuthenticated == true)
-            return Redirect(returnUrl ?? "/");
+            return returnUrl is not null
+                ? Redirect(returnUrl)
+                : RedirectToAction("Index", "Home");
 
         ViewData["ReturnUrl"] = returnUrl;
         ViewData["HideNav"] = true;
@@ -85,7 +87,9 @@ public class AuthController : Controller
             var stripeResult = await SyncStripeStatusOnLoginAsync(model.Email);
             if (stripeResult.IsApplicable && stripeResult.Status is not "active" and not "trialing")
                 TempData["StripeInactiveWarning"] = true;
-            return Redirect(returnUrl ?? "/");
+            return returnUrl is not null
+                ? Redirect(returnUrl)
+                : RedirectToAction("Index", "Home");
         }
 
         if (result.IsLockedOut)

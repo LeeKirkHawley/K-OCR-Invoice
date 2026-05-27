@@ -81,8 +81,9 @@ public class AuthControllerTests
 
         var result = await _controller.Login(model);
 
-        var redirect = Assert.IsType<RedirectResult>(result);
-        Assert.Equal("/", redirect.Url);
+        var redirect = Assert.IsType<RedirectToActionResult>(result);
+        Assert.Equal("Index", redirect.ActionName);
+        Assert.Equal("Home", redirect.ControllerName);
     }
 
     [Fact]
