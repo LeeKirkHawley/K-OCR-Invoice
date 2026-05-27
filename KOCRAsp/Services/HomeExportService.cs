@@ -25,6 +25,7 @@ public sealed class HomeExportService : IHomeExportService
     private readonly IBatchChangeNotifier _batchNotifier;
     private readonly IBatchActionService _batchActionSvc;
     private readonly IBatchNotificationService _batchNotificationSvc;
+    private readonly IOrganizationActivityLogService _orgLogSvc;
     private readonly ILogger<HomeExportService> _logger;
 
     public HomeExportService(
@@ -35,6 +36,7 @@ public sealed class HomeExportService : IHomeExportService
         IBatchChangeNotifier batchNotifier,
         IBatchActionService batchActionSvc,
         IBatchNotificationService batchNotificationSvc,
+        IOrganizationActivityLogService orgLogSvc,
         ILogger<HomeExportService> logger)
     {
         _exportSvc = exportSvc;
@@ -44,6 +46,7 @@ public sealed class HomeExportService : IHomeExportService
         _batchNotifier = batchNotifier;
         _batchActionSvc = batchActionSvc;
         _batchNotificationSvc = batchNotificationSvc;
+        _orgLogSvc = orgLogSvc;
         _logger = logger;
     }
 
@@ -151,6 +154,7 @@ public sealed class HomeExportService : IHomeExportService
 
             _batchNotifier.Notify(orgId);
             await _batchActionSvc.LogAsync(BatchActionTypes.MarkedForDeletion, batch.Name, orgName, orgUser);
+            await _orgLogSvc.LogBatchMarkedForDeletionAsync(orgName, batch.Name, orgUser);
             try
             {
                 await _batchNotificationSvc.NotifyBatchSoftDeletedAsync(orgId, batch.Name);

@@ -16,6 +16,7 @@ public class HomeControllerTests
     private readonly Mock<IHomePageService> _mockHomePageSvc;
     private readonly Mock<IHomeOcrService> _mockHomeOcrSvc;
     private readonly Mock<IHomeExportService> _mockHomeExportSvc;
+    private readonly Mock<IOrganizationActivityLogService> _mockOrgLogSvc;
     private readonly Mock<ITenantContext> _mockTenantContext;
     private readonly HomeController _controller;
 
@@ -28,6 +29,7 @@ public class HomeControllerTests
         _mockHomePageSvc = new Mock<IHomePageService>();
         _mockHomeOcrSvc = new Mock<IHomeOcrService>();
         _mockHomeExportSvc = new Mock<IHomeExportService>();
+        _mockOrgLogSvc = new Mock<IOrganizationActivityLogService>();
         _mockTenantContext = new Mock<ITenantContext>();
 
         _mockTenantContext.Setup(t => t.OrganizationId).Returns(OrgId);
@@ -39,6 +41,7 @@ public class HomeControllerTests
             _mockHomePageSvc.Object,
             _mockHomeOcrSvc.Object,
             _mockHomeExportSvc.Object,
+            _mockOrgLogSvc.Object,
             _mockTenantContext.Object,
             Mock.Of<ILogger<HomeController>>());
     }
@@ -119,13 +122,16 @@ public class HomeControllerTests
 
         var invoice = new InvoiceDto { VendorName = "Acme Corp" };
         _mockHomePageSvc
-            .Setup(s => s.LoadInvoiceAsync(@"C:\invoices\file.pdf"))
+            .Setup(s => s.LoadInvoiceAsync(@"C:\Org\Batch1\Invoices\file.pdf"))
             .ReturnsAsync(invoice);
         _mockHomeExportSvc
-            .Setup(s => s.BuildDocxAsync(@"C:\invoices\file.pdf", invoice))
+            .Setup(s => s.BuildDocxAsync(@"C:\Org\Batch1\Invoices\file.pdf", invoice))
             .ReturnsAsync(new byte[] { 0x50, 0x4B, 0x03, 0x04 });
+        _mockOrgLogSvc
+            .Setup(s => s.LogValidatedInvoiceDownloadAsync(OrgName, "Batch1", It.IsAny<string>(), "file.pdf"))
+            .Returns(Task.CompletedTask);
 
-        var result = await _controller.ExportDocx(@"C:\invoices\file.pdf");
+        var result = await _controller.ExportDocx(@"C:\Org\Batch1\Invoices\file.pdf");
 
         var fileResult = Assert.IsType<FileContentResult>(result);
         Assert.Equal(

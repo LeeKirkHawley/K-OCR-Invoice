@@ -21,6 +21,7 @@ public class HomeController : Controller
     private readonly IHomePageService _homePageSvc;
     private readonly IHomeOcrService _homeOcrSvc;
     private readonly IHomeExportService _homeExportSvc;
+    private readonly IOrganizationActivityLogService _orgLogSvc;
     private readonly ITenantContext _tenantContext;
     private readonly ILogger<HomeController> _logger;
 
@@ -31,12 +32,14 @@ public class HomeController : Controller
         IHomePageService homePageSvc,
         IHomeOcrService homeOcrSvc,
         IHomeExportService homeExportSvc,
+        IOrganizationActivityLogService orgLogSvc,
         ITenantContext tenantContext,
         ILogger<HomeController> logger)
     {
         _homePageSvc = homePageSvc;
         _homeOcrSvc = homeOcrSvc;
         _homeExportSvc = homeExportSvc;
+        _orgLogSvc = orgLogSvc;
         _tenantContext = tenantContext;
         _logger = logger;
     }
@@ -112,7 +115,7 @@ public class HomeController : Controller
 
         var batch = await GetCurrentBatchAsync();
         var result = await _homePageSvc.UploadFilesAsync(
-            batchId, uploads, userId, _tenantContext.IsGuestOrganization,
+            batchId, uploads, userId, _tenantContext.IsGuestOrganization, _tenantContext.OrganizationName ?? string.Empty,
             User.FindFirstValue(ClaimTypes.Email) ?? userId,
             batch?.Name ?? string.Empty);
 
@@ -436,7 +439,7 @@ public class HomeController : Controller
         {
             var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             var batch   = await GetCurrentBatchAsync();
-            await _homePageSvc.AcceptValidationAsync(filePath, batch?.Name ?? string.Empty, orgUser);
+            await _homePageSvc.AcceptValidationAsync(filePath, _tenantContext.OrganizationName ?? string.Empty, batch?.Name ?? string.Empty, orgUser);
 
             return Json(new { success = true });
         }
@@ -461,6 +464,13 @@ public class HomeController : Controller
             return NotFound("No processed invoice for this file.");
 
         var bytes = await _homeExportSvc.BuildDocxAsync(filePath, invoice);
+        var fileName = Path.GetFileName(filePath);
+        var batchName = Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(filePath) ?? string.Empty) ?? string.Empty);
+        await _orgLogSvc.LogValidatedInvoiceDownloadAsync(
+            _tenantContext.OrganizationName ?? string.Empty,
+            batchName,
+            User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
+            fileName);
         var downloadName = Path.GetFileNameWithoutExtension(filePath) + ".docx";
         return File(bytes,
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

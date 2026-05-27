@@ -19,6 +19,7 @@ public interface IHomePageService
         List<FileUpload> uploads,
         string userId,
         bool isGuestOrganization,
+        string organizationName,
         string orgUser,
         string batchName);
     Task<(int Total, int Processed)> BuildOcrStatusAsync(BatchSummary batch, int batchId, int baseline);
@@ -27,7 +28,7 @@ public interface IHomePageService
     Task<BatchDetail?> GetBatchDetailAsync(int batchId);
     Task<InvoiceDto?> LoadInvoiceAsync(string filePath);
     Task SaveInvoiceAsync(string filePath, InvoiceDto invoice);
-    Task AcceptValidationAsync(string filePath, string batchName, string orgUser);
+    Task AcceptValidationAsync(string filePath, string organizationName, string batchName, string orgUser);
     Task<FileListEntry?> BuildInvoiceDotStateAsync(int invoiceId);
     Task<List<(string FileName, InvoiceDto Invoice)>> LoadBatchInvoicesAsync(BatchSummary batch);
     Task RemoveInvoiceFromBatchAsync(string filePath, int sourceBatchId, string batchName, string orgUser);
@@ -46,6 +47,7 @@ public sealed class HomePageService : IHomePageService
     private readonly IConfigurationService _configSvc;
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly IInvoiceActionService _invoiceActionSvc;
+    private readonly IOrganizationActivityLogService _orgLogSvc;
     private readonly IDbContextFactory<KOCRDbContext> _dbFactory;
 
     public HomePageService(
@@ -56,6 +58,7 @@ public sealed class HomePageService : IHomePageService
         IConfigurationService configSvc,
         IOrgConfigService orgConfigSvc,
         IInvoiceActionService invoiceActionSvc,
+        IOrganizationActivityLogService orgLogSvc,
         IDbContextFactory<KOCRDbContext> dbFactory)
     {
         _batchSvc = batchSvc;
@@ -65,6 +68,7 @@ public sealed class HomePageService : IHomePageService
         _configSvc = configSvc;
         _orgConfigSvc = orgConfigSvc;
         _invoiceActionSvc = invoiceActionSvc;
+        _orgLogSvc = orgLogSvc;
         _dbFactory = dbFactory;
     }
 
@@ -106,6 +110,7 @@ public sealed class HomePageService : IHomePageService
         List<FileUpload> uploads,
         string userId,
         bool isGuestOrganization,
+        string organizationName,
         string orgUser,
         string batchName)
     {
@@ -114,12 +119,15 @@ public sealed class HomePageService : IHomePageService
 
         if (result.Success && result.FilesUploaded > 0)
         {
-            var conflicts = result.ConflictingFileNames?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+            var uploadedFileNames = uploads.Take(result.FilesUploaded).Select(u => u.FileName).ToArray();
+            var uploadedNames = uploadedFileNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var upload in uploads)
             {
-                if (!conflicts.Contains(upload.FileName))
+                if (uploadedNames.Contains(upload.FileName))
                     await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Added, upload.FileName, batchName, orgUser);
             }
+
+            await _orgLogSvc.LogInvoiceUploadAsync(organizationName, batchName, orgUser, uploadedFileNames);
         }
 
         return result;
@@ -156,7 +164,7 @@ public sealed class HomePageService : IHomePageService
     public async Task SaveInvoiceAsync(string filePath, InvoiceDto invoice) =>
         await _ocrSvc.SaveInvoiceAsync(filePath, invoice);
 
-    public async Task AcceptValidationAsync(string filePath, string batchName, string orgUser)
+    public async Task AcceptValidationAsync(string filePath, string organizationName, string batchName, string orgUser)
     {
         var invoice = await _ocrSvc.LoadInvoiceAsync(filePath)
             ?? throw new InvalidOperationException("No processed invoice for this file.");
@@ -164,6 +172,7 @@ public sealed class HomePageService : IHomePageService
         invoice.IsValidationAccepted = true;
         await _ocrSvc.SaveInvoiceAsync(filePath, invoice);
         await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Validated, Path.GetFileName(filePath), batchName, orgUser);
+        await _orgLogSvc.LogBatchValidatedAsync(organizationName, batchName, orgUser, Path.GetFileName(filePath));
     }
 
     public async Task<FileListEntry?> BuildInvoiceDotStateAsync(int invoiceId)

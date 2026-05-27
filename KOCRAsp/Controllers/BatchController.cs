@@ -17,6 +17,7 @@ public class BatchController : Controller
     private readonly IBatchChangeNotifier _batchNotifier;
     private readonly IBatchActionService _batchActionSvc;
     private readonly IBatchNotificationService _batchNotificationSvc;
+    private readonly IOrganizationActivityLogService _orgLogSvc;
     private readonly ILogger<BatchController> _logger;
     private readonly ITenantContext _tenantContext;
     private readonly IConfigurationService _configSvc;
@@ -26,6 +27,7 @@ public class BatchController : Controller
         IBatchChangeNotifier batchNotifier,
         IBatchActionService batchActionSvc,
         IBatchNotificationService batchNotificationSvc,
+        IOrganizationActivityLogService orgLogSvc,
         ILogger<BatchController> logger,
         ITenantContext tenantContext,
         IConfigurationService configSvc)
@@ -34,6 +36,7 @@ public class BatchController : Controller
         _batchNotifier        = batchNotifier;
         _batchActionSvc       = batchActionSvc;
         _batchNotificationSvc = batchNotificationSvc;
+        _orgLogSvc            = orgLogSvc;
         _logger               = logger;
         _tenantContext        = tenantContext;
         _configSvc            = configSvc;
@@ -77,6 +80,10 @@ public class BatchController : Controller
                 await _batchActionSvc.LogAsync(
                     BatchActionTypes.Created, name,
                     User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                    User.Identity?.Name ?? string.Empty);
+                await _orgLogSvc.LogBatchCreatedAsync(
+                    User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                    name,
                     User.Identity?.Name ?? string.Empty);
             }
         }
@@ -123,6 +130,10 @@ public class BatchController : Controller
                 BatchActionTypes.Created, name,
                 User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
                 User.Identity?.Name ?? string.Empty);
+            await _orgLogSvc.LogBatchCreatedAsync(
+                User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                name,
+                User.Identity?.Name ?? string.Empty);
             return Json(new { success = true, batchId = result.BatchId });
         }
         catch (Exception ex)
@@ -145,6 +156,10 @@ public class BatchController : Controller
             await _batchActionSvc.LogAsync(
                 BatchActionTypes.Deleted, batchName,
                 User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                User.Identity?.Name ?? string.Empty);
+            await _orgLogSvc.LogBatchMarkedForDeletionAsync(
+                User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                batchName,
                 User.Identity?.Name ?? string.Empty);
             try
             {

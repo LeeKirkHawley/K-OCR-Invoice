@@ -156,6 +156,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IReportingService, ReportingService>();
 builder.Services.AddScoped<IBatchActionService, BatchActionService>();
 builder.Services.AddScoped<IInvoiceActionService, InvoiceActionService>();
+builder.Services.AddScoped<IOrganizationActivityLogService, OrganizationActivityLogService>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
 builder.Services.AddScoped<ISuperAdminDataService, SuperAdminDataService>();
 builder.Services.AddScoped<IOrganizationAdminService, OrganizationAdminService>();
@@ -169,6 +170,7 @@ builder.Services.AddScoped<IBatchCleanupService>(sp =>
         sp.GetRequiredService<IPathService>(),
         databaseSettings,
         sp.GetRequiredService<IBatchNotificationService>(),
+        sp.GetRequiredService<IOrganizationActivityLogService>(),
         sp.GetRequiredService<ILogger<BatchCleanupService>>()));
 builder.Services.AddScoped<IGuestCleanupService, GuestCleanupService>();
 builder.Services.AddHostedService<GuestAccountCleanupService>();

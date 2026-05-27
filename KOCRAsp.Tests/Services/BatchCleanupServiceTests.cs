@@ -61,6 +61,7 @@ public class BatchCleanupServiceTests
                 pathService,
                 new DatabaseSettings(),
                 Mock.Of<IBatchNotificationService>(),
+                new OrganizationActivityLogService(pathService, Mock.Of<ILogger<OrganizationActivityLogService>>()),
                 Mock.Of<ILogger<BatchCleanupService>>());
 
             var deletedCount = await cleanupService.CleanupExpiredBatchesAsync(TimeSpan.FromDays(14));
@@ -76,6 +77,12 @@ public class BatchCleanupServiceTests
                 Assert.Equal(batchName, actions[0].BatchName);
                 Assert.Equal(orgFolderName, actions[0].Organization);
                 Assert.Equal("System", actions[0].OrgUser);
+
+                var logPath = Path.Combine(orgFolder, "activity.log");
+                Assert.True(File.Exists(logPath));
+                var logText = await File.ReadAllTextAsync(logPath);
+                Assert.Contains("BatchDeleted", logText);
+                Assert.Contains(batchName, logText);
             }
         }
         finally

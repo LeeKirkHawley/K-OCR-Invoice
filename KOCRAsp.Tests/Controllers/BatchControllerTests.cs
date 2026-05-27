@@ -20,6 +20,7 @@ public class BatchControllerTests
     private readonly Mock<ILogger<BatchController>> _mockLogger;
     private readonly Mock<IBatchActionService> _mockBatchActionSvc;
     private readonly Mock<IBatchNotificationService> _mockBatchNotificationSvc;
+    private readonly Mock<IOrganizationActivityLogService> _mockOrgLogSvc;
     private readonly Mock<ITenantContext> _mockTenantContext;
     private readonly Mock<IConfigurationService> _mockConfigSvc;
     private readonly BatchController _controller;
@@ -35,6 +36,7 @@ public class BatchControllerTests
         _mockLogger               = new Mock<ILogger<BatchController>>();
         _mockBatchActionSvc       = new Mock<IBatchActionService>();
         _mockBatchNotificationSvc = new Mock<IBatchNotificationService>();
+        _mockOrgLogSvc            = new Mock<IOrganizationActivityLogService>();
         _mockTenantContext        = new Mock<ITenantContext>();
         _mockConfigSvc            = new Mock<IConfigurationService>();
         _notifier = new BatchChangeNotifier();
@@ -43,6 +45,7 @@ public class BatchControllerTests
             _notifier,
             _mockBatchActionSvc.Object,
             _mockBatchNotificationSvc.Object,
+            _mockOrgLogSvc.Object,
             _mockLogger.Object,
             _mockTenantContext.Object,
             _mockConfigSvc.Object);
@@ -77,6 +80,9 @@ public class BatchControllerTests
         _mockBatchSvc
             .Setup(s => s.CreateBatchAsync(It.IsAny<CreateBatchRequest>()))
             .ReturnsAsync(CreateBatchResult.Ok(42));
+        _mockOrgLogSvc
+            .Setup(s => s.LogBatchCreatedAsync(OrgName, "My Batch", It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
 
         var result = await _controller.Create("My Batch");
 
@@ -90,6 +96,9 @@ public class BatchControllerTests
         _mockBatchSvc
             .Setup(s => s.DeleteBatchAsync(1, UserId))
             .ReturnsAsync("My Batch");
+        _mockOrgLogSvc
+            .Setup(s => s.LogBatchMarkedForDeletionAsync(OrgName, "My Batch", It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
 
         var result = await _controller.Delete(1);
 

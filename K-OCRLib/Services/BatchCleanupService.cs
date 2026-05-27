@@ -11,17 +11,20 @@ public class BatchCleanupService : IBatchCleanupService
     private readonly IPathService _paths;
     private readonly DatabaseSettings _settings;
     private readonly IBatchNotificationService _batchNotificationSvc;
+    private readonly IOrganizationActivityLogService _orgLogSvc;
     private readonly ILogger<BatchCleanupService> _logger;
 
     public BatchCleanupService(
         IPathService paths,
         DatabaseSettings settings,
         IBatchNotificationService batchNotificationSvc,
+        IOrganizationActivityLogService orgLogSvc,
         ILogger<BatchCleanupService> logger)
     {
         _paths                = paths;
         _settings             = settings;
         _batchNotificationSvc = batchNotificationSvc;
+        _orgLogSvc            = orgLogSvc;
         _logger               = logger;
     }
 
@@ -94,6 +97,8 @@ public class BatchCleanupService : IBatchCleanupService
 
                 foreach (var batchName in deletedBatchNames)
                 {
+                    await _orgLogSvc.LogBatchDeletedAsync(orgName, batchName, "System");
+
                     try
                     {
                         context.BatchActions.Add(new BatchAction
