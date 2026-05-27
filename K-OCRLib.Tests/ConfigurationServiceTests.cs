@@ -17,6 +17,8 @@ public class ConfigurationServiceTests
         Assert.Equal(3, settings.MaxConcurrentRequests);
         Assert.Equal(7, settings.GuestAccountRetentionDays);
         Assert.Equal(2, settings.GuestMaxBatches);
+        Assert.Null(settings.GoogleAnalyticsMeasurementId);
+        Assert.Null(settings.SearchConsoleVerificationToken);
         Assert.NotNull(settings.Limits);
         Assert.NotNull(settings.Email);
     }
@@ -58,6 +60,8 @@ public class ConfigurationServiceTests
                 {
                     OCRProvider = "Tesseract",
                     GuestMaxBatches = 5,
+                    GoogleAnalyticsMeasurementId = "G-TEST123",
+                    SearchConsoleVerificationToken = "verify-token",
                     Limits = new LimitsSection
                     {
                         Guest = new GuestLimits { MaxBatches = 6, MaxInvoicesPerBatch = 7, MaxPagesPerInvoice = 8 },
@@ -70,6 +74,8 @@ public class ConfigurationServiceTests
                 var root = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
                 Assert.Equal("*", root["AllowedHosts"]!.GetValue<string>());
                 Assert.Equal("Tesseract", root["OCRProvider"]!.GetValue<string>());
+                Assert.Equal("G-TEST123", root["GoogleAnalyticsMeasurementId"]!.GetValue<string>());
+                Assert.Equal("verify-token", root["SearchConsoleVerificationToken"]!.GetValue<string>());
                 Assert.Equal(6, root["Limits"]!["Guest"]!["MaxBatches"]!.GetValue<int>());
                 Assert.Equal(9, root["Limits"]!["User"]!["MaxInvoicesPerBatch"]!.GetValue<int>());
             }
@@ -100,6 +106,8 @@ public class ConfigurationServiceTests
 
                 Assert.NotNull(settings.Email);
                 Assert.Equal("K-OCR", settings.Email.FromName);
+                Assert.Null(settings.GoogleAnalyticsMeasurementId);
+                Assert.Null(settings.SearchConsoleVerificationToken);
             }
             finally
             {

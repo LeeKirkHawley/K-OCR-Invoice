@@ -10,6 +10,8 @@ public class AppSettings
     public int MaxConcurrentRequests { get; set; } = 3;
     public int GuestAccountRetentionDays { get; set; } = 7;
     public int DeletedBatchRetentionDays { get; set; } = 14;
+    public string? GoogleAnalyticsMeasurementId { get; set; }
+    public string? SearchConsoleVerificationToken { get; set; }
 
     /// <summary>Per-user-type limits for batches, invoices, and pages.</summary>
     public LimitsSection Limits { get; set; } = new();
@@ -107,4 +109,3 @@ public class EmailSettings
     public string? FromAddress { get; set; }
     public string? FromName { get; set; } = "K-OCR";
 }
-

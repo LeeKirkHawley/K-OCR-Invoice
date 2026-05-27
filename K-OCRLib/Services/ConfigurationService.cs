@@ -27,6 +27,8 @@ public class ConfigurationService : IConfigurationService
             MaxConcurrentRequests = 3,
             GuestAccountRetentionDays = 7,
             GuestMaxBatches = 2,
+            GoogleAnalyticsMeasurementId = null,
+            SearchConsoleVerificationToken = null,
             Limits = new K_OCR.Configuration.LimitsSection()
         };
     }

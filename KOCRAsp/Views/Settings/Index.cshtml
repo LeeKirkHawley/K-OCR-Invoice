@@ -148,6 +148,27 @@
         </div>
     </div>
 
+    <!-- Analytics -->
+    <div class="card mb-3">
+        <div class="card-header"><strong>Analytics</strong></div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="GoogleAnalyticsMeasurementId" class="form-label">Google Analytics Measurement ID</label>
+                    <input asp-for="GoogleAnalyticsMeasurementId" type="text"
+                           class="form-control" placeholder="G-XXXXXXXXXX" />
+                    <div class="form-text">Enables GA4 on public and authenticated pages when set.</div>
+                </div>
+                <div class="col-md-6">
+                    <label asp-for="SearchConsoleVerificationToken" class="form-label">Search Console Verification Token</label>
+                    <input asp-for="SearchConsoleVerificationToken" type="text"
+                           class="form-control" placeholder="google-site-verification token" />
+                    <div class="form-text">Adds the Google site verification meta tag when set.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">Save Settings</button>
         <a asp-controller="EmailConfig" asp-action="Index" class="btn btn-outline-secondary">📧 Email Config</a>
