@@ -155,7 +155,7 @@ jobs:
           username: kirkhawley
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./publish/
-          server-dir: /hardscrabble.org/Invoice
+          server-dir: /hardscrabble.org/Invoice/
           # Only upload changed files; does NOT wipe the server directory
           # dangerous-clean-slate would also delete KOCRBase data — keep false
           dangerous-clean-slate: false
