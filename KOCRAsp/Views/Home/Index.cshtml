@@ -676,7 +676,21 @@
         { key: 'Total',         label: 'Total',     prop: 'total'         },
     ];
 
-    function fmtMoney(v) { return v != null ? '$' + Number(v).toFixed(2) : ''; }
+    const HEADER_MONEY_FIELDS = new Set(['subtotal', 'totalTax', 'shipping', 'total']);
+    const ITEM_MONEY_FIELDS   = new Set(['unitPrice', 'amount']);
+
+    function stripCurrencySymbols(v) {
+        return String(v ?? '')
+            .replace(/[^\d.,\-()]/g, '')
+            .trim();
+    }
+
+    function fmtMoney(v) {
+        const stripped = stripCurrencySymbols(v);
+        if (!stripped) return '';
+        const n = Number(stripped.replace(/,/g, ''));
+        return Number.isFinite(n) ? n.toFixed(2) : stripped;
+    }
 
     function renderInvoiceFields(inv) {
         const container = document.getElementById('invoiceFields');
@@ -730,11 +744,13 @@
 
                 const vtip = t => `data-vtip="${escapeHtml(t.value)}" data-vtip-errors="${escapeHtml(t.errors.join('\n'))}"`;
                 const sc = f => f ? ' inv-suspect-input' : '';
+                const unitPrice = fmtMoney(item.unitPrice);
+                const amount    = fmtMoney(item.amount);
                 html += `<tr class="inv-field-row${(dSusp || qSusp || uSusp || aSusp) ? ' inv-suspect-row' : ''}" data-fieldkey="${fk}">
                              <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
-                             <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${item.unitPrice ?? ''}" /></td>
-                             <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="amount"      data-fieldkey="${fk}" value="${item.amount ?? ''}" /></td>
+                             <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${escapeHtml(unitPrice)}" /></td>
+                             <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="amount"      data-fieldkey="${fk}" value="${escapeHtml(amount)}" /></td>
                          </tr>`;
             }
             html += '</tbody></table></div>';
@@ -767,12 +783,18 @@
         allInputs.forEach((input, idx) => {
             input.addEventListener('change', () => {
                 const itemIdx = input.dataset.itemIdx;
+                const field   = input.dataset.field;
                 if (itemIdx !== undefined) {
                     const i = parseInt(itemIdx);
-                    if (_currentInvoice?.items?.[i] != null)
-                        _currentInvoice.items[i][input.dataset.field] = input.value;
+                    if (_currentInvoice?.items?.[i] != null) {
+                        const value = ITEM_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
+                        input.value = value;
+                        _currentInvoice.items[i][field] = value;
+                    }
                 } else {
-                    applyFieldEdit(input.dataset.field, input.value);
+                    const value = HEADER_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
+                    input.value = value;
+                    applyFieldEdit(field, value);
                 }
             });
             input.addEventListener('focus', () => selectField(input.dataset.fieldkey));
