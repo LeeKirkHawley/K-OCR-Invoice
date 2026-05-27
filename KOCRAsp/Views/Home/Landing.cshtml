@@ -105,3 +105,70 @@
         </div>
     </div>
 </section>
+
+@section Scripts {
+    <script type="application/ld+json">
+        @{
+            var siteUrl = $"{ViewContext.HttpContext.Request.Scheme}://{ViewContext.HttpContext.Request.Host}{ViewContext.HttpContext.Request.PathBase}/";
+            var schema = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["@context"] = "https://schema.org",
+                ["@graph"] = new object[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["@type"] = "WebSite",
+                        ["name"] = "Hardscrabble Invoice",
+                        ["url"] = siteUrl
+                    },
+                    new Dictionary<string, object?>
+                    {
+                        ["@type"] = "SoftwareApplication",
+                        ["name"] = "Hardscrabble Invoice",
+                        ["applicationCategory"] = "BusinessApplication",
+                        ["operatingSystem"] = "Web",
+                        ["description"] = "Invoice processing app for uploading batches, extracting invoice data, and reviewing OCR output."
+                    },
+                    new Dictionary<string, object?>
+                    {
+                        ["@type"] = "FAQPage",
+                        ["mainEntity"] = new object[]
+                        {
+                            new Dictionary<string, object?>
+                            {
+                                ["@type"] = "Question",
+                                ["name"] = "What is Hardscrabble Invoice?",
+                                ["acceptedAnswer"] = new Dictionary<string, object?>
+                                {
+                                    ["@type"] = "Answer",
+                                    ["text"] = "It is an invoice processing app for uploading batches, extracting invoice data, and reviewing OCR output."
+                                }
+                            },
+                            new Dictionary<string, object?>
+                            {
+                                ["@type"] = "Question",
+                                ["name"] = "Can I try it without a full account?",
+                                ["acceptedAnswer"] = new Dictionary<string, object?>
+                                {
+                                    ["@type"] = "Answer",
+                                    ["text"] = "Yes. Use the guest login flow from the sign-in page to create a temporary account."
+                                }
+                            },
+                            new Dictionary<string, object?>
+                            {
+                                ["@type"] = "Question",
+                                ["name"] = "What happens after sign in?",
+                                ["acceptedAnswer"] = new Dictionary<string, object?>
+                                {
+                                    ["@type"] = "Answer",
+                                    ["text"] = "You go to the invoice processing workspace where batches, uploads, OCR, and validation tools are available."
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        @Html.Raw(schema)
+    </script>
+}
