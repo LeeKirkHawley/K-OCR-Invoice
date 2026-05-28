@@ -33,5 +33,6 @@ public sealed class GuestAccountCleanupService : BackgroundService
         var guestCleanupService = scope.ServiceProvider.GetRequiredService<IGuestCleanupService>();
         return await guestCleanupService.RunCleanupCycleAsync(cancellationToken);
     }
+
 }
 
