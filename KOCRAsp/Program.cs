@@ -50,6 +50,17 @@ Log.Logger.Information("Starting KOCRAsp");
 // ── Database ─────────────────────────────────────────────────────────────────
 var databaseSettings = configuration.GetSection("Database").Get<DatabaseSettings>()
     ?? new DatabaseSettings();
+var usesSqlServerForMaster = databaseSettings.Provider?.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) == true;
+if (!usesSqlServerForMaster)
+{
+    throw new InvalidOperationException(
+        "Master database must use SQL Server. Set Database:Provider to 'SqlServer' and configure Database:ConnectionString.");
+}
+if (string.IsNullOrWhiteSpace(databaseSettings.ConnectionString))
+{
+    throw new InvalidOperationException(
+        "Database:ConnectionString must be configured for SQL Server master database.");
+}
 
 // Per-org database factory: defers context creation to avoid org-routing failures
 // in super-admin request scopes.
@@ -66,35 +77,19 @@ builder.Services.AddScoped<DatabaseService>();
 builder.Services.Configure<HostOptions>(opts =>
     opts.ShutdownTimeout = TimeSpan.FromMinutes(2));
 
-// Central identity database — provider selected by DatabaseSettings.Provider
+// Central identity database (master) — SQL Server only
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    var cs = databaseSettings.ConnectionString;
-    if (databaseSettings.Provider?.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) == true)
-    {
-        if (string.IsNullOrWhiteSpace(cs))
-            throw new InvalidOperationException(
-                "Database:ConnectionString must be set when Provider is SqlServer. " +
-                "Ensure ASPNETCORE_ENVIRONMENT is set correctly and Database:ConnectionString is configured.");
-        options.UseSqlServer(cs);
-    }
-    else
-    {
-        options.UseSqlite(cs ?? "Data Source=kocr.db");
-    }
+    options.UseSqlServer(databaseSettings.ConnectionString);
 
     if (databaseSettings.EnableDetailedErrors)       options.EnableDetailedErrors();
     if (databaseSettings.EnableSensitiveDataLogging) options.EnableSensitiveDataLogging();
 });
 
-// Reporting (master) DB — same provider and connection as the identity DB
+// Reporting (master) DB — SQL Server only, same connection as identity DB
 builder.Services.AddDbContext<ReportingDbContext>(options =>
 {
-    var cs = databaseSettings.ConnectionString;
-    if (databaseSettings.Provider?.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) == true)
-        options.UseSqlServer(cs!);
-    else
-        options.UseSqlite(cs ?? "Data Source=kocr-reporting.db");
+    options.UseSqlServer(databaseSettings.ConnectionString);
 
     if (databaseSettings.EnableDetailedErrors)       options.EnableDetailedErrors();
     if (databaseSettings.EnableSensitiveDataLogging) options.EnableSensitiveDataLogging();

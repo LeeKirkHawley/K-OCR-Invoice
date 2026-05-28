@@ -8,6 +8,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      ASPNETCORE_ENVIRONMENT: Production
+      DATABASE__PROVIDER: SqlServer
+      DATABASE__CONNECTIONSTRING: ${{ secrets.DB_CONNECTION_STRING }}
 
     steps:
       - name: Checkout
@@ -30,7 +34,6 @@ jobs:
       # Writes production appsettings.json from GitHub Secrets. No secrets in committed files.
       - name: Write production appsettings.json
         env:
-          DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
           AZURE_COGNITIVE_SERVICES_KEY: ${{ secrets.AZURE_COGNITIVE_SERVICES_KEY }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
@@ -79,8 +82,8 @@ jobs:
               "FromName":                  email.get("FromName", "K-OCR")
             },
             "Database": {
-              "Provider": "SqlServer",
-              "ConnectionString": os.environ["DB_CONNECTION_STRING"],
+              "Provider": os.environ.get("DATABASE__PROVIDER", "SqlServer"),
+              "ConnectionString": os.environ["DATABASE__CONNECTIONSTRING"],
               "EnableSensitiveDataLogging": False,
               "EnableDetailedErrors": False
             },
@@ -114,7 +117,14 @@ jobs:
       - name: Write web.config
         run: |
           python3 << 'EOF'
-          content = '''<?xml version="1.0" encoding="utf-8"?>
+          import os
+          from xml.sax.saxutils import escape
+
+          aspnetcore_environment = escape(os.environ.get("ASPNETCORE_ENVIRONMENT", "Production"))
+          database_provider = escape(os.environ.get("DATABASE__PROVIDER", "SqlServer"))
+          database_connection_string = escape(os.environ["DATABASE__CONNECTIONSTRING"])
+
+          content = f'''<?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <location path="." inheritInChildApplications="false">
               <system.webServer>
@@ -128,7 +138,9 @@ jobs:
                             stdoutLogFile=".\\logs\\stdout"
                             hostingModel="outofprocess">
                   <environmentVariables>
-                    <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
+                    <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="{aspnetcore_environment}" />
+                    <environmentVariable name="DATABASE__PROVIDER" value="{database_provider}" />
+                    <environmentVariable name="DATABASE__CONNECTIONSTRING" value="{database_connection_string}" />
                     <environmentVariable name="ASPNETCORE_DETAILEDERRORS" value="true" />
                   </environmentVariables>
                   <handlerSettings>
