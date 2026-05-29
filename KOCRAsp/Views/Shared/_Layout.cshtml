@@ -90,7 +90,7 @@
                     <form method="post" asp-controller="Auth" asp-action="SwitchOrganization" class="d-inline-flex align-items-center">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="returnUrl" value="@returnUrl" />
-                        <select name="orgId" class="form-select form-select-sm bg-dark text-light border-secondary" onchange="this.form.submit()">
+                        <select name="orgId" class="form-select form-select-sm bg-dark text-light border-secondary org-switcher-select" onchange="this.form.submit()">
                             @foreach (var opt in orgOptions)
                             {
                                 <option value="@opt.OrgId" selected="@(opt.OrgId == activeOrgId ? "selected" : null)">@opt.OrgName</option>
