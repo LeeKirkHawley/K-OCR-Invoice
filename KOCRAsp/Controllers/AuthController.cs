@@ -1,10 +1,14 @@
 using K_OCR.Identity;
+using System.Security.Claims;
 using K_OCR.Models.Api.SuperAdmin;
+using K_OCR.Security;
 using KOCRAsp.Models;
+using Microsoft.AspNetCore.Authorization;
 using K_OCR.Services;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace KOCRAsp.Controllers;
 
@@ -34,15 +38,43 @@ public class AuthController : Controller
     }
 
     [HttpGet]
-    [Microsoft.AspNetCore.Authorization.Authorize]
+    [Authorize]
     public async Task<IActionResult> GuestExpiryStatus()
     {
-        var user = await _userManager.GetUserAsync(User);
-        if (user?.OrganizationId == null)
+        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId);
+        if (string.IsNullOrWhiteSpace(orgId))
             return Json(new { isPendingDeletion = false });
 
-        var isPending = await _superAdminSvc.IsOrgMarkedForDeletionAsync(user.OrganizationId);
+        var isPending = await _superAdminSvc.IsOrgMarkedForDeletionAsync(orgId);
         return Json(new { isPendingDeletion = isPending });
+    }
+
+    [HttpPost]
+    [Authorize]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SwitchOrganization(string orgId, string? returnUrl = null)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null || string.IsNullOrWhiteSpace(orgId))
+            return Forbid();
+
+        var hasMembership = await _userManager.Users
+            .Where(u => u.Id == user.Id)
+            .SelectMany(u => u.OrganizationMemberships)
+            .AnyAsync(m => m.OrganizationId == orgId && m.Organization.IsActive);
+
+        if (!hasMembership)
+            return Forbid();
+
+        user.OrganizationId = orgId;
+        await _userManager.UpdateAsync(user);
+        await _signInManager.RefreshSignInAsync(user);
+        HttpContext.Session.Remove("CurrentBatchId");
+
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            return Redirect(returnUrl);
+
+        return RedirectToAction("Index", "Home");
     }
 
     [HttpGet]
@@ -219,8 +251,25 @@ public class AuthController : Controller
         try
         {
             var user = await _userManager.FindByEmailAsync(email);
-            if (user?.OrganizationId is null) return StripeStatusResult.NotApplicable;
-            return await _superAdminSvc.SyncStripeStatusAsync(user.OrganizationId);
+            if (user is null) return StripeStatusResult.NotApplicable;
+
+            var fullUser = await _userManager.Users
+                .Include(u => u.OrganizationMemberships)
+                    .ThenInclude(m => m.Organization)
+                .FirstOrDefaultAsync(u => u.Id == user.Id);
+
+            var activeOrgId = fullUser?.OrganizationMemberships
+                .Where(m => m.Organization.IsActive)
+                .Select(m => m.OrganizationId)
+                .FirstOrDefault(id => id == fullUser.OrganizationId)
+                ?? fullUser?.OrganizationMemberships
+                    .Where(m => m.Organization.IsActive)
+                    .OrderBy(m => m.Organization.Name)
+                    .Select(m => m.OrganizationId)
+                    .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(activeOrgId)) return StripeStatusResult.NotApplicable;
+            return await _superAdminSvc.SyncStripeStatusAsync(activeOrgId);
         }
         catch (Exception ex)
         {

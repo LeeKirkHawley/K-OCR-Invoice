@@ -1,4 +1,5 @@
 using K_OCR.Data;
+using K_OCR.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -31,9 +32,11 @@ public class BatchNotificationService : IBatchNotificationService
     {
         var retentionDays = _configuration.GetValue<int>("DeletedBatchRetentionDays", 14);
 
-        var admins = await _appDb.Users
-            .Where(u => u.OrganizationId == orgId && u.IsOrganizationAdmin)
-            .Select(u => new { u.Email, u.FullName })
+        var admins = await _appDb.UserOrganizationMemberships
+            .AsNoTracking()
+            .Include(m => m.User)
+            .Where(m => m.OrganizationId == orgId && m.Role == RoleNames.OrganizationAdmin)
+            .Select(m => new { m.User.Email, m.User.FullName })
             .ToListAsync(ct);
 
         var org = await _appDb.Organizations
@@ -69,7 +72,8 @@ public class BatchNotificationService : IBatchNotificationService
     public async Task NotifyBatchHardDeletedAsync(string orgSanitizedName, string batchName, CancellationToken ct = default)
     {
         var allOrgs = await _appDb.Organizations
-            .Include(o => o.Users)
+            .Include(o => o.UserMemberships)
+                .ThenInclude(m => m.User)
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -84,7 +88,9 @@ public class BatchNotificationService : IBatchNotificationService
             return;
         }
 
-        foreach (var admin in org.Users.Where(u => u.IsOrganizationAdmin))
+        foreach (var admin in org.UserMemberships
+            .Where(m => m.Role == RoleNames.OrganizationAdmin)
+            .Select(m => m.User))
         {
             if (string.IsNullOrWhiteSpace(admin.Email))
                 continue;

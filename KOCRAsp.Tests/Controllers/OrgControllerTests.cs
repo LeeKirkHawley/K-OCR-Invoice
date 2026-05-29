@@ -2,12 +2,15 @@ using K_OCR.Configuration;
 using K_OCR.Data;
 using K_OCR.Services;
 using K_OCR.Identity;
+using K_OCR.Security;
 using KOCRAsp.Controllers;
 using K_OCR.Models.Api.OrganizationAdmin;
 using K_OCR.Models.Api.SuperAdmin;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -16,11 +19,12 @@ namespace KOCRAsp.Tests.Controllers;
 public class OrgConfigControllerTests
 {
     private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
-    private readonly Mock<ITenantContext> _mockTenantContext;
     private readonly Mock<ISuperAdminService> _mockSuperAdminSvc;
     private readonly Mock<IOrganizationAdminService> _mockOrgAdminSvc;
     private readonly Mock<UserManager<ApplicationUser>> _mockUserManager;
     private readonly Mock<ILogger<OrgConfigController>> _mockLogger;
+    private readonly SqliteConnection _connection;
+    private readonly ApplicationDbContext _dbContext;
     private readonly OrgConfigController _controller;
 
     private const string OrgId   = "org-id-123";
@@ -29,7 +33,6 @@ public class OrgConfigControllerTests
     public OrgConfigControllerTests()
     {
         _mockOrgConfigSvc  = new Mock<IOrgConfigService>();
-        _mockTenantContext = new Mock<ITenantContext>();
         _mockSuperAdminSvc = new Mock<ISuperAdminService>();
         _mockOrgAdminSvc   = new Mock<IOrganizationAdminService>();
         _mockUserManager   = new Mock<UserManager<ApplicationUser>>(
@@ -37,14 +40,36 @@ public class OrgConfigControllerTests
             null!, null!, null!, null!, null!, null!, null!, null!);
         _mockLogger = new Mock<ILogger<OrgConfigController>>();
 
-        _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
-        _mockTenantContext.Setup(t => t.IsSuperAdmin).Returns(false);
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
+        var dbOptions = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+        _dbContext = new ApplicationDbContext(dbOptions);
+        _dbContext.Database.EnsureCreated();
+        _dbContext.Users.Add(new ApplicationUser
+        {
+            Id = "user-id-123",
+            UserName = "org-admin@test.com",
+            Email = "org-admin@test.com",
+            FullName = "Org Admin",
+            OrganizationId = OrgId
+        });
+        _dbContext.Organizations.Add(new Organization { Id = OrgId, Name = OrgName, IsActive = true });
+        _dbContext.UserOrganizationMemberships.Add(new UserOrganizationMembership
+        {
+            UserId = "user-id-123",
+            OrganizationId = OrgId,
+            Role = RoleNames.OrganizationAdmin
+        });
+        _dbContext.SaveChanges();
+
         _mockOrgConfigSvc.Setup(s => s.LoadAsync(OrgName))
                          .ReturnsAsync(new OrgConfig { MinConfidenceThreshold = 0.8 });
 
         _controller = new OrgConfigController(
+            _dbContext,
             _mockOrgConfigSvc.Object,
-            _mockTenantContext.Object,
             _mockSuperAdminSvc.Object,
             _mockOrgAdminSvc.Object,
             _mockUserManager.Object,

@@ -19,7 +19,8 @@ public class Organization
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
-    public ICollection<ApplicationUser> Users { get; set; } = new List<ApplicationUser>();
+    public ICollection<UserOrganizationMembership> UserMemberships { get; set; } =
+        new List<UserOrganizationMembership>();
 
     // Stripe billing
     public string? StripeCustomerId { get; set; }

@@ -69,20 +69,21 @@ public class AdminServiceTests
                 UserName = "user@test.com",
                 Email = "user@test.com",
                 FullName = "User One",
-                OrganizationId = org.Id,
-                IsOrganizationAdmin = true
+                OrganizationId = org.Id
             };
             db.Organizations.Add(org);
             db.Users.Add(user);
+            db.UserOrganizationMemberships.Add(new UserOrganizationMembership
+            {
+                UserId = user.Id,
+                OrganizationId = org.Id,
+                Role = RoleNames.OrganizationAdmin
+            });
             await db.SaveChangesAsync();
 
             var userManager = provider.GetRequiredService<UserManager<ApplicationUser>>();
-            var roleManager = provider.GetRequiredService<RoleManager<IdentityRole>>();
             var email = new Mock<IEmailService>();
-            var service = new OrganizationAdminService(db, userManager, roleManager, email.Object, Mock.Of<ILogger<OrganizationAdminService>>());
-
-            await roleManager.CreateAsync(new IdentityRole(RoleNames.OrganizationAdmin));
-            await userManager.AddToRoleAsync(user, RoleNames.OrganizationAdmin);
+            var service = new OrganizationAdminService(db, userManager, email.Object, Mock.Of<ILogger<OrganizationAdminService>>());
 
             var users = await service.GetOrgUsersAsync(org.Id);
 
@@ -108,8 +109,7 @@ public class AdminServiceTests
             await db.SaveChangesAsync();
 
             var userManager = provider.GetRequiredService<UserManager<ApplicationUser>>();
-            var roleManager = provider.GetRequiredService<RoleManager<IdentityRole>>();
-            var service = new OrganizationAdminService(db, userManager, roleManager, Mock.Of<IEmailService>(), Mock.Of<ILogger<OrganizationAdminService>>());
+            var service = new OrganizationAdminService(db, userManager, Mock.Of<IEmailService>(), Mock.Of<ILogger<OrganizationAdminService>>());
 
             await Assert.ThrowsAsync<ArgumentException>(() => service.InviteUserAsync(
                 org.Id,

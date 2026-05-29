@@ -1,9 +1,13 @@
 @using Microsoft.AspNetCore.Antiforgery
+@using System.Security.Claims
+@using K_OCR.Data
 @using K_OCR.Security
 @using KOCRAsp.Infrastructure
+@using Microsoft.EntityFrameworkCore
 @inject IAntiforgery Antiforgery
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@inject ApplicationDbContext AppDb
 @{
     var hideNav = ViewData["HideNav"] as bool? == true;
     var allowIndexing = ViewData["AllowIndexing"] as bool? == true;
@@ -19,6 +23,24 @@
             ? pageTitle
             : $"{pageTitle} – Hardscrabble Invoice";
     var canonicalUrl = $"{request.Scheme}://{request.Host}{request.PathBase}{canonicalPath}";
+    var activeOrgId = User.FindFirst(AppClaimTypes.OrganizationId)?.Value;
+    var activeTenantName = User.FindFirst(AppClaimTypes.TenantName)?.Value;
+    var returnUrl = $"{request.PathBase}{request.Path}{request.QueryString}";
+    var orgOptions = Array.Empty<(string OrgId, string OrgName)>();
+    if (User.Identity?.IsAuthenticated == true)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            var options = await AppDb.UserOrganizationMemberships
+                .AsNoTracking()
+                .Where(m => m.UserId == userId && m.Organization.IsActive)
+                .OrderBy(m => m.Organization.Name)
+                .Select(m => new { m.OrganizationId, OrgName = m.Organization.Name })
+                .ToListAsync();
+            orgOptions = options.Select(o => (o.OrganizationId, o.OrgName)).ToArray();
+        }
+    }
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -62,20 +84,30 @@
         <nav class="navbar navbar-dark bg-dark fixed-top px-3">
             <div class="d-flex align-items-center">
                 <a class="navbar-brand fw-bold mb-0" href="/">Hardscrabble Invoice</a>
-                @{
-                    var _tenantName = User.Identity?.IsAuthenticated == true ? User.FindFirst("k-ocr:tenant-name")?.Value : null;
-                    if (_tenantName == "Global") _tenantName = null;
-                }
-                @if (!string.IsNullOrEmpty(_tenantName))
+                @if (orgOptions.Length > 0)
                 {
                     <span class="text-secondary px-2">–</span>
-                    <span class="text-light">@_tenantName</span>
+                    <form method="post" asp-controller="Auth" asp-action="SwitchOrganization" class="d-inline-flex align-items-center">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="returnUrl" value="@returnUrl" />
+                        <select name="orgId" class="form-select form-select-sm bg-dark text-light border-secondary" onchange="this.form.submit()">
+                            @foreach (var opt in orgOptions)
+                            {
+                                <option value="@opt.OrgId" selected="@(opt.OrgId == activeOrgId ? "selected" : null)">@opt.OrgName</option>
+                            }
+                        </select>
+                    </form>
+                }
+                else if (!string.IsNullOrEmpty(activeTenantName) && activeTenantName != "Global")
+                {
+                    <span class="text-secondary px-2">–</span>
+                    <span class="text-light">@activeTenantName</span>
                 }
             </div>
             @if (User.Identity?.IsAuthenticated == true)
             {
                 <div class="d-flex align-items-center gap-3 ms-auto">
-                    @if (User.IsInRole(RoleNames.OrganizationAdmin) || User.IsInRole(RoleNames.SuperAdmin))
+                    @if (User.IsActiveOrganizationAdmin())
                     {
                         <a class="nav-link text-light small" asp-controller="OrgConfig" asp-action="Index">🏢 Org Config</a>
                     }

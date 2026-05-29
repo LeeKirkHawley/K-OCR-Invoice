@@ -7,33 +7,40 @@ using K_OCR.Services;
 using KOCRAsp.Models;
 using K_OCR.Models.Api.OrganizationAdmin;
 using K_OCR.Models.Api.SuperAdmin;
-using KOCRAsp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace KOCRAsp.Controllers;
 
-[Authorize(Roles = "OrganizationAdmin,SuperAdmin")]
+[Authorize(Policy = "OrgAdminOrSuperAdmin")]
 public class OrgConfigController : Controller
 {
+    private static readonly HashSet<string> AllowedOrgRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        RoleNames.OrganizationAdmin,
+        RoleNames.OrganizationValidator,
+        RoleNames.OrganizationUser
+    };
+
+    private readonly ApplicationDbContext _dbContext;
     private readonly IOrgConfigService _orgConfigSvc;
-    private readonly ITenantContext _tenantContext;
     private readonly ISuperAdminService _superAdminSvc;
     private readonly IOrganizationAdminService _orgAdminSvc;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<OrgConfigController> _logger;
 
     public OrgConfigController(
+        ApplicationDbContext dbContext,
         IOrgConfigService orgConfigSvc,
-        ITenantContext tenantContext,
         ISuperAdminService superAdminSvc,
         IOrganizationAdminService orgAdminSvc,
         UserManager<ApplicationUser> userManager,
         ILogger<OrgConfigController> logger)
     {
+        _dbContext   = dbContext;
         _orgConfigSvc  = orgConfigSvc;
-        _tenantContext = tenantContext;
         _superAdminSvc = superAdminSvc;
         _orgAdminSvc   = orgAdminSvc;
         _userManager   = userManager;
@@ -63,7 +70,7 @@ public class OrgConfigController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Save(OrgConfig model, string? orgId = null)
     {
-        var (orgName, _, _) = await ResolveOrgAsync(orgId);
+        var (orgName, _, selectedOrgId) = await ResolveOrgAsync(orgId);
 
         if (orgName is null)
             return NotFound("Organization not found.");
@@ -79,7 +86,7 @@ public class OrgConfigController : Controller
             TempData["Error"] = ex.Message;
         }
 
-        return RedirectToAction(nameof(Index), orgId is null ? null : new { orgId });
+        return RedirectToAction(nameof(Index), selectedOrgId is null ? null : new { orgId = selectedOrgId });
     }
 
     // ── User management API ───────────────────────────────────────────────────
@@ -88,7 +95,7 @@ public class OrgConfigController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> GetUsers(string? orgId = null)
     {
-        var resolvedOrgId = ResolveOrgId(orgId);
+        var resolvedOrgId = await ResolveOrgIdAsync(orgId);
         if (resolvedOrgId is null)
             return Json(Array.Empty<object>());
 
@@ -100,7 +107,7 @@ public class OrgConfigController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> InviteUser([FromBody] InviteUserRequest request, [FromQuery] string? orgId = null)
     {
-        var resolvedOrgId = ResolveOrgId(orgId);
+        var resolvedOrgId = await ResolveOrgIdAsync(orgId);
         if (resolvedOrgId is null)
             return Json(new { success = false, error = "Organization not found." });
 
@@ -127,7 +134,7 @@ public class OrgConfigController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> RemoveUser([FromBody] RemoveUserRequest request, [FromQuery] string? orgId = null)
     {
-        var resolvedOrgId = ResolveOrgId(orgId);
+        var resolvedOrgId = await ResolveOrgIdAsync(orgId);
         if (resolvedOrgId is null)
             return Json(new { success = false, error = "Organization not found." });
 
@@ -147,26 +154,26 @@ public class OrgConfigController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> ChangeRole([FromBody] ChangeRoleRequest request, [FromQuery] string? orgId = null)
     {
-        var resolvedOrgId = ResolveOrgId(orgId);
+        var resolvedOrgId = await ResolveOrgIdAsync(orgId);
         if (resolvedOrgId is null)
             return Json(new { success = false, error = "Organization not found." });
+        if (!AllowedOrgRoles.Contains(request.NewRole))
+            return Json(new { success = false, error = "Invalid role." });
 
         try
         {
-            var user = await _userManager.FindByIdAsync(request.UserId);
-            if (user is null)
+            var membership = await _dbContext.UserOrganizationMemberships
+                .FirstOrDefaultAsync(m => m.UserId == request.UserId && m.OrganizationId == resolvedOrgId);
+            if (membership is null)
                 return Json(new { success = false, error = "User not found." });
 
-            if (user.OrganizationId != resolvedOrgId && !User.IsInRole(RoleNames.SuperAdmin))
-                return Json(new { success = false, error = "Access denied." });
+            membership.Role = request.NewRole;
+            await _dbContext.SaveChangesAsync();
 
-            var currentRoles = await _userManager.GetRolesAsync(user);
-            var orgRoles = new[] { RoleNames.OrganizationAdmin, RoleNames.OrganizationValidator, RoleNames.OrganizationUser };
-            var rolesToRemove = currentRoles.Where(r => orgRoles.Contains(r)).ToList();
-            if (rolesToRemove.Count > 0)
-                await _userManager.RemoveFromRolesAsync(user, rolesToRemove);
+            var user = await _userManager.FindByIdAsync(request.UserId);
+            if (user is not null)
+                await _userManager.UpdateSecurityStampAsync(user);
 
-            await _userManager.AddToRoleAsync(user, request.NewRole);
             return Json(new { success = true });
         }
         catch (Exception ex)
@@ -183,28 +190,77 @@ public class OrgConfigController : Controller
     /// SuperAdmin: uses the provided <paramref name="requestedOrgId"/>.
     /// OrgAdmin: always uses their own org from claims.
     /// </summary>
-    private string? ResolveOrgId(string? requestedOrgId)
+    private async Task<string?> ResolveOrgIdAsync(string? requestedOrgId)
     {
         if (User.IsInRole(RoleNames.SuperAdmin))
             return requestedOrgId;
 
-        return User.FindFirstValue(AppClaimTypes.OrganizationId);
+        var candidateOrgId = requestedOrgId ?? User.FindFirstValue(AppClaimTypes.OrganizationId);
+        if (string.IsNullOrWhiteSpace(candidateOrgId))
+            return null;
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+            return null;
+
+        return await _dbContext.UserOrganizationMemberships
+            .Where(m =>
+                m.UserId == userId &&
+                m.OrganizationId == candidateOrgId &&
+                m.Organization.IsActive &&
+                m.Role == RoleNames.OrganizationAdmin)
+            .Select(m => m.OrganizationId)
+            .FirstOrDefaultAsync();
     }
 
     /// <summary>
     /// Resolves the org name (and optional list for SuperAdmin) for page rendering.
     /// </summary>
-    private async Task<(string? OrgName, OrganizationOverview[]? AllOrgs, string? SelectedOrgId)> ResolveOrgAsync(string? requestedOrgId)
+    private async Task<(string? OrgName, OrganizationOverview[] AllOrgs, string? SelectedOrgId)> ResolveOrgAsync(string? requestedOrgId)
     {
+        OrganizationOverview[] allOrgs;
+
         if (User.IsInRole(RoleNames.SuperAdmin))
         {
-            var allOrgs  = await _superAdminSvc.ListOrganizationsAsync();
-            var selected = requestedOrgId is not null
-                ? allOrgs.FirstOrDefault(o => o.OrganizationId == requestedOrgId)
-                : allOrgs.FirstOrDefault();
-            return (selected?.Name, allOrgs, selected?.OrganizationId);
+            allOrgs = await _superAdminSvc.ListOrganizationsAsync();
+        }
+        else
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId))
+                return (null, [], null);
+
+            allOrgs = await _dbContext.UserOrganizationMemberships
+                .AsNoTracking()
+                .Where(m =>
+                    m.UserId == userId &&
+                    m.Organization.IsActive &&
+                    m.Role == RoleNames.OrganizationAdmin)
+                .OrderBy(m => m.Organization.Name)
+                .Select(m => new OrganizationOverview
+                {
+                    OrganizationId = m.OrganizationId,
+                    Name = m.Organization.Name,
+                    Description = m.Organization.Description,
+                    IsActive = m.Organization.IsActive,
+                    IsGuestOrganization = m.Organization.IsGuestOrganization,
+                    MarkedForDeletionAtUtc = m.Organization.MarkedForDeletionAtUtc,
+                    CreatedAtUtc = m.Organization.CreatedAtUtc
+                })
+                .ToArrayAsync();
         }
 
-        return (_tenantContext.OrganizationName, null, null);
+        if (allOrgs.Length == 0)
+            return (null, [], null);
+
+        var activeClaimOrgId = User.FindFirstValue(AppClaimTypes.OrganizationId);
+        var selectedOrgId = requestedOrgId is not null && allOrgs.Any(o => o.OrganizationId == requestedOrgId)
+            ? requestedOrgId
+            : activeClaimOrgId is not null && allOrgs.Any(o => o.OrganizationId == activeClaimOrgId)
+                ? activeClaimOrgId
+                : allOrgs[0].OrganizationId;
+
+        var selected = allOrgs.FirstOrDefault(o => o.OrganizationId == selectedOrgId);
+        return (selected?.Name, allOrgs, selected?.OrganizationId);
     }
 }

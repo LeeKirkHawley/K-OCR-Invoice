@@ -22,7 +22,8 @@ public class AuthService : IAuthService
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
         var user = await _userManager.Users
-            .Include(u => u.Organization)
+            .Include(u => u.OrganizationMemberships)
+                .ThenInclude(m => m.Organization)
             .FirstOrDefaultAsync(u => u.Email == request.Email);
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, request.Password))
@@ -39,12 +40,20 @@ public class AuthService : IAuthService
 
         var roles = await _userManager.GetRolesAsync(user);
 
+        var activeMembership = user.OrganizationMemberships
+            .Where(m => m.Organization.IsActive)
+            .FirstOrDefault(m => m.OrganizationId == user.OrganizationId)
+            ?? user.OrganizationMemberships
+                .Where(m => m.Organization.IsActive)
+                .OrderBy(m => m.Organization.Name)
+                .FirstOrDefault();
+
         return new LoginResponse
         {
             Token = string.Empty, // No JWT needed for Blazor Server
             ExpiresAtUtc = DateTime.UtcNow.AddHours(8),
-            TenantId = user.OrganizationId,
-            TenantName = user.Organization?.Name ?? (user.IsGlobalAdmin ? "Global" : null),
+            TenantId = activeMembership?.OrganizationId,
+            TenantName = activeMembership?.Organization?.Name ?? (user.IsGlobalAdmin ? "Global" : null),
             Roles = roles.ToArray(),
             Email = user.Email ?? string.Empty
         };

@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace KOCRAsp.Controllers;
 
-[Authorize(Roles = "OrganizationAdmin,SuperAdmin")]
+[Authorize(Policy = "OrgAdminOrSuperAdmin")]
 public class EmailConfigController : Controller
 {
     private readonly IConfigurationService _configSvc;

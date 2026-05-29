@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using OCRQueue.Abstractions;
 using OCRQueue.Services;
 using Serilog;
@@ -119,6 +120,17 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/auth/login";
     options.SlidingExpiration = true;
     options.ExpireTimeSpan = TimeSpan.FromHours(8);
+});
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("OrgAdminOrSuperAdmin", policy =>
+        policy.RequireAssertion(context =>
+            context.User.IsInRole(RoleNames.SuperAdmin) ||
+            string.Equals(
+                context.User.FindFirst(AppClaimTypes.ActiveOrganizationRole)?.Value,
+                RoleNames.OrganizationAdmin,
+                StringComparison.OrdinalIgnoreCase)));
 });
 
 // ── Data Protection ───────────────────────────────────────────────────────────
@@ -261,6 +273,17 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var identityDb = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var startupLogger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Startup");
+
+        if (await ShouldResetIdentityDatabaseForMultiOrgMigrationAsync(identityDb, configuration))
+        {
+            startupLogger.LogWarning(
+                "Resetting SQL Server database before migrations because multi-org membership table is missing.");
+            await identityDb.Database.EnsureDeletedAsync();
+        }
+
         identityDb.Database.Migrate();
         await EnsureSuperAdminAsync(scope.ServiceProvider, configuration);
     }
@@ -461,6 +484,55 @@ app.MapGet("/api/image", async (string path, IImageService imageSvc) =>
 }).RequireAuthorization();
 
 app.Run();
+
+static async Task<bool> ShouldResetIdentityDatabaseForMultiOrgMigrationAsync(
+    ApplicationDbContext identityDb,
+    IConfiguration configuration)
+{
+    if (!configuration.GetValue<bool>("Bootstrap:ResetIdentityDatabaseIfMissingMultiOrgMembership"))
+        return false;
+    if (!identityDb.Database.IsSqlServer())
+        return false;
+
+    try
+    {
+        if (!await identityDb.Database.CanConnectAsync())
+            return false;
+    }
+    catch
+    {
+        return false;
+    }
+
+    var hasMembershipTable = await SqlServerTableExistsAsync(identityDb, "UserOrganizationMemberships");
+    return !hasMembershipTable;
+}
+
+static async Task<bool> SqlServerTableExistsAsync(DbContext dbContext, string tableName)
+{
+    var connection = dbContext.Database.GetDbConnection();
+    var closeWhenDone = connection.State != System.Data.ConnectionState.Open;
+    if (closeWhenDone)
+        await connection.OpenAsync();
+
+    try
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT CASE WHEN OBJECT_ID(@tableName, 'U') IS NULL THEN 0 ELSE 1 END";
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@tableName";
+        parameter.Value = $"[dbo].[{tableName}]";
+        command.Parameters.Add(parameter);
+
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result) == 1;
+    }
+    finally
+    {
+        if (closeWhenDone)
+            await connection.CloseAsync();
+    }
+}
 
 static async Task EnsureSuperAdminAsync(IServiceProvider services, IConfiguration configuration)
 {

@@ -23,14 +23,29 @@ public static class ApplicationUserClaimsExtensions
         UserManager<ApplicationUser> userManager)
     {
         var fullUser = await userManager.Users
-            .Include(u => u.Organization)
+            .Include(u => u.OrganizationMemberships)
+                .ThenInclude(m => m.Organization)
             .FirstOrDefaultAsync(u => u.Id == user.Id);
 
-        if (!string.IsNullOrEmpty(fullUser?.OrganizationId))
-            identity.AddClaim(new Claim(AppClaimTypes.OrganizationId, fullUser.OrganizationId));
+        var memberships = fullUser?.OrganizationMemberships
+            .Where(m => m.Organization.IsActive)
+            .ToList()
+            ?? [];
 
-        var tenantName = fullUser?.Organization?.Name
-                      ?? (fullUser?.IsGlobalAdmin == true ? "Global" : null);
+        var activeMembership = memberships.FirstOrDefault(m => m.OrganizationId == fullUser?.OrganizationId)
+            ?? memberships
+                .OrderBy(m => m.Organization.Name, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+
+        if (activeMembership is not null)
+        {
+            identity.AddClaim(new Claim(AppClaimTypes.OrganizationId, activeMembership.OrganizationId));
+            identity.AddClaim(new Claim(AppClaimTypes.TenantName, activeMembership.Organization.Name));
+            identity.AddClaim(new Claim(AppClaimTypes.ActiveOrganizationRole, activeMembership.Role));
+            return;
+        }
+
+        var tenantName = fullUser?.IsGlobalAdmin == true ? "Global" : null;
 
         if (tenantName is not null)
             identity.AddClaim(new Claim(AppClaimTypes.TenantName, tenantName));

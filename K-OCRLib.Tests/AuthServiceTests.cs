@@ -36,6 +36,13 @@ public class AuthServiceTests
             var create = await userManager.CreateAsync(user, "Password123!");
             Assert.True(create.Succeeded);
             await userManager.AddToRoleAsync(user, "OrganizationAdmin");
+            db.UserOrganizationMemberships.Add(new UserOrganizationMembership
+            {
+                UserId = user.Id,
+                OrganizationId = org.Id,
+                Role = "OrganizationAdmin"
+            });
+            await db.SaveChangesAsync();
 
             var service = new AuthService(userManager, Mock.Of<ILogger<AuthService>>());
             var result = await service.LoginAsync(new LoginRequest { Email = user.Email!, Password = "Password123!" });

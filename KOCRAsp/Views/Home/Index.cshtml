@@ -13,6 +13,7 @@
     <div class="kocr-pane kocr-pane-left">
         <div class="kocr-panel-header kocr-file-list-header p-1">
             <div class="d-flex gap-1 mb-1">
+                <button class="btn btn-sm btn-outline-primary py-0 text-nowrap" onclick="openNewBatchModal(); return false;" title="Create new batch">➕ New Batch</button>
                 <select id="batchSelector" class="form-select form-select-sm">
                     <option value="">— Select Batch —</option>
                     @foreach (var batch in Model.AvailableBatches)
@@ -34,7 +35,6 @@
                         }
                     }
                 </select>
-                <button class="btn btn-sm btn-outline-primary py-0 text-nowrap" onclick="openNewBatchModal(); return false;" title="Create new batch">➕ New Batch</button>
             </div>
             <div class="d-flex gap-1">
                 <label class="btn btn-sm btn-outline-primary mb-0 py-0 px-2" title="Upload Invoices">

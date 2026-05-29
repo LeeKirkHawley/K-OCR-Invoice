@@ -2,6 +2,7 @@ using K_OCR.Configuration;
 using K_OCR.Data;
 using K_OCR.Identity;
 using K_OCR.Models;
+using K_OCR.Security;
 using K_OCR.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -64,8 +65,7 @@ public class BatchAndCleanupTests
                 UserName = "admin@acme.test",
                 Email = "admin@acme.test",
                 FullName = "Admin",
-                OrganizationId = org.Id,
-                IsOrganizationAdmin = true
+                OrganizationId = org.Id
             };
             var regular = new ApplicationUser
             {
@@ -73,13 +73,23 @@ public class BatchAndCleanupTests
                 UserName = "user@acme.test",
                 Email = "user@acme.test",
                 FullName = "User",
-                OrganizationId = org.Id,
-                IsOrganizationAdmin = false
+                OrganizationId = org.Id
             };
-            org.Users.Add(admin);
-            org.Users.Add(regular);
             db.Organizations.Add(org);
             db.Users.AddRange(admin, regular);
+            db.UserOrganizationMemberships.AddRange(
+                new UserOrganizationMembership
+                {
+                    UserId = admin.Id,
+                    OrganizationId = org.Id,
+                    Role = RoleNames.OrganizationAdmin
+                },
+                new UserOrganizationMembership
+                {
+                    UserId = regular.Id,
+                    OrganizationId = org.Id,
+                    Role = RoleNames.OrganizationUser
+                });
             await db.SaveChangesAsync();
 
             var email = new Mock<IEmailService>();

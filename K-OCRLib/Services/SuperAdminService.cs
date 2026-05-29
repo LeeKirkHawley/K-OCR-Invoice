@@ -59,7 +59,7 @@ public class SuperAdminService : ISuperAdminService
                 IsGuestOrganization = org.IsGuestOrganization,
                 MarkedForDeletionAtUtc = org.MarkedForDeletionAtUtc,
                 CreatedAtUtc = org.CreatedAtUtc,
-                UserCount = org.Users.Count,
+                UserCount = org.UserMemberships.Count,
                 StripeCustomerId = org.StripeCustomerId,
                 StripeSubscriptionStatus = org.StripeSubscriptionStatus,
             })
@@ -94,29 +94,26 @@ public class SuperAdminService : ISuperAdminService
         await _dbContext.Organizations.AddAsync(organization);
         await _dbContext.SaveChangesAsync();
 
-        bool allowDuplicateEmails = _configuration.GetValue<bool>("AllowDuplicateEmails", false);
         var existingUser = await _userManager.FindByEmailAsync(request.AdminEmail);
 
         ApplicationUser user;
         string invitationToken;
         string tempPassword;
-        if (allowDuplicateEmails && existingUser is { IsGlobalAdmin: true })
+        if (existingUser is { IsGlobalAdmin: true })
             throw new InvalidOperationException(
                 "A global admin account cannot be reassigned to a new organization.");
 
-        bool reusingExistingUser = allowDuplicateEmails && existingUser is not null;
+        bool reusingExistingUser = existingUser is not null;
 
         if (reusingExistingUser)
         {
-            // Re-use the existing account — point it at the new organisation.
+            // Re-use the existing account — add membership to the new organisation.
             user = existingUser!;
-            user.OrganizationId = organization.Id;
-            user.IsOrganizationAdmin = true;
             user.FullName = request.AdminName.Trim();
+            if (string.IsNullOrWhiteSpace(user.OrganizationId))
+                user.OrganizationId = organization.Id;
             await _userManager.UpdateAsync(user);
-            await _userManager.UpdateSecurityStampAsync(user);
-            if (!await _userManager.IsInRoleAsync(user, RoleNames.OrganizationAdmin))
-                await _userManager.AddToRoleAsync(user, RoleNames.OrganizationAdmin);
+            await EnsureMembershipAsync(user, organization.Id, RoleNames.OrganizationAdmin);
             tempPassword = string.Empty;
             invitationToken = string.Empty;
         }
@@ -130,7 +127,6 @@ public class SuperAdminService : ISuperAdminService
                 FullName = request.AdminName.Trim(),
                 EmailConfirmed = false,
                 OrganizationId = organization.Id,
-                IsOrganizationAdmin = true,
                 LockoutEnabled = true
             };
 
@@ -143,7 +139,7 @@ public class SuperAdminService : ISuperAdminService
                     $"Unable to create admin user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
             }
 
-            await _userManager.AddToRoleAsync(user, RoleNames.OrganizationAdmin);
+            await EnsureMembershipAsync(user, organization.Id, RoleNames.OrganizationAdmin);
             invitationToken = await _userManager.GeneratePasswordResetTokenAsync(user);
         }
 
@@ -259,7 +255,6 @@ public class SuperAdminService : ISuperAdminService
     public async Task RevokeOrganizationAsync(string organizationId)
     {
         var organization = await _dbContext.Organizations
-            .Include(o => o.Users)
             .FirstOrDefaultAsync(o => o.Id == organizationId);
 
         if (organization is null)
@@ -267,20 +262,12 @@ public class SuperAdminService : ISuperAdminService
 
         organization.IsActive = false;
 
-        foreach (var user in organization.Users)
-        {
-            await _userManager.SetLockoutEnabledAsync(user, true);
-            await _userManager.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
-            await _userManager.UpdateSecurityStampAsync(user);
-        }
-
         await _dbContext.SaveChangesAsync();
     }
 
     public async Task ReEnableOrganizationAsync(string organizationId)
     {
         var organization = await _dbContext.Organizations
-            .Include(o => o.Users)
             .FirstOrDefaultAsync(o => o.Id == organizationId);
 
         if (organization is null)
@@ -288,19 +275,12 @@ public class SuperAdminService : ISuperAdminService
 
         organization.IsActive = true;
 
-        foreach (var user in organization.Users)
-        {
-            await _userManager.SetLockoutEndDateAsync(user, null);
-            await _userManager.UpdateSecurityStampAsync(user);
-        }
-
         await _dbContext.SaveChangesAsync();
     }
 
     public async Task DeleteOrganizationAsync(string organizationId)
     {
         var organization = await _dbContext.Organizations
-            .Include(o => o.Users)
             .FirstOrDefaultAsync(o => o.Id == organizationId);
 
         if (organization is null)
@@ -309,11 +289,33 @@ public class SuperAdminService : ISuperAdminService
         if (organization.IsActive)
             throw new InvalidOperationException("Organization must be revoked before it can be deleted.");
 
-        foreach (var user in organization.Users.ToList())
-            await DeleteUserAndLogAsync(user, $"organization deletion ({organization.Id})");
+        var userIds = await _dbContext.UserOrganizationMemberships
+            .Where(m => m.OrganizationId == organizationId)
+            .Select(m => m.UserId)
+            .Distinct()
+            .ToListAsync();
+
+        var memberships = await _dbContext.UserOrganizationMemberships
+            .Where(m => m.OrganizationId == organizationId)
+            .ToListAsync();
+        _dbContext.UserOrganizationMemberships.RemoveRange(memberships);
 
         _dbContext.Organizations.Remove(organization);
         await _dbContext.SaveChangesAsync();
+
+        foreach (var userId in userIds)
+        {
+            var remainingMemberships = await _dbContext.UserOrganizationMemberships
+                .AnyAsync(m => m.UserId == userId);
+            if (remainingMemberships)
+                continue;
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user is null || user.IsGlobalAdmin)
+                continue;
+
+            await DeleteUserAndLogAsync(user, $"organization deletion ({organization.Id})");
+        }
 
         // Release any pooled SQLite connections to the org's database before
         // deleting the folder. On Windows, open file handles prevent directory
@@ -348,18 +350,14 @@ public class SuperAdminService : ISuperAdminService
             "Organization marked for deletion: OrgId={OrgId}, OrgName={OrgName}, MarkedForDeletionAtUtc={MarkedForDeletionAtUtc}, IsGuestOrganization={IsGuestOrganization}.",
             organization.Id, organization.Name, organization.MarkedForDeletionAtUtc, organization.IsGuestOrganization);
 
-        var org = await _dbContext.Organizations
-            .Include(o => o.Users)
-            .FirstAsync(o => o.Id == organizationId);
-        foreach (var user in org.Users)
-        {
-            await _userManager.SetLockoutEnabledAsync(user, true);
-            await _userManager.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
-            await _userManager.UpdateSecurityStampAsync(user);
-        }
-
-        // Send deletion notification emails to organization admins
-        foreach (var admin in org.Users.Where(u => u.IsOrganizationAdmin))
+        // Send deletion notification emails to organization admins for this org.
+        var orgAdmins = await _dbContext.UserOrganizationMemberships
+            .AsNoTracking()
+            .Include(m => m.User)
+            .Where(m => m.OrganizationId == organizationId && m.Role == RoleNames.OrganizationAdmin)
+            .Select(m => m.User)
+            .ToListAsync();
+        foreach (var admin in orgAdmins)
         {
             try
             {
@@ -509,7 +507,6 @@ public class SuperAdminService : ISuperAdminService
             FullName             = userName,
             EmailConfirmed       = true,
             OrganizationId       = organization.Id,
-            IsOrganizationAdmin  = true,
             LockoutEnabled       = false
         };
 
@@ -522,7 +519,7 @@ public class SuperAdminService : ISuperAdminService
                 $"Unable to create guest user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
         }
 
-        await _userManager.AddToRoleAsync(user, RoleNames.OrganizationAdmin);
+        await EnsureMembershipAsync(user, organization.Id, RoleNames.OrganizationAdmin);
 
         var orgPath = _pathService.GetOrgFolderPath(organization.Name);
         try
@@ -589,9 +586,32 @@ public class SuperAdminService : ISuperAdminService
 
     private async Task EnsureRolesAsync()
     {
-        foreach (var role in new[] { RoleNames.SuperAdmin, RoleNames.OrganizationAdmin, RoleNames.OrganizationUser })
+        foreach (var role in new[] { RoleNames.SuperAdmin, RoleNames.OrganizationUser })
             if (!await _roleManager.RoleExistsAsync(role))
                 await _roleManager.CreateAsync(new IdentityRole(role));
+    }
+
+    private async Task EnsureMembershipAsync(ApplicationUser user, string organizationId, string role)
+    {
+        var existingMembership = await _dbContext.UserOrganizationMemberships
+            .FirstOrDefaultAsync(m => m.UserId == user.Id && m.OrganizationId == organizationId);
+
+        if (existingMembership is null)
+        {
+            _dbContext.UserOrganizationMemberships.Add(new UserOrganizationMembership
+            {
+                UserId = user.Id,
+                OrganizationId = organizationId,
+                Role = role
+            });
+        }
+        else
+        {
+            existingMembership.Role = role;
+        }
+
+        await _dbContext.SaveChangesAsync();
+        await _userManager.UpdateSecurityStampAsync(user);
     }
 
     private static string GenerateTemporaryPassword()

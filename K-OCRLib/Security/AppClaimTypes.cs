@@ -12,4 +12,7 @@ public static class AppClaimTypes
 
     /// <summary>Display name of the user's organisation, or "Global" for super-admins.</summary>
     public const string TenantName = "k-ocr:tenant-name";
+
+    /// <summary>Org-scoped role for the currently active organization context.</summary>
+    public const string ActiveOrganizationRole = "k-ocr:active-organization-role";
 }

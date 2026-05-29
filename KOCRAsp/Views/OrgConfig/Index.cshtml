@@ -8,7 +8,6 @@
     var allOrgs       = ViewBag.AllOrgs as OrganizationOverview[];
     var selectedOrgId = ViewBag.SelectedOrgId as string;
     var orgName       = ViewBag.OrgName as string;
-    bool isSuperAdmin = User.IsInRole(RoleNames.SuperAdmin);
 }
 
 <h1 class="h4 mb-4">Organization Configuration</h1>
@@ -26,28 +25,48 @@
     </div>
 }
 
-@* Org selector for SuperAdmin — changing org reloads the page *@
-@if (isSuperAdmin && allOrgs is { Length: > 0 })
+@* Org selector for org-config access scope *@
+@if (allOrgs is { Length: > 0 })
 {
     <div class="card mb-3">
         <div class="card-header"><strong>Organization</strong></div>
         <div class="card-body">
-            <form method="get" asp-action="Index" asp-controller="OrgConfig" class="d-flex align-items-center gap-3">
-                <label class="form-label mb-0 text-nowrap">Select Organization:</label>
-                <select name="orgId" class="form-select w-auto" onchange="this.form.submit()">
-                    @foreach (var org in allOrgs)
-                    {
-                        <option value="@org.OrganizationId"
-                                selected="@(org.OrganizationId == selectedOrgId ? "selected" : null)">
-                            @org.Name
-                        </option>
-                    }
-                </select>
-            </form>
+            @if (User.IsInRole(RoleNames.SuperAdmin))
+            {
+                <form method="get" asp-action="Index" asp-controller="OrgConfig" class="d-flex align-items-center gap-3">
+                    <label class="form-label mb-0 text-nowrap">Select Organization:</label>
+                    <select name="orgId" class="form-select w-auto" onchange="this.form.submit()">
+                        @foreach (var org in allOrgs)
+                        {
+                            <option value="@org.OrganizationId"
+                                    selected="@(org.OrganizationId == selectedOrgId ? "selected" : null)">
+                                @org.Name
+                            </option>
+                        }
+                    </select>
+                </form>
+            }
+            else
+            {
+                <form method="post" asp-action="SwitchOrganization" asp-controller="Auth" class="d-flex align-items-center gap-3">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="returnUrl" value="@Url.Action("Index", "OrgConfig")" />
+                    <label class="form-label mb-0 text-nowrap">Select Organization:</label>
+                    <select name="orgId" class="form-select w-auto" onchange="this.form.submit()">
+                        @foreach (var org in allOrgs)
+                        {
+                            <option value="@org.OrganizationId"
+                                    selected="@(org.OrganizationId == selectedOrgId ? "selected" : null)">
+                                @org.Name
+                            </option>
+                        }
+                    </select>
+                </form>
+            }
         </div>
     </div>
 }
-else if (!isSuperAdmin)
+else
 {
     <p class="text-muted small mb-3">Configuring: <strong>@orgName</strong></p>
 }

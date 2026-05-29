@@ -1,6 +1,7 @@
 using K_OCR.Services;
 using K_OCR.Data;
 using K_OCR.Identity;
+using K_OCR.Security;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http;
@@ -42,8 +43,7 @@ public class SuperAdminServiceEmailTests
             Id = Guid.NewGuid().ToString(),
             UserName = "admin@test.com",
             Email = "admin@test.com",
-            FullName = "Test Admin",
-            IsOrganizationAdmin = true
+            FullName = "Test Admin"
         };
 
         var regularUser = new ApplicationUser
@@ -51,15 +51,24 @@ public class SuperAdminServiceEmailTests
             Id = Guid.NewGuid().ToString(),
             UserName = "user@test.com",
             Email = "user@test.com",
-            FullName = "Regular User",
-            IsOrganizationAdmin = false
+            FullName = "Regular User"
         };
-
-        org.Users.Add(admin);
-        org.Users.Add(regularUser);
 
         await dbContext.Organizations.AddAsync(org);
         await dbContext.Users.AddRangeAsync(admin, regularUser);
+        await dbContext.UserOrganizationMemberships.AddRangeAsync(
+            new UserOrganizationMembership
+            {
+                UserId = admin.Id,
+                OrganizationId = org.Id,
+                Role = RoleNames.OrganizationAdmin
+            },
+            new UserOrganizationMembership
+            {
+                UserId = regularUser.Id,
+                OrganizationId = org.Id,
+                Role = RoleNames.OrganizationUser
+            });
         await dbContext.SaveChangesAsync();
 
         var configuration = new ConfigurationBuilder()
@@ -141,13 +150,17 @@ public class SuperAdminServiceEmailTests
             Id = Guid.NewGuid().ToString(),
             UserName = "admin@test.com",
             Email = "admin@test.com",
-            FullName = "Test Admin",
-            IsOrganizationAdmin = true
+            FullName = "Test Admin"
         };
 
-        org.Users.Add(admin);
         await dbContext.Organizations.AddAsync(org);
         await dbContext.Users.AddAsync(admin);
+        await dbContext.UserOrganizationMemberships.AddAsync(new UserOrganizationMembership
+        {
+            UserId = admin.Id,
+            OrganizationId = org.Id,
+            Role = RoleNames.OrganizationAdmin
+        });
         await dbContext.SaveChangesAsync();
 
         var configuration = new ConfigurationBuilder()
@@ -214,8 +227,7 @@ public class SuperAdminServiceEmailTests
             Id = Guid.NewGuid().ToString(),
             UserName = "admin1@test.com",
             Email = "admin1@test.com",
-            FullName = "Admin With Email",
-            IsOrganizationAdmin = true
+            FullName = "Admin With Email"
         };
 
         var adminWithoutEmail = new ApplicationUser
@@ -223,15 +235,24 @@ public class SuperAdminServiceEmailTests
             Id = Guid.NewGuid().ToString(),
             UserName = "admin2",
             Email = null,
-            FullName = "Admin Without Email",
-            IsOrganizationAdmin = true
+            FullName = "Admin Without Email"
         };
-
-        org.Users.Add(adminWithEmail);
-        org.Users.Add(adminWithoutEmail);
 
         await dbContext.Organizations.AddAsync(org);
         await dbContext.Users.AddRangeAsync(adminWithEmail, adminWithoutEmail);
+        await dbContext.UserOrganizationMemberships.AddRangeAsync(
+            new UserOrganizationMembership
+            {
+                UserId = adminWithEmail.Id,
+                OrganizationId = org.Id,
+                Role = RoleNames.OrganizationAdmin
+            },
+            new UserOrganizationMembership
+            {
+                UserId = adminWithoutEmail.Id,
+                OrganizationId = org.Id,
+                Role = RoleNames.OrganizationAdmin
+            });
         await dbContext.SaveChangesAsync();
 
         var configuration = new ConfigurationBuilder()
@@ -280,5 +301,3 @@ public class SuperAdminServiceEmailTests
             Times.Never);
     }
 }
-
-

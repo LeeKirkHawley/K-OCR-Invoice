@@ -14,7 +14,6 @@ public class OrganizationAdminService : IOrganizationAdminService
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly RoleManager<IdentityRole> _roleManager;
     private readonly IEmailService _emailService;
     private readonly ILogger<OrganizationAdminService> _logger;
 
@@ -28,13 +27,11 @@ public class OrganizationAdminService : IOrganizationAdminService
     public OrganizationAdminService(
         ApplicationDbContext dbContext,
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole> roleManager,
         IEmailService emailService,
         ILogger<OrganizationAdminService> logger)
     {
         _dbContext = dbContext;
         _userManager = userManager;
-        _roleManager = roleManager;
         _emailService = emailService;
         _logger = logger;
     }
@@ -44,25 +41,23 @@ public class OrganizationAdminService : IOrganizationAdminService
 
     public async Task<OrganizationUserOverview[]> GetOrgUsersAsync(string organizationId)
     {
-        var users = await _userManager.Users
-            .Where(u => u.OrganizationId == organizationId)
+        var memberships = await _dbContext.UserOrganizationMemberships
+            .AsNoTracking()
+            .Include(m => m.User)
+            .Where(m => m.OrganizationId == organizationId)
             .ToListAsync();
 
-        var overviews = new List<OrganizationUserOverview>();
-        foreach (var user in users)
-        {
-            var roles = await _userManager.GetRolesAsync(user);
-            overviews.Add(new OrganizationUserOverview
+        return memberships
+            .Select(m => new OrganizationUserOverview
             {
-                UserId   = user.Id,
-                FullName = user.FullName,
-                Email    = user.Email,
-                IsActive = user.LockoutEnd is null || user.LockoutEnd <= DateTimeOffset.UtcNow,
-                Roles    = roles.ToArray()
-            });
-        }
-
-        return overviews.ToArray();
+                UserId = m.UserId,
+                FullName = m.User.FullName,
+                Email = m.User.Email,
+                IsActive = m.User.LockoutEnd is null || m.User.LockoutEnd <= DateTimeOffset.UtcNow,
+                Roles = [m.Role]
+            })
+            .OrderBy(u => u.FullName ?? u.Email ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     public async Task<InviteUserResult> InviteUserAsync(
@@ -76,42 +71,85 @@ public class OrganizationAdminService : IOrganizationAdminService
         if (!_allowedRoles.Contains(roleName))
             throw new ArgumentException($"Role '{roleName}' is not a valid organization role.");
 
-        if (!await _roleManager.RoleExistsAsync(roleName))
-            await _roleManager.CreateAsync(new IdentityRole(roleName));
+        var existingUser = await _userManager.FindByEmailAsync(request.Email);
+        var tempPassword = string.Empty;
+        var invitationToken = string.Empty;
+        var setupLink = string.Empty;
+        var emailSent = false;
+        ApplicationUser user;
 
-        var tempPassword = GenerateTemporaryPassword();
-        var user = new ApplicationUser
+        if (existingUser is not null)
         {
-            UserName       = request.Email,
-            Email          = request.Email,
-            FullName       = request.Name.Trim(),
-            EmailConfirmed = false,
-            OrganizationId = organizationId,
-            IsOrganizationAdmin = string.Equals(roleName, RoleNames.OrganizationAdmin, StringComparison.OrdinalIgnoreCase),
-            LockoutEnabled = true
-        };
+            if (existingUser.IsGlobalAdmin)
+                throw new InvalidOperationException("A global admin account cannot be assigned as an organization member.");
 
-        var result = await _userManager.CreateAsync(user, tempPassword);
-        if (!result.Succeeded)
-            throw new InvalidOperationException(
-                $"Unable to create user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+            user = existingUser;
+            user.FullName = request.Name.Trim();
 
-        await _userManager.AddToRoleAsync(user, roleName);
-        var invitationToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var membership = await _dbContext.UserOrganizationMemberships
+                .FirstOrDefaultAsync(m => m.UserId == user.Id && m.OrganizationId == organizationId);
 
-        var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(invitationToken));
-        var setupLink = BuildSetupLink(user.Id, encodedToken, baseUrl);
+            if (membership is null)
+            {
+                _dbContext.UserOrganizationMemberships.Add(new UserOrganizationMembership
+                {
+                    UserId = user.Id,
+                    OrganizationId = organizationId,
+                    Role = roleName
+                });
+            }
+            else
+            {
+                membership.Role = roleName;
+            }
 
-        bool emailSent = false;
-        try
-        {
-            await _emailService.SendOrgUserInviteAsync(
-                user.Email!, request.Name.Trim(), organization.Name, roleName, setupLink);
-            emailSent = true;
+            if (string.IsNullOrWhiteSpace(user.OrganizationId))
+                user.OrganizationId = organizationId;
+
+            await _userManager.UpdateAsync(user);
+            await _dbContext.SaveChangesAsync();
+            await _userManager.UpdateSecurityStampAsync(user);
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogWarning(ex, "Could not send invite email to {Email}; returning setup link instead.", user.Email);
+            tempPassword = GenerateTemporaryPassword();
+            user = new ApplicationUser
+            {
+                UserName = request.Email,
+                Email = request.Email,
+                FullName = request.Name.Trim(),
+                EmailConfirmed = false,
+                OrganizationId = organizationId,
+                LockoutEnabled = true
+            };
+
+            var result = await _userManager.CreateAsync(user, tempPassword);
+            if (!result.Succeeded)
+                throw new InvalidOperationException(
+                    $"Unable to create user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+
+            _dbContext.UserOrganizationMemberships.Add(new UserOrganizationMembership
+            {
+                UserId = user.Id,
+                OrganizationId = organizationId,
+                Role = roleName
+            });
+            await _dbContext.SaveChangesAsync();
+
+            invitationToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(invitationToken));
+            setupLink = BuildSetupLink(user.Id, encodedToken, baseUrl);
+
+            try
+            {
+                await _emailService.SendOrgUserInviteAsync(
+                    user.Email!, request.Name.Trim(), organization.Name, roleName, setupLink);
+                emailSent = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not send invite email to {Email}; returning setup link instead.", user.Email);
+            }
         }
 
         _logger.LogInformation(
@@ -130,20 +168,42 @@ public class OrganizationAdminService : IOrganizationAdminService
 
     public async Task RemoveUserAsync(string userId, string organizationId)
     {
+        var membership = await _dbContext.UserOrganizationMemberships
+            .FirstOrDefaultAsync(m => m.UserId == userId && m.OrganizationId == organizationId)
+            ?? throw new InvalidOperationException("User does not belong to the specified organization.");
+
         var user = await _userManager.FindByIdAsync(userId)
             ?? throw new InvalidOperationException("User not found.");
 
-        if (!string.Equals(user.OrganizationId, organizationId, StringComparison.Ordinal))
-            throw new InvalidOperationException("User does not belong to the specified organization.");
+        _dbContext.UserOrganizationMemberships.Remove(membership);
+        await _dbContext.SaveChangesAsync();
 
-        var deleteResult = await _userManager.DeleteAsync(user);
-        if (!deleteResult.Succeeded)
-            throw new InvalidOperationException(
-                $"Unable to delete user: {string.Join("; ", deleteResult.Errors.Select(e => e.Description))}");
+        if (string.Equals(user.OrganizationId, organizationId, StringComparison.Ordinal))
+        {
+            user.OrganizationId = await _dbContext.UserOrganizationMemberships
+                .Where(m => m.UserId == userId)
+                .OrderBy(m => m.Organization.Name)
+                .Select(m => m.OrganizationId)
+                .FirstOrDefaultAsync();
+
+            await _userManager.UpdateAsync(user);
+            await _userManager.UpdateSecurityStampAsync(user);
+        }
+
+        var remainingMemberships = await _dbContext.UserOrganizationMemberships
+            .AnyAsync(m => m.UserId == userId);
+
+        if (!remainingMemberships && !user.IsGlobalAdmin)
+        {
+            var deleteResult = await _userManager.DeleteAsync(user);
+            if (!deleteResult.Succeeded)
+                throw new InvalidOperationException(
+                    $"Unable to delete user: {string.Join("; ", deleteResult.Errors.Select(e => e.Description))}");
+        }
 
         _logger.LogInformation(
             "User deleted: UserId={UserId}, Email={Email}, FullName={FullName}, OrganizationId={OrgId}, Reason={Reason}.",
-            user.Id, user.Email, user.FullName, user.OrganizationId, "organization admin removal");
+            user.Id, user.Email, user.FullName, organizationId, "organization admin removal");
     }
 
     private static string BuildSetupLink(string userId, string encodedToken, string? baseUrl)
