@@ -102,7 +102,7 @@ jobs:
               "Prices":           stripe.get("Prices", {})
             },
             "Bootstrap": {
-              "ResetIdentityDatabaseIfMissingMultiOrgMembership": True,
+              "ResetIdentityDatabaseIfMissingMultiOrgMembership": False,
               "SuperAdmin": {
                 "UserName": "superadmin",
                 "Email": "leekirkhawley@gmail.com",

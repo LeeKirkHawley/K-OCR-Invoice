@@ -300,12 +300,23 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var reportingDb = scope.ServiceProvider.GetRequiredService<ReportingDbContext>();
-        reportingDb.Database.Migrate();
+        var startupLogger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Startup");
+
+        if (await reportingDb.Database.CanConnectAsync())
+        {
+            reportingDb.Database.Migrate();
+        }
+        else
+        {
+            startupLogger.LogWarning(
+                "Reporting database is not reachable at startup; skipping migration because the host cannot create it.");
+        }
     }
     catch (Exception ex)
     {
-        startupError.SetError($"Reporting DB initialization failed: {ex.Message}");
-        Log.Logger.Fatal(ex, "Reporting DB initialization failed");
+        Log.Logger.Warning(ex, "Reporting DB initialization skipped.");
     }
 }
 
