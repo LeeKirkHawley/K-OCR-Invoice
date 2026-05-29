@@ -388,13 +388,23 @@
     }
 
     function maybeShowInitialGuestDialog() {
-        if (!_isGuestOrganization) return;
-        if (_showGuestWelcomeDialog) {
-            showGuestOcrLimitModal(
-                `Welcome! Your guest account allows up to ${_guestMaxBatches} batches, ` +
-                `${_guestMaxInvoicesPerBatch} files per batch, and ${_guestMaxPagesPerInvoice} pages per file. ` +
-                `You currently have ${_guestActiveBatchCount} of ${_guestMaxBatches} batches.`
-            );
+        if (!_isGuestOrganization || !_showGuestWelcomeDialog) return;
+
+        const message =
+            `Welcome! Your guest account allows up to ${_guestMaxBatches} batches, ` +
+            `${_guestMaxInvoicesPerBatch} files per batch, and ${_guestMaxPagesPerInvoice} pages per file. ` +
+            `You currently have ${_guestActiveBatchCount} of ${_guestMaxBatches} batches.`;
+
+        const showWhenReady = () => {
+            if (typeof showGuestOcrLimitModal !== 'function') return;
+            if (!document.getElementById('guestOcrLimitModal')) return;
+            showGuestOcrLimitModal(message);
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', showWhenReady, { once: true });
+        } else {
+            showWhenReady();
         }
     }
 

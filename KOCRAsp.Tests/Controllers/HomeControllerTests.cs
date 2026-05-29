@@ -20,6 +20,7 @@ public class HomeControllerTests
     private readonly Mock<IOrganizationActivityLogService> _mockOrgLogSvc;
     private readonly Mock<ITrialOrganizationLimitService> _mockTrialLimitSvc;
     private readonly Mock<ITenantContext> _mockTenantContext;
+    private readonly Mock<IConfigurationService> _mockConfigSvc;
     private readonly HomeController _controller;
 
     private const string UserId = "user-id-123";
@@ -34,6 +35,7 @@ public class HomeControllerTests
         _mockOrgLogSvc = new Mock<IOrganizationActivityLogService>();
         _mockTrialLimitSvc = new Mock<ITrialOrganizationLimitService>();
         _mockTenantContext = new Mock<ITenantContext>();
+        _mockConfigSvc = new Mock<IConfigurationService>();
 
         _mockTenantContext.Setup(t => t.OrganizationId).Returns(OrgId);
         _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
@@ -41,6 +43,9 @@ public class HomeControllerTests
         _mockTenantContext.Setup(t => t.IsBetaTestOrganization).Returns(false);
         _mockTenantContext.Setup(t => t.IsTrialOrganization).Returns(false);
         _mockTenantContext.Setup(t => t.StripeSubscriptionStatus).Returns("active");
+        _mockConfigSvc.Setup(s => s.GetGuestMaxBatches()).Returns(3);
+        _mockConfigSvc.Setup(s => s.GetMaxInvoicesPerBatch(true)).Returns(25);
+        _mockConfigSvc.Setup(s => s.GetMaxPagesPerInvoice(true)).Returns(20);
         _mockTrialLimitSvc
             .Setup(s => s.GetCurrentStatusAsync())
             .ReturnsAsync(new TrialOrganizationLimitStatus(false, 500, 0));
@@ -52,6 +57,7 @@ public class HomeControllerTests
             _mockOrgLogSvc.Object,
             _mockTrialLimitSvc.Object,
             _mockTenantContext.Object,
+            _mockConfigSvc.Object,
             Mock.Of<ILogger<HomeController>>());
     }
 
