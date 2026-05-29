@@ -15,4 +15,7 @@ public class CreateOrganizationRequest
 
     [Required]
     public string AdminName { get; set; } = string.Empty;
+
+    public bool IsBetaTestOrganization { get; set; }
+    public int? BetaMaxOcrPages { get; set; }
 }

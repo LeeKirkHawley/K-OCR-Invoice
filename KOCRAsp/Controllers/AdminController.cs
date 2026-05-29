@@ -50,6 +50,7 @@ public class AdminController : Controller
             value = 14; // default fallback
         }
         ViewBag.DeletedOrgRetentionDays = value;
+        ViewBag.DefaultBetaMaxOcrPages = _configuration.GetValue<int?>("Limits:Beta:MaxOcrPages") ?? 500;
         ViewBag.QueueIsPaused = _ocrQueueProcessor.IsPaused;
         return View(orgs);
     }
@@ -233,6 +234,22 @@ public class AdminController : Controller
         }
     }
 
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> UpdateBetaMaxOcrPages([FromBody] UpdateBetaMaxOcrPagesRequest request)
+    {
+        try
+        {
+            await _superAdminSvc.UpdateBetaMaxOcrPagesAsync(request.OrgId, request.MaxOcrPages);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "UpdateBetaMaxOcrPages failed for {OrgId}", request.OrgId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> OcrQueue()
     {
@@ -307,4 +324,10 @@ public sealed class SetUserPasswordRequest
 {
     public string UserId { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
+}
+
+public sealed class UpdateBetaMaxOcrPagesRequest
+{
+    public string OrgId { get; set; } = string.Empty;
+    public int MaxOcrPages { get; set; }
 }

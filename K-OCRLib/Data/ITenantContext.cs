@@ -52,4 +52,14 @@ public interface ITenantContext
     /// When <c>true</c> the org is a guest organisation and is exempt from Stripe billing.
     /// </summary>
     bool IsGuestOrganization { get; }
+
+    /// <summary>
+    /// When <c>true</c> the org is a beta-test organisation and follows trial-style billing rules.
+    /// </summary>
+    bool IsBetaTestOrganization { get; }
+
+    /// <summary>
+    /// When <c>true</c> the org is running in a trial mode (guest or beta-test).
+    /// </summary>
+    bool IsTrialOrganization { get; }
 }

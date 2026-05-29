@@ -57,6 +57,8 @@ public class SuperAdminService : ISuperAdminService
                 Description = org.Description,
                 IsActive = org.IsActive,
                 IsGuestOrganization = org.IsGuestOrganization,
+                IsBetaTestOrganization = org.IsBetaTestOrganization,
+                BetaMaxOcrPages = org.BetaMaxOcrPages,
                 MarkedForDeletionAtUtc = org.MarkedForDeletionAtUtc,
                 CreatedAtUtc = org.CreatedAtUtc,
                 UserCount = org.UserMemberships.Count,
@@ -88,7 +90,9 @@ public class SuperAdminService : ISuperAdminService
         {
             Name = trimmedName,
             Description = request.Description?.Trim(),
-            IsActive = true
+            IsActive = true,
+            IsBetaTestOrganization = request.IsBetaTestOrganization,
+            BetaMaxOcrPages = ResolveBetaMaxOcrPages(request.BetaMaxOcrPages)
         };
 
         await _dbContext.Organizations.AddAsync(organization);
@@ -217,9 +221,9 @@ public class SuperAdminService : ISuperAdminService
         }
 
         // Auto-provision Stripe Customer + Subscription (non-fatal — admin can retry manually)
-        bool stripeProvisioned = false;
+        bool stripeProvisioned = organization.IsTrialOrganization();
         string? stripeProvisioningError = null;
-        if (!organization.IsGuestOrganization)
+        if (!organization.IsTrialOrganization())
         {
             var stripeResult = await TryProvisionStripeAsync(organization, priceId: null);
             stripeProvisioned = stripeResult.Success;
@@ -227,8 +231,8 @@ public class SuperAdminService : ISuperAdminService
         }
 
         _logger.LogInformation(
-            "Organization created: OrgId={OrgId}, OrgName={OrgName}, IsGuestOrganization={IsGuestOrganization}, AdminUserId={AdminUserId}, AdminEmail={AdminEmail}.",
-            organization.Id, organization.Name, organization.IsGuestOrganization, user.Id, user.Email);
+            "Organization created: OrgId={OrgId}, OrgName={OrgName}, IsGuestOrganization={IsGuestOrganization}, IsBetaTestOrganization={IsBetaTestOrganization}, AdminUserId={AdminUserId}, AdminEmail={AdminEmail}.",
+            organization.Id, organization.Name, organization.IsGuestOrganization, organization.IsBetaTestOrganization, user.Id, user.Email);
 
         if (!reusingExistingUser)
         {
@@ -638,8 +642,8 @@ public class SuperAdminService : ISuperAdminService
             .FirstOrDefaultAsync(o => o.Id == organizationId)
             ?? throw new KeyNotFoundException("Organization not found.");
 
-        // Guest orgs are never Stripe-billed — no status check needed.
-        if (organization.IsGuestOrganization) return StripeStatusResult.NotApplicable;
+        // Trial orgs (guest/beta) are never Stripe-billed — no status check needed.
+        if (organization.IsTrialOrganization()) return StripeStatusResult.NotApplicable;
 
         // Stripe not configured or no subscription provisioned → treat as inactive.
         if (_stripeProvisioning is null || string.IsNullOrEmpty(organization.StripeSubscriptionId))
@@ -679,8 +683,8 @@ public class SuperAdminService : ISuperAdminService
             .FirstOrDefaultAsync(o => o.Id == organizationId)
             ?? throw new KeyNotFoundException("Organization not found.");
 
-        if (organization.IsGuestOrganization)
-            throw new InvalidOperationException("Guest organizations are not billed via Stripe.");
+        if (organization.IsTrialOrganization())
+            throw new InvalidOperationException("Trial organizations are not billed via Stripe.");
 
         if (_stripeProvisioning is null)
             throw new InvalidOperationException("Stripe provisioning service is not configured.");
@@ -730,5 +734,36 @@ public class SuperAdminService : ISuperAdminService
                 organization.Id);
             return (false, ex.Message);
         }
+    }
+
+    public async Task UpdateBetaMaxOcrPagesAsync(string organizationId, int maxOcrPages)
+    {
+        if (maxOcrPages <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxOcrPages), "Beta max OCR pages must be greater than 0.");
+
+        var organization = await _dbContext.Organizations
+            .FirstOrDefaultAsync(o => o.Id == organizationId)
+            ?? throw new KeyNotFoundException("Organization not found.");
+
+        if (!organization.IsBetaTestOrganization)
+            throw new InvalidOperationException("Only beta-test organizations support a beta OCR page limit.");
+
+        organization.BetaMaxOcrPages = maxOcrPages;
+        await _dbContext.SaveChangesAsync();
+    }
+
+    private int ResolveBetaMaxOcrPages(int? requestedMaxOcrPages)
+    {
+        var configuredDefault = _configuration.GetValue<int?>("Limits:Beta:MaxOcrPages") ?? 500;
+        if (configuredDefault <= 0)
+            configuredDefault = 500;
+
+        if (!requestedMaxOcrPages.HasValue)
+            return configuredDefault;
+
+        if (requestedMaxOcrPages.Value <= 0)
+            throw new InvalidOperationException("Beta max OCR pages must be greater than 0.");
+
+        return requestedMaxOcrPages.Value;
     }
 }

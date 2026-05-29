@@ -162,6 +162,21 @@ public class ConfigurationService : IConfigurationService
         return isGuest ? 20 : 100;
     }
 
+    public int GetBetaMaxOcrPages()
+    {
+        try
+        {
+            var node = ParseSettingsNode();
+            if (node?["Limits"]?["Beta"]?["MaxOcrPages"] is { } val &&
+                val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
+            {
+                return (int)val;
+            }
+        }
+        catch { /* fall through */ }
+        return 500;
+    }
+
     private System.Text.Json.Nodes.JsonNode? ParseSettingsNode()
     {
         var path = IsDevelopment()

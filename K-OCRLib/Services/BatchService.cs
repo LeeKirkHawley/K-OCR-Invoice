@@ -368,7 +368,7 @@ public class BatchService : IBatchService, IAsyncDisposable
 
     public async Task<TriggerOcrResult> TriggerOcrAsync(int batchId, double? minConfidenceThreshold = null, ISet<string>? skipFileNames = null, string? workflowKey = null, int? maxPageCount = null, int? maxInvoicesPerBatch = null)
     {
-        if (!_tenantContext.IsGuestOrganization &&
+        if (!_tenantContext.IsTrialOrganization &&
             !_stripeUsage.IsStatusActive(_tenantContext.StripeSubscriptionStatus))
             throw new InvalidOperationException("OCR is unavailable: subscription inactive.");
 
@@ -476,7 +476,7 @@ public class BatchService : IBatchService, IAsyncDisposable
             // TODO: RecordBatchOcrEventAsync requires actual OCR results; move to OcrQueueProcessor completion callback.
 
             // Bill Stripe now with estimated page counts; actual page counts are available after OCR completes.
-            if (!_tenantContext.IsGuestOrganization && _tenantContext.StripeCustomerId is { } customerId)
+            if (!_tenantContext.IsTrialOrganization && _tenantContext.StripeCustomerId is { } customerId)
             {
                 var estimatedPages = filePaths.Sum(EstimateFilePageCount);
                 var idempotencyKey = $"batch-{batchId}-{ocrRunId}";

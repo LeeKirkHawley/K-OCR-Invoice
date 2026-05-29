@@ -188,6 +188,7 @@ builder.Services.AddScoped<IBatchNotificationService, BatchNotificationService>(
 builder.Services.AddScoped<IHomePageService, HomePageService>();
 builder.Services.AddScoped<IHomeOcrService, HomeOcrService>();
 builder.Services.AddScoped<IHomeExportService, HomeExportService>();
+builder.Services.AddScoped<ITrialOrganizationLimitService, TrialOrganizationLimitService>();
 builder.Services.AddScoped<IBatchCleanupService>(sp =>
     new BatchCleanupService(
         sp.GetRequiredService<IPathService>(),

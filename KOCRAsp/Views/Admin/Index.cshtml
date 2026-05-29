@@ -6,6 +6,7 @@
     ViewData["MetaDescription"] = "Administer organizations and queue settings in Hardscrabble Invoice.";
     var batches = (ViewBag.Batches as BatchDetail[]) ?? Array.Empty<BatchDetail>();
     var deletedOrgRetentionDays = (int)(ViewBag.DeletedOrgRetentionDays ?? 14);
+    var defaultBetaMaxOcrPages = (int)(ViewBag.DefaultBetaMaxOcrPages ?? 500);
 }
 
 <h1 class="h4 mb-4">Admin Console</h1>
@@ -27,6 +28,15 @@
             <div class="col-sm-4">
                 <input type="text" id="adminName" class="form-control" placeholder="Admin full name" />
             </div>
+            <div class="col-sm-4 d-flex align-items-center">
+                <div class="form-check">
+                    <input type="checkbox" id="isBetaTestOrganization" class="form-check-input" />
+                    <label for="isBetaTestOrganization" class="form-check-label">Beta test organization</label>
+                </div>
+            </div>
+            <div class="col-sm-4">
+                <input type="number" id="betaMaxOcrPages" class="form-control" min="1" value="@defaultBetaMaxOcrPages" placeholder="Beta max OCR pages" />
+            </div>
             <div class="col-auto">
                 <button class="btn btn-primary" id="createOrgBtn" onclick="createOrg()">Create</button>
             </div>
@@ -46,6 +56,7 @@
                     <th>Users</th>
                     <th>Created</th>
                     <th>Status</th>
+                    <th>Beta OCR Limit</th>
                     <th>Stripe</th>
                     <th class="text-end">Actions</th>
                 </tr>
@@ -54,7 +65,7 @@
                 @if (!Model.Any())
                 {
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-3">No organizations.</td>
+                        <td colspan="8" class="text-center text-muted py-3">No organizations.</td>
                     </tr>
                 }
                 else
@@ -68,6 +79,10 @@
                                 @if (org.IsGuestOrganization)
                                 {
                                     <span class="badge bg-info text-dark ms-1">Guest</span>
+                                }
+                                else if (org.IsBetaTestOrganization)
+                                {
+                                    <span class="badge bg-primary ms-1">Beta</span>
                                 }
                             </td>
                             <td class="text-muted small">@org.Description</td>
@@ -96,7 +111,27 @@
                                 }
                             </td>
                             <td id="org-stripe-@org.OrganizationId">
-                                @if (org.IsGuestOrganization)
+                                @if (org.IsBetaTestOrganization)
+                                {
+                                    <div class="input-group input-group-sm" style="max-width: 220px;">
+                                        <input type="number"
+                                               id="beta-limit-input-@org.OrganizationId"
+                                               class="form-control"
+                                               min="1"
+                                               value="@org.BetaMaxOcrPages" />
+                                        <button class="btn btn-outline-primary"
+                                                onclick="updateBetaLimit('@org.OrganizationId', this)">
+                                            Save
+                                        </button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">N/A</span>
+                                }
+                            </td>
+                            <td>
+                                @if (org.IsGuestOrganization || org.IsBetaTestOrganization)
                                 {
                                     <span class="text-muted small">N/A</span>
                                 }
@@ -127,12 +162,12 @@
                                 }
                                 else if (org.IsActive)
                                 {
-                                    if (!org.IsGuestOrganization && org.StripeCustomerId == null)
+                                    if (!org.IsGuestOrganization && !org.IsBetaTestOrganization && org.StripeCustomerId == null)
                                     {
                                         <button class="btn btn-sm btn-outline-primary me-1"
                                                 onclick="provisionStripe('@org.OrganizationId', this)">Provision Stripe</button>
                                     }
-                                    @if (!org.IsGuestOrganization && org.StripeCustomerId != null)
+                                    @if (!org.IsGuestOrganization && !org.IsBetaTestOrganization && org.StripeCustomerId != null)
                                     {
                                         <button class="btn btn-sm btn-outline-secondary me-1"
                                                 onclick="syncStripeStatus('@org.OrganizationId', this)">Sync Status</button>
@@ -264,9 +299,16 @@
         const desc = document.getElementById('orgDesc').value.trim();
         const email = document.getElementById('adminEmail').value.trim();
         const adminName = document.getElementById('adminName').value.trim();
+        const isBetaTestOrganization = document.getElementById('isBetaTestOrganization').checked;
+        const betaMaxOcrPagesRaw = document.getElementById('betaMaxOcrPages').value;
+        const betaMaxOcrPages = parseInt(betaMaxOcrPagesRaw, 10);
 
         if (!name || !email || !adminName) {
             showToast('Name, admin email and admin name are required.', 'warning');
+            return;
+        }
+        if (isBetaTestOrganization && (!Number.isInteger(betaMaxOcrPages) || betaMaxOcrPages <= 0)) {
+            showToast('Beta max OCR pages must be a positive whole number.', 'warning');
             return;
         }
 
@@ -274,13 +316,38 @@
         setButtonLoading(btn, true);
         try {
             const result = await postJson('/admin/createorganization', {
-                name, description: desc, adminEmail: email, adminName
+                name, description: desc, adminEmail: email, adminName, isBetaTestOrganization, betaMaxOcrPages
             });
             if (result.success) {
                 if (result.stripeProvisioned === false) {
                     alert('Organization created, but Stripe provisioning failed:\n\n' + (result.stripeProvisioningError ?? 'unknown error') + '\n\nUse the Provision Stripe button to retry after the page reloads.');
                 } else {
                     showToast('Organization created.');
+                }
+
+                async function updateBetaLimit(orgId, btn) {
+                    const input = document.getElementById(`beta-limit-input-${orgId}`);
+                    if (!input) return;
+                    const maxOcrPages = parseInt(input.value, 10);
+                    if (!Number.isInteger(maxOcrPages) || maxOcrPages <= 0) {
+                        showToast('Beta max OCR pages must be a positive whole number.', 'warning');
+                        input.focus();
+                        return;
+                    }
+
+                    setButtonLoading(btn, true);
+                    try {
+                        const result = await postJson('/admin/updatebetamaxocrpages', { orgId, maxOcrPages });
+                        if (result.success) {
+                            showToast('Beta OCR page limit updated.');
+                        } else {
+                            showToast(result.error ?? 'Update failed.', 'error');
+                        }
+                    } catch (err) {
+                        showToast('Error: ' + err.message, 'error');
+                    } finally {
+                        setButtonLoading(btn, false);
+                    }
                 }
                 if (result.setupLink && !result.emailSent) {
                     document.getElementById('setupLinkInput').value = result.setupLink;

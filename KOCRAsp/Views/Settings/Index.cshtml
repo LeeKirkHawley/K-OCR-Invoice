@@ -101,6 +101,15 @@
                            class="form-control" min="1" max="1000" />
                     <div class="form-text">Invoices exceeding this page count are grayed out and skipped during OCR.</div>
                 </div>
+                <div class="col-12 mt-3">
+                    <h6 class="mb-2">Beta Test Organizations</h6>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="Limits.Beta.MaxOcrPages" class="form-label">Max OCR Pages</label>
+                    <input asp-for="Limits.Beta.MaxOcrPages" type="number"
+                           class="form-control" min="1" max="1000000" />
+                    <div class="form-text">Total OCR page budget before uploads and OCR are disabled for beta organizations.</div>
+                </div>
             </div>
         </div>
     </div>

@@ -22,6 +22,7 @@ public class HomeController : Controller
     private readonly IHomeOcrService _homeOcrSvc;
     private readonly IHomeExportService _homeExportSvc;
     private readonly IOrganizationActivityLogService _orgLogSvc;
+    private readonly ITrialOrganizationLimitService _trialLimitSvc;
     private readonly ITenantContext _tenantContext;
     private readonly ILogger<HomeController> _logger;
 
@@ -33,6 +34,7 @@ public class HomeController : Controller
         IHomeOcrService homeOcrSvc,
         IHomeExportService homeExportSvc,
         IOrganizationActivityLogService orgLogSvc,
+        ITrialOrganizationLimitService trialLimitSvc,
         ITenantContext tenantContext,
         ILogger<HomeController> logger)
     {
@@ -40,6 +42,7 @@ public class HomeController : Controller
         _homeOcrSvc = homeOcrSvc;
         _homeExportSvc = homeExportSvc;
         _orgLogSvc = orgLogSvc;
+        _trialLimitSvc = trialLimitSvc;
         _tenantContext = tenantContext;
         _logger = logger;
     }
@@ -79,6 +82,9 @@ public class HomeController : Controller
             (files, totalFiles, currentPage, totalPages) = await _homePageSvc.BuildPagedFileListAsync(
                 currentBatch, 1, defaultPageSize, _tenantContext.IsGuestOrganization);
 
+        var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
+        var isOrgAdmin = User.IsActiveOrganizationAdmin();
+
         return View(new HomeIndexViewModel
         {
             OrgId = orgId,
@@ -89,7 +95,14 @@ public class HomeController : Controller
             CurrentPage = currentPage,
             PageSize = defaultPageSize,
             TotalPages = totalPages,
-            MaxPagesPerInvoice = maxPagesPerInvoice
+            MaxPagesPerInvoice = maxPagesPerInvoice,
+            IsBetaTestOrganization = betaStatus.IsBetaTestOrganization,
+            IsOrgAdmin = isOrgAdmin,
+            ShowBetaWelcomeDialog = betaStatus.IsBetaTestOrganization && isOrgAdmin,
+            BetaMaxOcrPages = betaStatus.MaxOcrPages,
+            BetaUsedOcrPages = betaStatus.UsedOcrPages,
+            BetaRemainingOcrPages = betaStatus.RemainingOcrPages,
+            BetaOcrLimitExceeded = betaStatus.IsLimitExceeded
         });
     }
 
@@ -110,6 +123,17 @@ public class HomeController : Controller
     {
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
+        if (betaStatus.IsLimitExceeded)
+        {
+            return Json(new
+            {
+                success = false,
+                betaLimitExceeded = true,
+                error = $"This beta-test organization has reached its OCR limit ({betaStatus.UsedOcrPages}/{betaStatus.MaxOcrPages} pages). Uploads and OCR are disabled."
+            });
+        }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
@@ -152,18 +176,36 @@ public class HomeController : Controller
             _tenantContext.OrganizationId ?? string.Empty,
             _tenantContext.OrganizationName ?? string.Empty,
             _tenantContext.IsGuestOrganization,
+            _tenantContext.IsBetaTestOrganization,
+            _tenantContext.IsTrialOrganization,
             _tenantContext.StripeSubscriptionStatus,
             _tenantContext.StripeCustomerId);
+
+        var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
+        if (betaStatus.IsLimitExceeded)
+        {
+            return Json(new
+            {
+                success = false,
+                betaLimitExceeded = true,
+                error = $"This beta-test organization has reached its OCR limit ({betaStatus.UsedOcrPages}/{betaStatus.MaxOcrPages} pages)."
+            });
+        }
 
         var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         var batch = await GetCurrentBatchAsync();
         var result = await _homeOcrSvc.StartOcrAsync(filePath, tenant, orgUser, batch);
+        var updatedBetaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
         return Json(new
         {
             success = result.Success,
             pageLimitExceeded = result.PageLimitExceeded,
             error = result.Error,
-            invoice = result.Invoice
+            invoice = result.Invoice,
+            betaLimitExceeded = updatedBetaStatus.IsLimitExceeded,
+            betaPagesRemaining = updatedBetaStatus.RemainingOcrPages,
+            betaUsedPages = updatedBetaStatus.UsedOcrPages,
+            betaMaxPages = updatedBetaStatus.MaxOcrPages
         });
     }
 
@@ -182,8 +224,21 @@ public class HomeController : Controller
             _tenantContext.OrganizationId ?? string.Empty,
             _tenantContext.OrganizationName ?? string.Empty,
             _tenantContext.IsGuestOrganization,
+            _tenantContext.IsBetaTestOrganization,
+            _tenantContext.IsTrialOrganization,
             _tenantContext.StripeSubscriptionStatus,
             _tenantContext.StripeCustomerId);
+
+        var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
+        if (betaStatus.IsLimitExceeded)
+        {
+            return Json(new
+            {
+                success = false,
+                betaLimitExceeded = true,
+                error = $"This beta-test organization has reached its OCR limit ({betaStatus.UsedOcrPages}/{betaStatus.MaxOcrPages} pages)."
+            });
+        }
 
         var result = await _homeOcrSvc.BatchOcrAsync(batchId, skipAlreadyOcrd, tenant);
         var baseline = skipAlreadyOcrd ? (await _homePageSvc.GetAlreadyOcrdFilesAsync(batchId)).Count : 0;
@@ -213,7 +268,17 @@ public class HomeController : Controller
 
         int baseline = HttpContext.Session.GetInt32("OcrSkipBaseline") ?? 0;
         var (total, processed) = await _homePageSvc.BuildOcrStatusAsync(batch, batchId, baseline);
-        return Json(new { success = true, total, processed });
+        var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
+        return Json(new
+        {
+            success = true,
+            total,
+            processed,
+            betaLimitExceeded = betaStatus.IsLimitExceeded,
+            betaPagesRemaining = betaStatus.RemainingOcrPages,
+            betaUsedPages = betaStatus.UsedOcrPages,
+            betaMaxPages = betaStatus.MaxOcrPages
+        });
     }
 
     /// <summary>

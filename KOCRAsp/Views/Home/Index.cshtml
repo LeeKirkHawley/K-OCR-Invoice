@@ -242,6 +242,21 @@
     </div>
 </div>
 
+<div class="modal fade" id="betaLimitModal" tabindex="-1" aria-labelledby="betaLimitModalLabel" aria-modal="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning-subtle">
+                <h5 class="modal-title" id="betaLimitModalLabel">Beta Test Organization Notice</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="betaLimitModalBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 @section Scripts {
 <script src="~/lib/signalr/signalr.min.js"></script>
@@ -313,6 +328,57 @@
     const _orgId             = '@Html.Raw(Model.OrgId)';
     const _currentBatchId    = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
     const _maxPagesPerInvoice = @Model.MaxPagesPerInvoice;
+    const _isBetaTestOrganization = @(Model.IsBetaTestOrganization.ToString().ToLowerInvariant());
+    const _isOrgAdmin = @(Model.IsOrgAdmin.ToString().ToLowerInvariant());
+    const _showBetaWelcomeDialog = @(Model.ShowBetaWelcomeDialog.ToString().ToLowerInvariant());
+    let _betaLimitExceeded = @(Model.BetaOcrLimitExceeded.ToString().ToLowerInvariant());
+    let _betaUsedPages = @Model.BetaUsedOcrPages;
+    let _betaMaxPages = @Model.BetaMaxOcrPages;
+    let _betaPagesRemaining = @Model.BetaRemainingOcrPages;
+    let _betaExceededDialogShown = _betaLimitExceeded;
+
+    function showBetaDialog(message) {
+        const body = document.getElementById('betaLimitModalBody');
+        if (body) body.textContent = message;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('betaLimitModal')).show();
+    }
+
+    function setBetaLimitStateFromServer(data) {
+        if (!_isBetaTestOrganization) return;
+        const wasExceeded = _betaLimitExceeded;
+        if (typeof data.betaLimitExceeded === 'boolean') _betaLimitExceeded = data.betaLimitExceeded;
+        if (typeof data.betaUsedPages === 'number') _betaUsedPages = data.betaUsedPages;
+        if (typeof data.betaMaxPages === 'number') _betaMaxPages = data.betaMaxPages;
+        if (typeof data.betaPagesRemaining === 'number') _betaPagesRemaining = data.betaPagesRemaining;
+        applyBetaLimitState();
+        if (_betaLimitExceeded && !wasExceeded && !_betaExceededDialogShown) {
+            _betaExceededDialogShown = true;
+            showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+        }
+    }
+
+    function applyBetaLimitState() {
+        const uploadInput = document.getElementById('uploadInput');
+        if (uploadInput) uploadInput.disabled = _isBetaTestOrganization && _betaLimitExceeded;
+        if (!_isBetaTestOrganization || !_betaLimitExceeded) return;
+        for (const id of ['batchOcrBtn', 'runOcrBtn']) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            el.disabled = true;
+            el.classList.add('disabled');
+        }
+    }
+
+    function maybeShowInitialBetaDialog() {
+        if (!_isBetaTestOrganization) return;
+        if (_showBetaWelcomeDialog && _isOrgAdmin) {
+            showBetaDialog(`You have ${_betaPagesRemaining} OCR page scans remaining (${_betaUsedPages}/${_betaMaxPages} used). Please report any bugs you find during beta testing.`);
+        }
+        if (_betaLimitExceeded) {
+            _betaExceededDialogShown = true;
+            showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+        }
+    }
 
     // ── Batch selector ──────────────────────────────────────────
     document.getElementById('batchSelector').addEventListener('change', function () {
@@ -327,6 +393,12 @@
 
     // ── File upload ─────────────────────────────────────────────
     document.getElementById('uploadInput').addEventListener('change', async function () {
+        if (_isBetaTestOrganization && _betaLimitExceeded) {
+            showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+            this.value = '';
+            return;
+        }
+
         if (!this.files.length) return;
         const fd = new FormData();
         for (const f of this.files) {
@@ -336,6 +408,7 @@
         showUploadOverlay();
         try {
             const result = await postForm('/home/uploadfiles', fd);
+            setBetaLimitStateFromServer(result);
             if (result.success) {
                 showToast(`Uploaded ${result.filesUploaded} file(s).`);
                 if (result.filesSkippedByLimit > 0) {
@@ -345,6 +418,9 @@
                 await refreshBatchDropdown();
                 await updateExportButtonState();
             } else {
+                if (result.betaLimitExceeded) {
+                    showBetaDialog(result.error ?? `This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+                }
                 showToast(result.error ?? 'Upload failed.', 'error');
             }
         } catch (err) {
@@ -363,6 +439,11 @@
 
     // ── Batch OCR ───────────────────────────────────────────────
     document.getElementById('batchOcrBtn').addEventListener('click', async function () {
+        if (_isBetaTestOrganization && _betaLimitExceeded) {
+            showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+            return;
+        }
+
         try {
             const checkResult = await fetch('/home/GetAlreadyOcrdFiles');
             const checkData   = await checkResult.json();
@@ -451,11 +532,17 @@
     });
 
     async function startBatchOcr(skipAlreadyOcrd) {
+        if (_isBetaTestOrganization && _betaLimitExceeded) {
+            showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+            return;
+        }
+
         showOcrOverlay();
         try {
             const fd = new FormData();
             if (skipAlreadyOcrd) fd.append('skipAlreadyOcrd', 'true');
             const result = await postForm('/home/batchocr', fd);
+            setBetaLimitStateFromServer(result);
             if (result.success) {
                 if (result.allSkipped) {
                     hideOcrOverlay();
@@ -468,6 +555,9 @@
                 }
             } else {
                 hideOcrOverlay();
+                if (result.betaLimitExceeded) {
+                    showBetaDialog(result.error ?? `This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+                }
                 showToast(result.error ?? 'OCR failed.', 'error');
             }
         } catch (err) {
@@ -615,7 +705,12 @@
         const container = document.getElementById('invoiceFields');
         const btn = document.createElement('button');
         btn.id = 'runOcrBtn';
-        if (exceedsLimit) {
+        if (_isBetaTestOrganization && _betaLimitExceeded) {
+            btn.className = 'btn btn-sm btn-secondary mt-2';
+            btn.textContent = '▶ Run OCR';
+            btn.disabled = true;
+            btn.title = `Beta OCR page limit reached (${_betaUsedPages}/${_betaMaxPages}).`;
+        } else if (exceedsLimit) {
             btn.className = 'btn btn-sm btn-secondary mt-2';
             btn.textContent = '▶ Run OCR';
             btn.disabled = true;
@@ -629,6 +724,11 @@
     }
 
     async function runOcrOnFile(filePath, btn) {
+        if (_isBetaTestOrganization && _betaLimitExceeded) {
+            showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+            return;
+        }
+
         if (isFileQueued(filePath)) {
             showToast('This invoice is already queued for OCR.', 'warning');
             return;
@@ -639,10 +739,14 @@
             const fd = new FormData();
             fd.append('filePath', filePath);
             const result = await postForm('/home/startocr', fd);
+            setBetaLimitStateFromServer(result);
             if (result.pageLimitExceeded) {
                 showToast(result.error ?? 'Invoice exceeds page limit.', 'error');
                 setButtonLoading(btn, false);
                 return;
+            }
+            if (result.betaLimitExceeded) {
+                showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
             }
             if (result.success && result.invoice) {
                 _currentInvoice = result.invoice;
@@ -854,8 +958,9 @@
         for (const id of ['batchOcrBtn', 'runOcrBtn']) {
             const el = document.getElementById(id);
             if (!el) continue;
-            el.disabled = disabled;
-            el.classList.toggle('disabled', disabled);
+            const shouldDisable = disabled || (_isBetaTestOrganization && _betaLimitExceeded);
+            el.disabled = shouldDisable;
+            el.classList.toggle('disabled', shouldDisable);
         }
     }
 
@@ -1429,6 +1534,7 @@
             try {
                 const resp = await fetch('/home/getocrstatus');
                 const data = await resp.json();
+                setBetaLimitStateFromServer(data);
                 if (data.success && data.processed >= data.total && data.total > 0) {
                     clearInterval(_ocrPollInterval);
                     _ocrPollInterval = null;
@@ -1514,6 +1620,8 @@
     initKocrSplitters();
     initKocrZoom();
     initVtip();
+    applyBetaLimitState();
+    maybeShowInitialBetaDialog();
     initOcrSignalR();
 </script>
 }

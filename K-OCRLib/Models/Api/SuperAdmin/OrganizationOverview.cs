@@ -7,6 +7,8 @@ public class OrganizationOverview
     public string? Description { get; set; }
     public bool IsActive { get; set; }
     public bool IsGuestOrganization { get; set; }
+    public bool IsBetaTestOrganization { get; set; }
+    public int BetaMaxOcrPages { get; set; }
     public DateTime? MarkedForDeletionAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public int UserCount { get; set; }

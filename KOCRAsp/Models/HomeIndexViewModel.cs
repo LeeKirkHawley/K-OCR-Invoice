@@ -13,4 +13,11 @@ public class HomeIndexViewModel
     public int PageSize { get; set; } = 25;
     public int TotalPages { get; set; }
     public int MaxPagesPerInvoice { get; set; } = 20;
+    public bool IsBetaTestOrganization { get; set; }
+    public bool IsOrgAdmin { get; set; }
+    public bool ShowBetaWelcomeDialog { get; set; }
+    public int BetaMaxOcrPages { get; set; }
+    public int BetaUsedOcrPages { get; set; }
+    public int BetaRemainingOcrPages { get; set; }
+    public bool BetaOcrLimitExceeded { get; set; }
 }

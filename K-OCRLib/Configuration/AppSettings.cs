@@ -48,6 +48,7 @@ public class LimitsSection
 {
     public UserLimits User { get; set; } = new();
     public GuestLimits Guest { get; set; } = new();
+    public BetaLimits Beta { get; set; } = new();
 }
 
 public class UserLimits
@@ -74,6 +75,12 @@ public class GuestLimits
     /// are grayed out and skipped during OCR. Defaults to 20.
     /// </summary>
     public int MaxPagesPerInvoice { get; set; } = 20;
+}
+
+public class BetaLimits
+{
+    /// <summary>Maximum OCR pages allowed for beta-test organizations. Defaults to 500.</summary>
+    public int MaxOcrPages { get; set; } = 500;
 }
 
 public class DatabaseSettings

@@ -18,6 +18,7 @@ public class HomeControllerTests
     private readonly Mock<IHomeOcrService> _mockHomeOcrSvc;
     private readonly Mock<IHomeExportService> _mockHomeExportSvc;
     private readonly Mock<IOrganizationActivityLogService> _mockOrgLogSvc;
+    private readonly Mock<ITrialOrganizationLimitService> _mockTrialLimitSvc;
     private readonly Mock<ITenantContext> _mockTenantContext;
     private readonly HomeController _controller;
 
@@ -31,18 +32,25 @@ public class HomeControllerTests
         _mockHomeOcrSvc = new Mock<IHomeOcrService>();
         _mockHomeExportSvc = new Mock<IHomeExportService>();
         _mockOrgLogSvc = new Mock<IOrganizationActivityLogService>();
+        _mockTrialLimitSvc = new Mock<ITrialOrganizationLimitService>();
         _mockTenantContext = new Mock<ITenantContext>();
 
         _mockTenantContext.Setup(t => t.OrganizationId).Returns(OrgId);
         _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
         _mockTenantContext.Setup(t => t.IsGuestOrganization).Returns(false);
+        _mockTenantContext.Setup(t => t.IsBetaTestOrganization).Returns(false);
+        _mockTenantContext.Setup(t => t.IsTrialOrganization).Returns(false);
         _mockTenantContext.Setup(t => t.StripeSubscriptionStatus).Returns("active");
+        _mockTrialLimitSvc
+            .Setup(s => s.GetCurrentStatusAsync())
+            .ReturnsAsync(new TrialOrganizationLimitStatus(false, 500, 0));
 
         _controller = new HomeController(
             _mockHomePageSvc.Object,
             _mockHomeOcrSvc.Object,
             _mockHomeExportSvc.Object,
             _mockOrgLogSvc.Object,
+            _mockTrialLimitSvc.Object,
             _mockTenantContext.Object,
             Mock.Of<ILogger<HomeController>>());
     }
@@ -152,6 +160,26 @@ public class HomeControllerTests
         var successProp = value.GetType().GetProperty("success");
         Assert.NotNull(successProp);
         Assert.True((bool)successProp.GetValue(value)!);
+    }
+
+    [Fact]
+    public async Task StartOcr_WhenBetaLimitExceeded_ReturnsLimitError()
+    {
+        SetControllerContext();
+        _mockTrialLimitSvc
+            .Setup(s => s.GetCurrentStatusAsync())
+            .ReturnsAsync(new TrialOrganizationLimitStatus(true, 500, 500));
+        _mockTenantContext.Setup(t => t.IsBetaTestOrganization).Returns(true);
+
+        var result = await _controller.StartOcr(@"C:\invoices\file.pdf");
+
+        var json = Assert.IsType<JsonResult>(result);
+        var value = json.Value!;
+        Assert.False((bool)value.GetType().GetProperty("success")!.GetValue(value)!);
+        Assert.True((bool)value.GetType().GetProperty("betaLimitExceeded")!.GetValue(value)!);
+        _mockHomeOcrSvc.Verify(
+            s => s.StartOcrAsync(It.IsAny<string>(), It.IsAny<HomeTenantInfo>(), It.IsAny<string>(), It.IsAny<BatchSummary?>()),
+            Times.Never);
     }
 
     [Fact]

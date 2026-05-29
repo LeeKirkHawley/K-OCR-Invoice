@@ -7,6 +7,8 @@ public sealed record HomeTenantInfo(
     string OrganizationId,
     string OrganizationName,
     bool IsGuestOrganization,
+    bool IsBetaTestOrganization,
+    bool IsTrialOrganization,
     string StripeSubscriptionStatus,
     string? StripeCustomerId);
 
@@ -64,7 +66,7 @@ public sealed class HomeOcrService : IHomeOcrService
     }
 
     public bool CanUseOcr(HomeTenantInfo tenant) =>
-        tenant.IsGuestOrganization || _stripeUsage.IsStatusActive(tenant.StripeSubscriptionStatus);
+        tenant.IsTrialOrganization || _stripeUsage.IsStatusActive(tenant.StripeSubscriptionStatus);
 
     public async Task<HomeSingleOcrResult> StartOcrAsync(
         string filePath,
@@ -139,7 +141,7 @@ public sealed class HomeOcrService : IHomeOcrService
                 _logger.LogError(ex, "Failed to record single-file OCR report for {FilePath}.", filePath);
             }
 
-            if (!tenant.IsGuestOrganization && tenant.StripeCustomerId is { } customerId)
+            if (!tenant.IsTrialOrganization && tenant.StripeCustomerId is { } customerId)
             {
                 var idempotencyKey = $"file-{Path.GetFileName(filePath)}-{Guid.NewGuid():N}";
                 await _stripeUsage.ReportUsageAsync(customerId, invoice?.PageCount ?? 1, idempotencyKey);

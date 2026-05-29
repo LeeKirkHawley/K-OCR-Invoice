@@ -34,4 +34,5 @@ public interface ISuperAdminService
     /// <see cref="StripeStatusResult.Status"/> holds the live status or <c>"error"</c> on failure.
     /// </summary>
     Task<StripeStatusResult> SyncStripeStatusAsync(string organizationId);
+    Task UpdateBetaMaxOcrPagesAsync(string organizationId, int maxOcrPages);
 }

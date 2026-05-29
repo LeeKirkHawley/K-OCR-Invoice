@@ -14,6 +14,8 @@ public class Organization
     public bool IsActive { get; set; } = true;
 
     public bool IsGuestOrganization { get; set; }
+    public bool IsBetaTestOrganization { get; set; }
+    public int BetaMaxOcrPages { get; set; } = 500;
 
     public DateTime? MarkedForDeletionAtUtc { get; set; }
 

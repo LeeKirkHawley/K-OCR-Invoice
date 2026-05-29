@@ -39,4 +39,9 @@ public interface IConfigurationService
     /// Returns the maximum number of invoices allowed per batch for regular or guest users.
     /// </summary>
     int GetMaxInvoicesPerBatch(bool isGuest);
+
+    /// <summary>
+    /// Returns the maximum number of OCR pages available to beta-test organizations.
+    /// </summary>
+    int GetBetaMaxOcrPages();
 }
