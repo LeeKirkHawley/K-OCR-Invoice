@@ -24,6 +24,7 @@ public class HomeController : Controller
     private readonly IOrganizationActivityLogService _orgLogSvc;
     private readonly ITrialOrganizationLimitService _trialLimitSvc;
     private readonly ITenantContext _tenantContext;
+    private readonly IConfigurationService _configSvc;
     private readonly ILogger<HomeController> _logger;
 
     private static readonly string[] InvoiceExtensions =
@@ -36,6 +37,7 @@ public class HomeController : Controller
         IOrganizationActivityLogService orgLogSvc,
         ITrialOrganizationLimitService trialLimitSvc,
         ITenantContext tenantContext,
+        IConfigurationService configSvc,
         ILogger<HomeController> logger)
     {
         _homePageSvc = homePageSvc;
@@ -44,6 +46,7 @@ public class HomeController : Controller
         _orgLogSvc = orgLogSvc;
         _trialLimitSvc = trialLimitSvc;
         _tenantContext = tenantContext;
+        _configSvc = configSvc;
         _logger = logger;
     }
 
@@ -84,6 +87,11 @@ public class HomeController : Controller
 
         var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
         var isOrgAdmin = User.IsActiveOrganizationAdmin();
+        var isGuest = _tenantContext.IsGuestOrganization;
+
+        var guestMaxBatches = isGuest ? _configSvc.GetGuestMaxBatches() : 0;
+        var guestMaxInvoices = isGuest ? _configSvc.GetMaxInvoicesPerBatch(isGuest: true) : 0;
+        var guestMaxPages = isGuest ? _configSvc.GetMaxPagesPerInvoice(isGuest: true) : 0;
 
         return View(new HomeIndexViewModel
         {
@@ -102,7 +110,13 @@ public class HomeController : Controller
             BetaMaxOcrPages = betaStatus.MaxOcrPages,
             BetaUsedOcrPages = betaStatus.UsedOcrPages,
             BetaRemainingOcrPages = betaStatus.RemainingOcrPages,
-            BetaOcrLimitExceeded = betaStatus.IsLimitExceeded
+            BetaOcrLimitExceeded = betaStatus.IsLimitExceeded,
+            IsGuestOrganization = isGuest,
+            ShowGuestWelcomeDialog = isGuest && isOrgAdmin,
+            GuestMaxBatches = guestMaxBatches,
+            GuestActiveBatchCount = batches.Count,
+            GuestMaxInvoicesPerBatch = guestMaxInvoices,
+            GuestMaxPagesPerInvoice = guestMaxPages,
         });
     }
 

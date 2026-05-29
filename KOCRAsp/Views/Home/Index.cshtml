@@ -337,6 +337,13 @@
     let _betaPagesRemaining = @Model.BetaRemainingOcrPages;
     let _betaExceededDialogShown = _betaLimitExceeded;
 
+    const _isGuestOrganization = @(Model.IsGuestOrganization.ToString().ToLowerInvariant());
+    const _showGuestWelcomeDialog = @(Model.ShowGuestWelcomeDialog.ToString().ToLowerInvariant());
+    const _guestMaxBatches = @Model.GuestMaxBatches;
+    const _guestActiveBatchCount = @Model.GuestActiveBatchCount;
+    const _guestMaxInvoicesPerBatch = @Model.GuestMaxInvoicesPerBatch;
+    const _guestMaxPagesPerInvoice = @Model.GuestMaxPagesPerInvoice;
+
     function showBetaDialog(message) {
         const body = document.getElementById('betaLimitModalBody');
         if (body) body.textContent = message;
@@ -380,6 +387,17 @@
         }
     }
 
+    function maybeShowInitialGuestDialog() {
+        if (!_isGuestOrganization) return;
+        if (_showGuestWelcomeDialog) {
+            showGuestOcrLimitModal(
+                `Welcome! Your guest account allows up to ${_guestMaxBatches} batches, ` +
+                `${_guestMaxInvoicesPerBatch} files per batch, and ${_guestMaxPagesPerInvoice} pages per file. ` +
+                `You currently have ${_guestActiveBatchCount} of ${_guestMaxBatches} batches.`
+            );
+        }
+    }
+
     // ── Batch selector ──────────────────────────────────────────
     document.getElementById('batchSelector').addEventListener('change', function () {
         const batchId = this.value;
@@ -412,7 +430,14 @@
             if (result.success) {
                 showToast(`Uploaded ${result.filesUploaded} file(s).`);
                 if (result.filesSkippedByLimit > 0) {
-                    showToast(`${result.filesSkippedByLimit} file(s) were not uploaded: batch invoice limit reached.`, 'warning');
+                    if (_isGuestOrganization) {
+                        showGuestOcrLimitModal(
+                            `${result.filesSkippedByLimit} file(s) were not uploaded: the batch has reached its limit of ${_guestMaxInvoicesPerBatch} files. ` +
+                            `Create a new batch to upload more (up to ${_guestMaxBatches} batches allowed).`
+                        );
+                    } else {
+                        showToast(`${result.filesSkippedByLimit} file(s) were not uploaded: batch invoice limit reached.`, 'warning');
+                    }
                 }
                 await refreshFileList();
                 await refreshBatchDropdown();
@@ -1622,6 +1647,7 @@
     initVtip();
     applyBetaLimitState();
     maybeShowInitialBetaDialog();
+    maybeShowInitialGuestDialog();
     initOcrSignalR();
 </script>
 }

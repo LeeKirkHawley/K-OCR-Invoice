@@ -20,4 +20,11 @@ public class HomeIndexViewModel
     public int BetaUsedOcrPages { get; set; }
     public int BetaRemainingOcrPages { get; set; }
     public bool BetaOcrLimitExceeded { get; set; }
+
+    public bool IsGuestOrganization { get; set; }
+    public bool ShowGuestWelcomeDialog { get; set; }
+    public int GuestMaxBatches { get; set; }
+    public int GuestActiveBatchCount { get; set; }
+    public int GuestMaxInvoicesPerBatch { get; set; }
+    public int GuestMaxPagesPerInvoice { get; set; }
 }
