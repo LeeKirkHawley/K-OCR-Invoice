@@ -165,7 +165,8 @@
                                     if (org.IsGuestOrganization || org.IsBetaTestOrganization)
                                     {
                                         <button class="btn btn-sm btn-outline-primary me-1"
-                                                onclick="promoteOrg('@org.OrganizationId', @Html.Raw(System.Text.Json.JsonSerializer.Serialize(org.Name)), this)">
+                                                data-org-name="@org.Name"
+                                                onclick="promoteOrg('@org.OrganizationId', this.dataset.orgName, this)">
                                             Promote to Full-Class
                                         </button>
                                     }
