@@ -46,6 +46,7 @@ public class OrganizationAdminService : IOrganizationAdminService
             .Include(m => m.User)
             .Where(m => m.OrganizationId == organizationId)
             .ToListAsync();
+        var adminCount = memberships.Count(m => m.Role == RoleNames.OrganizationAdmin);
 
         return memberships
             .Select(m => new OrganizationUserOverview
@@ -54,6 +55,9 @@ public class OrganizationAdminService : IOrganizationAdminService
                 FullName = m.User.FullName,
                 Email = m.User.Email,
                 IsActive = m.User.LockoutEnd is null || m.User.LockoutEnd <= DateTimeOffset.UtcNow,
+                IsOrganizationAdmin = m.Role == RoleNames.OrganizationAdmin,
+                CanChangeRole = m.Role != RoleNames.OrganizationAdmin || adminCount > 1,
+                CanRemove = m.Role != RoleNames.OrganizationAdmin || adminCount > 1,
                 Roles = [m.Role]
             })
             .OrderBy(u => u.FullName ?? u.Email ?? string.Empty, StringComparer.OrdinalIgnoreCase)
@@ -175,6 +179,8 @@ public class OrganizationAdminService : IOrganizationAdminService
         var user = await _userManager.FindByIdAsync(userId)
             ?? throw new InvalidOperationException("User not found.");
 
+        await EnsureUserCanBeRemovedAsync(membership);
+
         _dbContext.UserOrganizationMemberships.Remove(membership);
         await _dbContext.SaveChangesAsync();
 
@@ -204,6 +210,47 @@ public class OrganizationAdminService : IOrganizationAdminService
         _logger.LogInformation(
             "User deleted: UserId={UserId}, Email={Email}, FullName={FullName}, OrganizationId={OrgId}, Reason={Reason}.",
             user.Id, user.Email, user.FullName, organizationId, "organization admin removal");
+    }
+
+    public async Task ChangeUserRoleAsync(string userId, string organizationId, string newRole)
+    {
+        if (!_allowedRoles.Contains(newRole))
+            throw new ArgumentException($"Role '{newRole}' is not a valid organization role.");
+
+        var membership = await _dbContext.UserOrganizationMemberships
+            .FirstOrDefaultAsync(m => m.UserId == userId && m.OrganizationId == organizationId)
+            ?? throw new InvalidOperationException("User does not belong to the specified organization.");
+
+        var user = await _userManager.FindByIdAsync(userId)
+            ?? throw new InvalidOperationException("User not found.");
+
+        await EnsureRoleChangeIsAllowedAsync(membership, newRole);
+
+        membership.Role = newRole;
+        await _dbContext.SaveChangesAsync();
+        await _userManager.UpdateSecurityStampAsync(user);
+    }
+
+    private async Task EnsureUserCanBeRemovedAsync(UserOrganizationMembership membership)
+    {
+        if (membership.Role != RoleNames.OrganizationAdmin)
+            return;
+
+        var adminCount = await _dbContext.UserOrganizationMemberships
+            .CountAsync(m => m.OrganizationId == membership.OrganizationId && m.Role == RoleNames.OrganizationAdmin);
+        if (adminCount <= 1)
+            throw new InvalidOperationException("Cannot remove the last organization admin. Assign another admin first.");
+    }
+
+    private async Task EnsureRoleChangeIsAllowedAsync(UserOrganizationMembership membership, string newRole)
+    {
+        if (membership.Role != RoleNames.OrganizationAdmin || string.Equals(newRole, RoleNames.OrganizationAdmin, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var adminCount = await _dbContext.UserOrganizationMemberships
+            .CountAsync(m => m.OrganizationId == membership.OrganizationId && m.Role == RoleNames.OrganizationAdmin);
+        if (adminCount <= 1)
+            throw new InvalidOperationException("Cannot change the last organization admin's role. Assign another admin first.");
     }
 
     private static string BuildSetupLink(string userId, string encodedToken, string? baseUrl)

@@ -24,11 +24,10 @@ public class OrgConfigController : Controller
         RoleNames.OrganizationUser
     };
 
-    private readonly ApplicationDbContext _dbContext;
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly ISuperAdminService _superAdminSvc;
     private readonly IOrganizationAdminService _orgAdminSvc;
-    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<OrgConfigController> _logger;
 
     public OrgConfigController(
@@ -36,14 +35,12 @@ public class OrgConfigController : Controller
         IOrgConfigService orgConfigSvc,
         ISuperAdminService superAdminSvc,
         IOrganizationAdminService orgAdminSvc,
-        UserManager<ApplicationUser> userManager,
         ILogger<OrgConfigController> logger)
     {
-        _dbContext   = dbContext;
         _orgConfigSvc  = orgConfigSvc;
         _superAdminSvc = superAdminSvc;
         _orgAdminSvc   = orgAdminSvc;
-        _userManager   = userManager;
+        _dbContext     = dbContext;
         _logger        = logger;
     }
 
@@ -162,18 +159,7 @@ public class OrgConfigController : Controller
 
         try
         {
-            var membership = await _dbContext.UserOrganizationMemberships
-                .FirstOrDefaultAsync(m => m.UserId == request.UserId && m.OrganizationId == resolvedOrgId);
-            if (membership is null)
-                return Json(new { success = false, error = "User not found." });
-
-            membership.Role = request.NewRole;
-            await _dbContext.SaveChangesAsync();
-
-            var user = await _userManager.FindByIdAsync(request.UserId);
-            if (user is not null)
-                await _userManager.UpdateSecurityStampAsync(user);
-
+            await _orgAdminSvc.ChangeUserRoleAsync(request.UserId, resolvedOrgId, request.NewRole);
             return Json(new { success = true });
         }
         catch (Exception ex)

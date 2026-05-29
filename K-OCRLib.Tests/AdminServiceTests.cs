@@ -90,6 +90,86 @@ public class AdminServiceTests
             Assert.Single(users);
             Assert.Equal("User One", users[0].FullName);
             Assert.Contains(RoleNames.OrganizationAdmin, users[0].Roles);
+            Assert.True(users[0].IsOrganizationAdmin);
+            Assert.False(users[0].CanChangeRole);
+            Assert.False(users[0].CanRemove);
+        }
+        finally
+        {
+            await db.DisposeAsync();
+            connection.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task OrganizationAdminService_RemoveUserAsync_RejectsLastOrganizationAdmin()
+    {
+        var (db, provider, connection) = await CreateIdentityHarnessAsync();
+        try
+        {
+            var org = new K_OCR.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserName = "admin@test.com",
+                Email = "admin@test.com",
+                FullName = "Admin User",
+                OrganizationId = org.Id
+            };
+            db.Organizations.Add(org);
+            db.Users.Add(user);
+            db.UserOrganizationMemberships.Add(new UserOrganizationMembership
+            {
+                UserId = user.Id,
+                OrganizationId = org.Id,
+                Role = RoleNames.OrganizationAdmin
+            });
+            await db.SaveChangesAsync();
+
+            var userManager = provider.GetRequiredService<UserManager<ApplicationUser>>();
+            var service = new OrganizationAdminService(db, userManager, Mock.Of<IEmailService>(), Mock.Of<ILogger<OrganizationAdminService>>());
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.RemoveUserAsync(user.Id, org.Id));
+            Assert.Contains("last organization admin", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await db.DisposeAsync();
+            connection.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task OrganizationAdminService_ChangeUserRoleAsync_RejectsLastOrganizationAdminDemotion()
+    {
+        var (db, provider, connection) = await CreateIdentityHarnessAsync();
+        try
+        {
+            var org = new K_OCR.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserName = "admin@test.com",
+                Email = "admin@test.com",
+                FullName = "Admin User",
+                OrganizationId = org.Id
+            };
+            db.Organizations.Add(org);
+            db.Users.Add(user);
+            db.UserOrganizationMemberships.Add(new UserOrganizationMembership
+            {
+                UserId = user.Id,
+                OrganizationId = org.Id,
+                Role = RoleNames.OrganizationAdmin
+            });
+            await db.SaveChangesAsync();
+
+            var userManager = provider.GetRequiredService<UserManager<ApplicationUser>>();
+            var service = new OrganizationAdminService(db, userManager, Mock.Of<IEmailService>(), Mock.Of<ILogger<OrganizationAdminService>>());
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.ChangeUserRoleAsync(user.Id, org.Id, RoleNames.OrganizationUser));
+            Assert.Contains("last organization admin", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -161,6 +241,70 @@ public class AdminServiceTests
 
             Assert.Single(marked);
             Assert.NotNull(await db.Organizations.Where(o => o.Id == guest.Id).Select(o => o.MarkedForDeletionAtUtc).FirstAsync());
+        }
+        finally
+        {
+            await db.DisposeAsync();
+            connection.Dispose();
+            CleanupDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task SuperAdminService_DeleteOrganizationAsync_AllowsDeletingSingleAdminOrg()
+    {
+        var (db, provider, connection) = await CreateIdentityHarnessAsync();
+        var root = Path.Combine(Path.GetTempPath(), $"superadmin-delete-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var org = new K_OCR.Identity.Organization
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = "Delete Me",
+                IsActive = false
+            };
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserName = "admin@test.com",
+                Email = "admin@test.com",
+                FullName = "Org Admin",
+                OrganizationId = org.Id
+            };
+            db.Organizations.Add(org);
+            db.Users.Add(user);
+            db.UserOrganizationMemberships.Add(new UserOrganizationMembership
+            {
+                UserId = user.Id,
+                OrganizationId = org.Id,
+                Role = RoleNames.OrganizationAdmin
+            });
+            await db.SaveChangesAsync();
+
+            var path = new PathService(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Kocr:BaseDirectory"] = root
+            }).Build());
+            var orgFolder = path.GetOrgFolderPath(org.Name);
+            Directory.CreateDirectory(orgFolder);
+
+            var service = new SuperAdminService(
+                db,
+                provider.GetRequiredService<UserManager<ApplicationUser>>(),
+                provider.GetRequiredService<RoleManager<IdentityRole>>(),
+                Mock.Of<IEmailService>(),
+                new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["AllowDuplicateEmails"] = "false" }).Build(),
+                path,
+                Mock.Of<IOrgConfigService>(),
+                null,
+                Mock.Of<ILogger<SuperAdminService>>());
+
+            await service.DeleteOrganizationAsync(org.Id);
+
+            Assert.False(await db.Organizations.AnyAsync(o => o.Id == org.Id));
+            Assert.False(await db.UserOrganizationMemberships.AnyAsync(m => m.OrganizationId == org.Id));
+            Assert.False(await db.Users.AnyAsync(u => u.Id == user.Id));
         }
         finally
         {

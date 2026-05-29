@@ -12,4 +12,5 @@ public interface IOrganizationAdminService
     /// </param>
     Task<InviteUserResult> InviteUserAsync(string organizationId, InviteUserRequest request, string? baseUrl = null);
     Task RemoveUserAsync(string userId, string organizationId);
+    Task ChangeUserRoleAsync(string userId, string organizationId, string newRole);
 }

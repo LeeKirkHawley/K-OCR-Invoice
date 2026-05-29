@@ -21,7 +21,6 @@ public class OrgConfigControllerTests
     private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
     private readonly Mock<ISuperAdminService> _mockSuperAdminSvc;
     private readonly Mock<IOrganizationAdminService> _mockOrgAdminSvc;
-    private readonly Mock<UserManager<ApplicationUser>> _mockUserManager;
     private readonly Mock<ILogger<OrgConfigController>> _mockLogger;
     private readonly SqliteConnection _connection;
     private readonly ApplicationDbContext _dbContext;
@@ -35,9 +34,6 @@ public class OrgConfigControllerTests
         _mockOrgConfigSvc  = new Mock<IOrgConfigService>();
         _mockSuperAdminSvc = new Mock<ISuperAdminService>();
         _mockOrgAdminSvc   = new Mock<IOrganizationAdminService>();
-        _mockUserManager   = new Mock<UserManager<ApplicationUser>>(
-            Mock.Of<IUserStore<ApplicationUser>>(),
-            null!, null!, null!, null!, null!, null!, null!, null!);
         _mockLogger = new Mock<ILogger<OrgConfigController>>();
 
         _connection = new SqliteConnection("Data Source=:memory:");
@@ -72,7 +68,6 @@ public class OrgConfigControllerTests
             _mockOrgConfigSvc.Object,
             _mockSuperAdminSvc.Object,
             _mockOrgAdminSvc.Object,
-            _mockUserManager.Object,
             _mockLogger.Object);
 
         _controller.ControllerContext = ControllerTestHelper.CreateControllerContext(

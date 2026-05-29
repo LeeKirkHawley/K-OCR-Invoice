@@ -224,21 +224,24 @@ else
         let html = '';
         for (const u of users) {
             const primaryRole = u.roles?.[0] ?? 'OrganizationUser';
+            const canRemove = u.canRemove ?? true;
+            const canChangeRole = u.canChangeRole ?? true;
             html += `<tr id="user-row-${escapeHtml(u.userId)}">
                 <td>${escapeHtml(u.fullName ?? '—')}</td>
                 <td>${escapeHtml(u.email ?? '—')}</td>
                 <td>
                     <select class="form-select form-select-sm" style="width:auto;"
-                            onchange="changeRole('${escapeHtml(u.userId)}', this.value)">
+                            onchange="changeRole('${escapeHtml(u.userId)}', this.value, '${escapeHtml(primaryRole)}', ${canChangeRole}, this)">
                         <option value="OrganizationUser"      ${primaryRole === 'OrganizationUser'      ? 'selected' : ''}>User</option>
                         <option value="OrganizationValidator" ${primaryRole === 'OrganizationValidator' ? 'selected' : ''}>Validator</option>
                         <option value="OrganizationAdmin"     ${primaryRole === 'OrganizationAdmin'     ? 'selected' : ''}>Admin</option>
                     </select>
+                    ${u.isOrganizationAdmin && !canChangeRole ? '<div class="small text-warning mt-1">Last admin</div>' : ''}
                 </td>
                 <td>${u.isActive ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
                 <td class="text-end">
                     <button class="btn btn-sm btn-outline-danger"
-                            onclick="removeUser('${escapeHtml(u.userId)}', this)">Remove</button>
+                            onclick="removeUser('${escapeHtml(u.userId)}', ${canRemove}, this)">Remove</button>
                 </td>
             </tr>`;
         }
@@ -278,7 +281,15 @@ else
         }
     }
 
-    async function removeUser(userId, btn) {
+    function showLastAdminDialog() {
+        alert('This change cannot be made because the organization would have no admin.');
+    }
+
+    async function removeUser(userId, canRemove, btn) {
+        if (!canRemove) {
+            showLastAdminDialog();
+            return;
+        }
         if (!confirm('Remove this user from the organization?')) return;
         setButtonLoading(btn, true);
         try {
@@ -296,17 +307,24 @@ else
         }
     }
 
-    async function changeRole(userId, newRole) {
+    async function changeRole(userId, newRole, currentRole, canChangeRole, selectEl) {
+        if (!canChangeRole && newRole !== currentRole) {
+            showLastAdminDialog();
+            selectEl.value = currentRole;
+            return;
+        }
         try {
             const result = await postJson('/orgconfig/changerole' + orgParam(), { userId, newRole });
             if (result.success) {
                 showToast('Role updated.');
             } else {
                 showToast(result.error ?? 'Role change failed.', 'error');
+                selectEl.value = currentRole;
                 await loadUsers();
             }
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
+            selectEl.value = currentRole;
         }
     }
 
