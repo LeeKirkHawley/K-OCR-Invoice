@@ -250,6 +250,28 @@ public class AdminController : Controller
         }
     }
 
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> PromoteOrganization([FromBody] PromoteOrganizationRequest request)
+    {
+        try
+        {
+            var result = await _superAdminSvc.PromoteOrganizationAsync(request.OrgId, request.NewOrganizationName);
+            return Json(new
+            {
+                success = true,
+                organizationName = result.OrganizationName,
+                stripeProvisioned = result.StripeProvisioned,
+                stripeProvisioningError = result.StripeProvisioningError
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PromoteOrganization failed for {OrgId}", request.OrgId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> OcrQueue()
     {
@@ -330,4 +352,10 @@ public sealed class UpdateBetaMaxOcrPagesRequest
 {
     public string OrgId { get; set; } = string.Empty;
     public int MaxOcrPages { get; set; }
+}
+
+public sealed class PromoteOrganizationRequest
+{
+    public string OrgId { get; set; } = string.Empty;
+    public string? NewOrganizationName { get; set; }
 }

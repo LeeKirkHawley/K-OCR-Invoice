@@ -162,6 +162,13 @@
                                 }
                                 else if (org.IsActive)
                                 {
+                                    if (org.IsGuestOrganization || org.IsBetaTestOrganization)
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary me-1"
+                                                onclick="promoteOrg('@org.OrganizationId', @Html.Raw(System.Text.Json.JsonSerializer.Serialize(org.Name)), this)">
+                                            Promote to Full-Class
+                                        </button>
+                                    }
                                     if (!org.IsGuestOrganization && !org.IsBetaTestOrganization && org.StripeCustomerId == null)
                                     {
                                         <button class="btn btn-sm btn-outline-primary me-1"
@@ -272,6 +279,28 @@
     </div>
 </div>
 
+<!-- Promote org modal -->
+<div class="modal fade" id="promoteOrgModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Promote to Full-Class Organization</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Existing invoices and org data will be retained. Stripe billing will be provisioned.</p>
+                <label for="promoteOrgNameInput" class="form-label fw-semibold">Organization name</label>
+                <input type="text" id="promoteOrgNameInput" class="form-control" placeholder="Organization name" />
+                <div id="promoteOrgError" class="text-danger small mt-1" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="promoteOrgConfirmBtn" class="btn btn-primary" onclick="confirmPromoteOrg()">Promote</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Setup link modal -->
 <div class="modal fade" id="setupLinkModal" tabindex="-1">
     <div class="modal-dialog">
@@ -325,30 +354,6 @@
                     showToast('Organization created.');
                 }
 
-                async function updateBetaLimit(orgId, btn) {
-                    const input = document.getElementById(`beta-limit-input-${orgId}`);
-                    if (!input) return;
-                    const maxOcrPages = parseInt(input.value, 10);
-                    if (!Number.isInteger(maxOcrPages) || maxOcrPages <= 0) {
-                        showToast('Beta max OCR pages must be a positive whole number.', 'warning');
-                        input.focus();
-                        return;
-                    }
-
-                    setButtonLoading(btn, true);
-                    try {
-                        const result = await postJson('/admin/updatebetamaxocrpages', { orgId, maxOcrPages });
-                        if (result.success) {
-                            showToast('Beta OCR page limit updated.');
-                        } else {
-                            showToast(result.error ?? 'Update failed.', 'error');
-                        }
-                    } catch (err) {
-                        showToast('Error: ' + err.message, 'error');
-                    } finally {
-                        setButtonLoading(btn, false);
-                    }
-                }
                 if (result.setupLink && !result.emailSent) {
                     document.getElementById('setupLinkInput').value = result.setupLink;
                     new bootstrap.Modal(document.getElementById('setupLinkModal')).show();
@@ -363,6 +368,31 @@
                     return;
                 }
                 showToast(result.error ?? 'Create failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function updateBetaLimit(orgId, btn) {
+        const input = document.getElementById(`beta-limit-input-${orgId}`);
+        if (!input) return;
+        const maxOcrPages = parseInt(input.value, 10);
+        if (!Number.isInteger(maxOcrPages) || maxOcrPages <= 0) {
+            showToast('Beta max OCR pages must be a positive whole number.', 'warning');
+            input.focus();
+            return;
+        }
+
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/updatebetamaxocrpages', { orgId, maxOcrPages });
+            if (result.success) {
+                showToast('Beta OCR page limit updated.');
+            } else {
+                showToast(result.error ?? 'Update failed.', 'error');
             }
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
@@ -515,6 +545,63 @@
         } catch (err) {
             showToast('Error: ' + err.message, 'error');
             setButtonLoading(btn, false);
+        }
+    }
+
+    let _promoteOrgId = null;
+    let _promoteBtn = null;
+    let _promoteModal = null;
+
+    function promoteOrg(orgId, currentOrgName, btn) {
+        _promoteOrgId = orgId;
+        _promoteBtn = btn;
+        const nameInput = document.getElementById('promoteOrgNameInput');
+        const errorEl = document.getElementById('promoteOrgError');
+        nameInput.value = currentOrgName ?? '';
+        errorEl.style.display = 'none';
+        errorEl.textContent = '';
+        const confirmBtn = document.getElementById('promoteOrgConfirmBtn');
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Promote';
+        _promoteModal = new bootstrap.Modal(document.getElementById('promoteOrgModal'));
+        _promoteModal.show();
+        setTimeout(() => nameInput.select(), 300);
+    }
+
+    async function confirmPromoteOrg() {
+        const nameInput = document.getElementById('promoteOrgNameInput');
+        const errorEl = document.getElementById('promoteOrgError');
+        const trimmedName = (nameInput.value ?? '').trim();
+        if (!trimmedName) {
+            errorEl.textContent = 'Organization name is required.';
+            errorEl.style.display = '';
+            nameInput.focus();
+            return;
+        }
+
+        const confirmBtn = document.getElementById('promoteOrgConfirmBtn');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Promoting…';
+        if (_promoteBtn) setButtonLoading(_promoteBtn, true);
+
+        try {
+            const result = await postJson('/admin/promoteorganization', { orgId: _promoteOrgId, newOrganizationName: trimmedName });
+            _promoteModal?.hide();
+            if (result.success) {
+                if (result.stripeProvisioned === false && result.stripeProvisioningError) {
+                    showToast(`Promotion completed, but Stripe provisioning failed: ${result.stripeProvisioningError}`, 'warning');
+                } else {
+                    showToast('Organization promoted to full-class.');
+                }
+                location.reload();
+            } else {
+                showToast(result.error ?? 'Promotion failed.', 'error');
+                if (_promoteBtn) setButtonLoading(_promoteBtn, false);
+            }
+        } catch (err) {
+            _promoteModal?.hide();
+            showToast('Error: ' + err.message, 'error');
+            if (_promoteBtn) setButtonLoading(_promoteBtn, false);
         }
     }
 

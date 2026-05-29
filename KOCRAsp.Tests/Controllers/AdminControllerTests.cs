@@ -113,4 +113,27 @@ public class AdminControllerTests
         Assert.NotNull(errorProp);
         Assert.Equal("An organization named \"Acme\" already exists.", (string)errorProp!.GetValue(value)!);
     }
+
+    [Fact]
+    public async Task PromoteOrganization_WhenSuccessful_ReturnsSuccess()
+    {
+        _mockSuperAdminSvc
+            .Setup(s => s.PromoteOrganizationAsync("org-1", "Acme"))
+            .ReturnsAsync(new PromoteOrganizationResult
+            {
+                OrganizationName = "Acme",
+                StripeProvisioned = true
+            });
+
+        var result = await _controller.PromoteOrganization(new PromoteOrganizationRequest
+        {
+            OrgId = "org-1",
+            NewOrganizationName = "Acme"
+        });
+
+        var json = Assert.IsType<JsonResult>(result);
+        var value = json.Value!;
+        Assert.True((bool)value.GetType().GetProperty("success")!.GetValue(value)!);
+        _mockSuperAdminSvc.Verify(s => s.PromoteOrganizationAsync("org-1", "Acme"), Times.Once);
+    }
 }

@@ -35,4 +35,5 @@ public interface ISuperAdminService
     /// </summary>
     Task<StripeStatusResult> SyncStripeStatusAsync(string organizationId);
     Task UpdateBetaMaxOcrPagesAsync(string organizationId, int maxOcrPages);
+    Task<PromoteOrganizationResult> PromoteOrganizationAsync(string organizationId, string? newOrganizationName = null);
 }

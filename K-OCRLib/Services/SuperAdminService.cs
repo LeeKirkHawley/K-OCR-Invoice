@@ -752,6 +752,69 @@ public class SuperAdminService : ISuperAdminService
         await _dbContext.SaveChangesAsync();
     }
 
+    public async Task<PromoteOrganizationResult> PromoteOrganizationAsync(string organizationId, string? newOrganizationName = null)
+    {
+        var organization = await _dbContext.Organizations
+            .FirstOrDefaultAsync(o => o.Id == organizationId)
+            ?? throw new KeyNotFoundException("Organization not found.");
+
+        if (!organization.IsTrialOrganization())
+            throw new InvalidOperationException("Only guest or beta-test organizations can be promoted.");
+
+        var oldName = organization.Name;
+        var targetName = string.IsNullOrWhiteSpace(newOrganizationName)
+            ? oldName
+            : newOrganizationName.Trim();
+
+        if (!string.Equals(oldName, targetName, StringComparison.OrdinalIgnoreCase))
+            await EnsureOrganizationNameAvailableAsync(organizationId, targetName);
+
+        var oldOrgPath = _pathService.GetOrgFolderPath(oldName);
+        var newOrgPath = _pathService.GetOrgFolderPath(targetName);
+
+        var folderMoved = false;
+        if (!string.Equals(oldOrgPath, newOrgPath, StringComparison.OrdinalIgnoreCase))
+        {
+            if (Directory.Exists(newOrgPath))
+                throw new InvalidOperationException($"Cannot promote organization: target folder already exists at \"{newOrgPath}\".");
+
+            if (Directory.Exists(oldOrgPath))
+            {
+                Directory.Move(oldOrgPath, newOrgPath);
+                folderMoved = true;
+            }
+            else
+            {
+                Directory.CreateDirectory(newOrgPath);
+            }
+        }
+
+        try
+        {
+            if (!string.Equals(oldOrgPath, newOrgPath, StringComparison.OrdinalIgnoreCase))
+                await RewriteOrgStoragePathsAsync(newOrgPath, oldOrgPath, targetName);
+
+            organization.Name = targetName;
+            organization.IsGuestOrganization = false;
+            organization.IsBetaTestOrganization = false;
+            await _dbContext.SaveChangesAsync();
+        }
+        catch
+        {
+            if (folderMoved && Directory.Exists(newOrgPath) && !Directory.Exists(oldOrgPath))
+                Directory.Move(newOrgPath, oldOrgPath);
+            throw;
+        }
+
+        var stripeResult = await TryProvisionStripeAsync(organization, priceId: null);
+        return new PromoteOrganizationResult
+        {
+            OrganizationName = organization.Name,
+            StripeProvisioned = stripeResult.Success,
+            StripeProvisioningError = stripeResult.Error
+        };
+    }
+
     private int ResolveBetaMaxOcrPages(int? requestedMaxOcrPages)
     {
         var configuredDefault = _configuration.GetValue<int?>("Limits:Beta:MaxOcrPages") ?? 500;
@@ -765,5 +828,62 @@ public class SuperAdminService : ISuperAdminService
             throw new InvalidOperationException("Beta max OCR pages must be greater than 0.");
 
         return requestedMaxOcrPages.Value;
+    }
+
+    private async Task EnsureOrganizationNameAvailableAsync(string currentOrganizationId, string targetName)
+    {
+        var existingNames = await _dbContext.Organizations
+            .Where(o => o.Id != currentOrganizationId)
+            .Select(o => o.Name)
+            .ToArrayAsync();
+
+        if (existingNames.Any(n => string.Equals(n, targetName, StringComparison.OrdinalIgnoreCase)))
+            throw new DuplicateOrganizationNameException(
+                $"An organization named \"{targetName}\" already exists.");
+
+        var sanitizedNew = _pathService.SanitizeName(targetName);
+        if (existingNames.Any(n => _pathService.SanitizeName(n) == sanitizedNew))
+            throw new DuplicateOrganizationNameException(
+                $"The organization name \"{targetName}\" would produce a folder name that conflicts with an existing organization. Choose a different name.");
+    }
+
+    private async Task RewriteOrgStoragePathsAsync(string newOrgPath, string oldOrgPath, string targetName)
+    {
+        var orgDbPath = Path.Combine(newOrgPath, "kocr.db");
+        if (!File.Exists(orgDbPath))
+            return;
+
+        var dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
+            .UseSqlite($"Data Source={orgDbPath}")
+            .Options;
+
+        await using var orgDb = new KOCRDbContext(dbOptions);
+        await orgDb.Database.MigrateAsync();
+
+        static string ReplacePrefix(string value, string oldPrefix, string newPrefix)
+        {
+            if (!value.StartsWith(oldPrefix, StringComparison.OrdinalIgnoreCase))
+                return value;
+            return newPrefix + value[oldPrefix.Length..];
+        }
+
+        var batches = await orgDb.Batches.ToListAsync();
+        foreach (var batch in batches)
+            batch.FolderPath = ReplacePrefix(batch.FolderPath, oldOrgPath, newOrgPath);
+
+        var invoices = await orgDb.Invoices
+            .Where(i => i.FilePath != null)
+            .ToListAsync();
+        foreach (var invoice in invoices)
+            invoice.FilePath = ReplacePrefix(invoice.FilePath!, oldOrgPath, newOrgPath);
+
+        var jobs = await orgDb.OcrJobs.ToListAsync();
+        foreach (var job in jobs)
+        {
+            job.FilePath = ReplacePrefix(job.FilePath, oldOrgPath, newOrgPath);
+            job.OrgName = targetName;
+        }
+
+        await orgDb.SaveChangesAsync();
     }
 }
