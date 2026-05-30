@@ -2,6 +2,7 @@ using K_OCR.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
+
 namespace K_OCR.Data;
 
 public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
