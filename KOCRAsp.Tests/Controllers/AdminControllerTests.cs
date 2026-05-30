@@ -3,6 +3,7 @@ using K_OCR.Services;
 using KOCRAsp.Controllers;
 using K_OCR.Models.Api.SuperAdmin;
 using KOCRAsp.Tests.Helpers;
+using KOCRAsp.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -53,13 +54,136 @@ public class AdminControllerTests
         _mockSuperAdminSvc
             .Setup(s => s.ListOrganizationsAsync())
             .ReturnsAsync(Array.Empty<OrganizationOverview>());
-        _mockDataSvc
-            .Setup(s => s.GetAllBatchesAcrossOrgsAsync())
-            .ReturnsAsync(Array.Empty<BatchDetail>());
 
         var result = await _controller.Index();
 
         Assert.IsType<ViewResult>(result);
+    }
+
+    [Fact]
+    public async Task AllBatches_ReturnsPagedViewModel()
+    {
+        var batches = Enumerable.Range(1, 11)
+            .Select(i => new BatchDetail
+            {
+                BatchId = i,
+                Name = $"Batch {i}",
+                OrganizationId = $"org-{i % 2}",
+                CreatedAtUtc = new DateTime(2026, 01, 01).AddDays(i)
+            })
+            .ToArray();
+        _mockDataSvc
+            .Setup(s => s.GetAllBatchesAcrossOrgsAsync())
+            .ReturnsAsync(batches);
+
+        var result = await _controller.AllBatches(page: 2, pageSize: 10);
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<AdminAllBatchesViewModel>(view.Model);
+        Assert.Equal(2, model.CurrentPage);
+        Assert.Equal(10, model.PageSize);
+        Assert.Equal(11, model.TotalCount);
+        Assert.Equal(2, model.TotalPages);
+        Assert.Equal("created", model.Sort);
+        Assert.Equal("desc", model.Dir);
+        Assert.Single(model.Batches);
+        Assert.Equal("Batch 1", model.Batches[0].Name);
+    }
+
+    [Fact]
+    public async Task AllBatches_SortsByFilesAscending()
+    {
+        var batches = new[]
+        {
+            new BatchDetail { BatchId = 1, Name = "Batch A", OrganizationId = "org-1", FileCount = 9, CreatedAtUtc = new DateTime(2026, 01, 01) },
+            new BatchDetail { BatchId = 2, Name = "Batch B", OrganizationId = "org-1", FileCount = 2, CreatedAtUtc = new DateTime(2026, 01, 02) },
+            new BatchDetail { BatchId = 3, Name = "Batch C", OrganizationId = "org-2", FileCount = 5, CreatedAtUtc = new DateTime(2026, 01, 03) }
+        };
+        _mockDataSvc
+            .Setup(s => s.GetAllBatchesAcrossOrgsAsync())
+            .ReturnsAsync(batches);
+
+        var result = await _controller.AllBatches(page: 1, pageSize: 10, sort: "files", dir: "asc");
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<AdminAllBatchesViewModel>(view.Model);
+        Assert.Equal("files", model.Sort);
+        Assert.Equal("asc", model.Dir);
+        Assert.Equal(2, model.Batches[0].FileCount);
+        Assert.Equal(5, model.Batches[1].FileCount);
+        Assert.Equal(9, model.Batches[2].FileCount);
+    }
+
+    [Fact]
+    public async Task AllBatches_FiltersByOrganization()
+    {
+        var batches = new[]
+        {
+            new BatchDetail { BatchId = 1, Name = "Batch A", OrganizationId = "org-1", OrganizationName = "Org One", CreatedAtUtc = new DateTime(2026, 01, 01) },
+            new BatchDetail { BatchId = 2, Name = "Batch B", OrganizationId = "org-2", OrganizationName = "Org Two", CreatedAtUtc = new DateTime(2026, 01, 02) },
+            new BatchDetail { BatchId = 3, Name = "Batch C", OrganizationId = "org-1", OrganizationName = "Org One", CreatedAtUtc = new DateTime(2026, 01, 03) }
+        };
+        _mockDataSvc
+            .Setup(s => s.GetAllBatchesAcrossOrgsAsync())
+            .ReturnsAsync(batches);
+
+        var result = await _controller.AllBatches(page: 1, pageSize: 10, orgId: "org-1");
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<AdminAllBatchesViewModel>(view.Model);
+        Assert.Equal("org-1", model.SelectedOrgId);
+        Assert.Equal(2, model.TotalCount);
+        Assert.All(model.Batches, b => Assert.Equal("org-1", b.OrganizationId));
+    }
+
+    [Fact]
+    public async Task AllUsers_ReturnsSortedPagedViewModel()
+    {
+        var users = new[]
+        {
+            new SuperAdminUserDetail { UserId = "1", UserName = "zeta", FullName = "Zeta User", Email = "zeta@x.com", OrganizationName = "Beta Org", IsGlobalAdmin = false },
+            new SuperAdminUserDetail { UserId = "2", UserName = "alpha", FullName = "Alpha User", Email = "alpha@x.com", OrganizationName = "Acme Org", IsGlobalAdmin = false },
+            new SuperAdminUserDetail { UserId = "3", UserName = "super", FullName = "Super Admin", Email = "super@x.com", OrganizationName = null, IsGlobalAdmin = true }
+        };
+        _mockDataSvc
+            .Setup(s => s.GetAllUsersAsync())
+            .ReturnsAsync(users);
+
+        var result = await _controller.AllUsers(page: 1, pageSize: 10, sort: "org", dir: "asc");
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<AdminAllUsersViewModel>(view.Model);
+        Assert.Equal(1, model.CurrentPage);
+        Assert.Equal(10, model.PageSize);
+        Assert.Equal(3, model.TotalCount);
+        Assert.Equal(1, model.TotalPages);
+        Assert.Equal("org", model.Sort);
+        Assert.Equal("asc", model.Dir);
+        Assert.Equal("Super Admin", model.Users[0].FullName);
+        Assert.Equal("Alpha User", model.Users[1].FullName);
+        Assert.Equal("Zeta User", model.Users[2].FullName);
+    }
+
+    [Fact]
+    public async Task AllUsers_FiltersByOrganization()
+    {
+        var users = new[]
+        {
+            new SuperAdminUserDetail { UserId = "1", UserName = "zeta", FullName = "Zeta User", Email = "zeta@x.com", OrganizationId = "org-2", OrganizationName = "Beta Org", IsGlobalAdmin = false },
+            new SuperAdminUserDetail { UserId = "2", UserName = "alpha", FullName = "Alpha User", Email = "alpha@x.com", OrganizationId = "org-1", OrganizationName = "Acme Org", IsGlobalAdmin = false },
+            new SuperAdminUserDetail { UserId = "3", UserName = "super", FullName = "Super Admin", Email = "super@x.com", OrganizationId = null, OrganizationName = null, IsGlobalAdmin = true }
+        };
+        _mockDataSvc
+            .Setup(s => s.GetAllUsersAsync())
+            .ReturnsAsync(users);
+
+        var result = await _controller.AllUsers(page: 1, pageSize: 10, sort: "name", dir: "asc", orgId: "org-1");
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<AdminAllUsersViewModel>(view.Model);
+        Assert.Equal("org-1", model.SelectedOrgId);
+        Assert.Single(model.Users);
+        Assert.Equal("Alpha User", model.Users[0].FullName);
     }
 
     [Fact]

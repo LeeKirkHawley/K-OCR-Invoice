@@ -82,4 +82,23 @@ public sealed class SuperAdminDataService : ISuperAdminDataService
 
         return [.. results.OrderBy(b => b.OrganizationId).ThenBy(b => b.BatchNumber)];
     }
+
+    public async Task<SuperAdminUserDetail[]> GetAllUsersAsync()
+    {
+        var users = await _appDb.Users
+            .AsNoTracking()
+            .Select(u => new SuperAdminUserDetail
+            {
+                UserId = u.Id,
+                UserName = u.UserName ?? string.Empty,
+                Email = u.Email ?? string.Empty,
+                FullName = u.FullName ?? string.Empty,
+                OrganizationId = u.OrganizationId,
+                OrganizationName = u.Organization != null ? u.Organization.Name : null,
+                IsGlobalAdmin = u.IsGlobalAdmin
+            })
+            .ToArrayAsync();
+
+        return users;
+    }
 }

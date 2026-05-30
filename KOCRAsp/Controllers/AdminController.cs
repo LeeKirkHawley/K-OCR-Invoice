@@ -37,8 +37,6 @@ public class AdminController : Controller
     public async Task<IActionResult> Index()
     {
         var orgs = await _superAdminSvc.ListOrganizationsAsync();
-        var batches = await _dataSvc.GetAllBatchesAcrossOrgsAsync();
-        ViewBag.Batches = batches;
         int value = 0;
         try
         {
@@ -53,6 +51,187 @@ public class AdminController : Controller
         ViewBag.DefaultBetaMaxOcrPages = _configuration.GetValue<int?>("Limits:Beta:MaxOcrPages") ?? 500;
         ViewBag.QueueIsPaused = _ocrQueueProcessor.IsPaused;
         return View(orgs);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> AllBatches(int page = 1, int pageSize = 50, string sort = "created", string dir = "desc", string? orgId = null)
+    {
+        const int minPageSize = 10;
+        const int maxPageSize = 200;
+        if (page < 1) page = 1;
+        pageSize = Math.Clamp(pageSize, minPageSize, maxPageSize);
+        var normalizedSort = sort.ToLowerInvariant() switch
+        {
+            "org" => "org",
+            "name" => "name",
+            "status" => "status",
+            "created" => "created",
+            "validated" => "validated",
+            "files" => "files",
+            _ => "created"
+        };
+        var normalizedDir = dir.Equals("asc", StringComparison.OrdinalIgnoreCase) ? "asc" : "desc";
+
+        var allBatches = await _dataSvc.GetAllBatchesAcrossOrgsAsync();
+        var selectedOrgId = string.IsNullOrWhiteSpace(orgId) ? null : orgId.Trim();
+        var orgOptions = allBatches
+            .Where(b => !string.IsNullOrWhiteSpace(b.OrganizationId) && !string.IsNullOrWhiteSpace(b.OrganizationName))
+            .GroupBy(b => b.OrganizationId)
+            .Select(g => new AdminOrgFilterOption
+            {
+                Id = g.Key,
+                Name = g.Select(x => x.OrganizationName).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? g.Key
+            })
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (!string.IsNullOrWhiteSpace(selectedOrgId))
+        {
+            allBatches = allBatches
+                .Where(b => string.Equals(b.OrganizationId, selectedOrgId, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        }
+
+        static int StatusOrder(K_OCR.Models.BatchDetail b) =>
+            b.MarkedForDeletionAtUtc.HasValue ? 2 :
+            b.LockedByUserId != null ? 1 : 0;
+
+        IEnumerable<K_OCR.Models.BatchDetail> ordered = normalizedSort switch
+        {
+            "org" when normalizedDir == "asc" => allBatches
+                .OrderBy(b => b.OrganizationName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "org" => allBatches
+                .OrderByDescending(b => b.OrganizationName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "name" when normalizedDir == "asc" => allBatches
+                .OrderBy(b => b.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "name" => allBatches
+                .OrderByDescending(b => b.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "status" when normalizedDir == "asc" => allBatches
+                .OrderBy(StatusOrder)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "status" => allBatches
+                .OrderByDescending(StatusOrder)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "validated" when normalizedDir == "asc" => allBatches
+                .OrderBy(b => b.ValidatedCount)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "validated" => allBatches
+                .OrderByDescending(b => b.ValidatedCount)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "files" when normalizedDir == "asc" => allBatches
+                .OrderBy(b => b.FileCount)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "files" => allBatches
+                .OrderByDescending(b => b.FileCount)
+                .ThenByDescending(b => b.CreatedAtUtc),
+            "created" when normalizedDir == "asc" => allBatches
+                .OrderBy(b => b.CreatedAtUtc),
+            _ => allBatches
+                .OrderByDescending(b => b.CreatedAtUtc)
+        };
+
+        var orderedArray = ordered.ToArray();
+
+        var totalCount = orderedArray.Length;
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        if (page > totalPages) page = totalPages;
+
+        var paged = orderedArray
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToArray();
+
+        var model = new AdminAllBatchesViewModel
+        {
+            Batches = paged,
+            OrgOptions = orgOptions,
+            SelectedOrgId = selectedOrgId,
+            CurrentPage = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages,
+            Sort = normalizedSort,
+            Dir = normalizedDir
+        };
+
+        return View(model);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> AllUsers(int page = 1, int pageSize = 50, string sort = "name", string dir = "asc", string? orgId = null)
+    {
+        const int minPageSize = 10;
+        const int maxPageSize = 200;
+        if (page < 1) page = 1;
+        pageSize = Math.Clamp(pageSize, minPageSize, maxPageSize);
+
+        var normalizedSort = sort.Equals("org", StringComparison.OrdinalIgnoreCase) ? "org" : "name";
+        var normalizedDir = dir.Equals("desc", StringComparison.OrdinalIgnoreCase) ? "desc" : "asc";
+
+        var users = await _dataSvc.GetAllUsersAsync();
+        var selectedOrgId = string.IsNullOrWhiteSpace(orgId) ? null : orgId.Trim();
+        var orgOptions = users
+            .Where(u => !string.IsNullOrWhiteSpace(u.OrganizationId) && !string.IsNullOrWhiteSpace(u.OrganizationName))
+            .GroupBy(u => u.OrganizationId!)
+            .Select(g => new AdminOrgFilterOption
+            {
+                Id = g.Key,
+                Name = g.Select(x => x.OrganizationName).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? g.Key
+            })
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (!string.IsNullOrWhiteSpace(selectedOrgId))
+        {
+            users = users
+                .Where(u => string.Equals(u.OrganizationId, selectedOrgId, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        }
+
+        IEnumerable<K_OCR.Models.SuperAdminUserDetail> ordered = normalizedSort switch
+        {
+            "org" when normalizedDir == "desc" => users
+                .OrderByDescending(u => u.OrganizationName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(u => string.IsNullOrWhiteSpace(u.FullName) ? u.UserName : u.FullName, StringComparer.OrdinalIgnoreCase),
+            "org" => users
+                .OrderBy(u => u.OrganizationName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(u => string.IsNullOrWhiteSpace(u.FullName) ? u.UserName : u.FullName, StringComparer.OrdinalIgnoreCase),
+            _ when normalizedDir == "desc" => users
+                .OrderByDescending(u => string.IsNullOrWhiteSpace(u.FullName) ? u.UserName : u.FullName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(u => u.OrganizationName ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            _ => users
+                .OrderBy(u => string.IsNullOrWhiteSpace(u.FullName) ? u.UserName : u.FullName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(u => u.OrganizationName ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+        };
+
+        var orderedArray = ordered.ToArray();
+        var totalCount = orderedArray.Length;
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        if (page > totalPages) page = totalPages;
+
+        var paged = orderedArray
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToArray();
+
+        var model = new AdminAllUsersViewModel
+        {
+            Users = paged,
+            OrgOptions = orgOptions,
+            SelectedOrgId = selectedOrgId,
+            CurrentPage = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages,
+            Sort = normalizedSort,
+            Dir = normalizedDir
+        };
+
+        return View(model);
     }
 
     [HttpPost]
@@ -191,6 +370,47 @@ public class AdminController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "SetUserPassword failed for {UserId}", request.UserId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> ReinviteUser([FromBody] ReinviteUserRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.UserId))
+                return Json(new { success = false, error = "UserId is required." });
+
+            var user = await GetUserManagerAsync(request.UserId);
+            if (user == null)
+                return Json(new { success = false, error = "User not found." });
+
+            if (string.IsNullOrWhiteSpace(user.User.Email))
+                return Json(new { success = false, error = "User does not have an email address." });
+
+            var authSvc = HttpContext.RequestServices.GetRequiredService<IAuthService>();
+            var emailSvc = HttpContext.RequestServices.GetRequiredService<IEmailService>();
+            var email = user.User.Email;
+            if (string.IsNullOrWhiteSpace(email))
+                return Json(new { success = false, error = "User does not have an email address." });
+            var nonNullEmail = email.Trim();
+
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+
+            var resetLink = await authSvc.GeneratePasswordResetLinkAsync(nonNullEmail, baseUrl);
+            if (resetLink is null)
+                return Json(new { success = false, error = "Unable to generate password reset link." });
+
+            var displayName = user.User.FullName ?? nonNullEmail;
+            await emailSvc.SendPasswordResetAsync(nonNullEmail, displayName, resetLink);
+
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ReinviteUser failed for {UserId}", request.UserId);
             return Json(new { success = false, error = ex.Message });
         }
     }
@@ -346,6 +566,11 @@ public sealed class SetUserPasswordRequest
 {
     public string UserId { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
+}
+
+public sealed class ReinviteUserRequest
+{
+    public string UserId { get; set; } = string.Empty;
 }
 
 public sealed class UpdateBetaMaxOcrPagesRequest

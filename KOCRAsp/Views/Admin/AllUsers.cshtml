@@ -1,0 +1,194 @@
+@model KOCRAsp.Models.AdminAllUsersViewModel
+@{
+    ViewData["Title"] = "All Users";
+    ViewData["MetaDescription"] = "All system users with organization context.";
+
+    var nameNextDir = Model.Sort == "name" && Model.Dir == "asc" ? "desc" : "asc";
+    var orgNextDir = Model.Sort == "org" && Model.Dir == "asc" ? "desc" : "asc";
+    var nameArrow = Model.Sort == "name" ? (Model.Dir == "asc" ? "↑" : "↓") : "\u00A0";
+    var orgArrow = Model.Sort == "org" ? (Model.Dir == "asc" ? "↑" : "↓") : "\u00A0";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">All Users</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="/admin">Back to Admin Console</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body d-flex justify-content-between align-items-center py-2">
+        <div class="small text-muted">
+            Showing page @Model.CurrentPage of @Model.TotalPages (@Model.TotalCount total users)
+        </div>
+        <form method="get" action="/admin/allusers" class="d-flex align-items-center gap-2">
+            <input type="hidden" name="sort" value="@Model.Sort" />
+            <input type="hidden" name="dir" value="@Model.Dir" />
+            <label for="orgId" class="small text-muted mb-0">Org Filter</label>
+            <select id="orgId" name="orgId" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                @if (string.IsNullOrWhiteSpace(Model.SelectedOrgId))
+                {
+                    <option value="" selected>&lt;None&gt;</option>
+                }
+                else
+                {
+                    <option value="">&lt;None&gt;</option>
+                }
+                @foreach (var org in Model.OrgOptions)
+                {
+                    if (string.Equals(org.Id, Model.SelectedOrgId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        <option value="@org.Id" selected>@org.Name</option>
+                    }
+                    else
+                    {
+                        <option value="@org.Id">@org.Name</option>
+                    }
+                }
+            </select>
+            <label for="pageSize" class="small text-muted mb-0">Page size</label>
+            <select id="pageSize" name="pageSize" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                @foreach (var size in new[] { 25, 50, 100, 200 })
+                {
+                    if (size == Model.PageSize)
+                    {
+                        <option value="@size" selected>@size</option>
+                    }
+                    else
+                    {
+                        <option value="@size">@size</option>
+                    }
+                }
+            </select>
+            <input type="hidden" name="page" value="1" />
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>
+                        <a class="link-dark text-decoration-none"
+                           href="/admin/allusers?page=1&pageSize=@Model.PageSize&sort=name&dir=@nameNextDir&orgId=@Model.SelectedOrgId">
+                            Name
+                            <span class="ms-1 text-muted d-inline-block text-center" style="width:1em">@nameArrow</span>
+                        </a>
+                    </th>
+                    <th>Email</th>
+                    <th>
+                        <a class="link-dark text-decoration-none"
+                           href="/admin/allusers?page=1&pageSize=@Model.PageSize&sort=org&dir=@orgNextDir&orgId=@Model.SelectedOrgId">
+                            Org
+                            <span class="ms-1 text-muted d-inline-block text-center" style="width:1em">@orgArrow</span>
+                        </a>
+                    </th>
+                    <th>Type</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Users.Any())
+                {
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-3">No users.</td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var user in Model.Users)
+                    {
+                        var displayName = string.IsNullOrWhiteSpace(user.FullName) ? user.UserName : user.FullName;
+                        <tr>
+                            <td>@displayName</td>
+                            <td class="small">@user.Email</td>
+                            <td>@(string.IsNullOrWhiteSpace(user.OrganizationName) ? "—" : user.OrganizationName)</td>
+                            <td>
+                                @if (user.IsGlobalAdmin)
+                                {
+                                    <span class="badge bg-dark">SuperAdmin</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Org User</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(user.Email))
+                                {
+                                    <button class="btn btn-outline-primary btn-sm"
+                                            onclick="reinviteUser('@user.UserId', this)">
+                                        Re-invite
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">No email</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<nav class="mt-3" aria-label="All users pagination">
+    <ul class="pagination pagination-sm mb-0">
+        <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : "")">
+            <a class="page-link" href="/admin/allusers?page=@(Model.CurrentPage - 1)&pageSize=@Model.PageSize&sort=@Model.Sort&dir=@Model.Dir&orgId=@Model.SelectedOrgId">Previous</a>
+        </li>
+        <li class="page-item disabled">
+            <span class="page-link">Page @Model.CurrentPage / @Model.TotalPages</span>
+        </li>
+        <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : "")">
+            <a class="page-link" href="/admin/allusers?page=@(Model.CurrentPage + 1)&pageSize=@Model.PageSize&sort=@Model.Sort&dir=@Model.Dir&orgId=@Model.SelectedOrgId">Next</a>
+        </li>
+    </ul>
+</nav>
+
+@section Scripts {
+<script>
+    async function postJson(url, body) {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+    }
+
+    function setButtonLoading(btn, loading) {
+        if (!btn) return;
+        if (loading) {
+            btn.dataset.originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+        } else {
+            btn.disabled = false;
+            btn.textContent = btn.dataset.originalText || 'Re-invite';
+        }
+    }
+
+    async function reinviteUser(userId, btn) {
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson('/admin/reinviteuser', { userId });
+            if (result.success) {
+                if (typeof showToast === 'function') showToast('Password reset email sent.');
+                else alert('Password reset email sent.');
+            } else {
+                if (typeof showToast === 'function') showToast(result.error ?? 'Failed to send email.', 'error');
+                else alert(result.error ?? 'Failed to send email.');
+            }
+        } catch (err) {
+            if (typeof showToast === 'function') showToast('Error: ' + err.message, 'error');
+            else alert('Error: ' + err.message);
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+</script>
+}

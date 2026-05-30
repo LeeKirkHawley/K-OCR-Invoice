@@ -1,15 +1,19 @@
 @using K_OCR.Models.Api.SuperAdmin
-@using K_OCR.Models
 @model OrganizationOverview[]
 @{
     ViewData["Title"] = "Admin Console";
     ViewData["MetaDescription"] = "Administer organizations and queue settings in Hardscrabble Invoice.";
-    var batches = (ViewBag.Batches as BatchDetail[]) ?? Array.Empty<BatchDetail>();
     var deletedOrgRetentionDays = (int)(ViewBag.DeletedOrgRetentionDays ?? 14);
     var defaultBetaMaxOcrPages = (int)(ViewBag.DefaultBetaMaxOcrPages ?? 500);
 }
 
-<h1 class="h4 mb-4">Admin Console</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h4 mb-0">Admin Console</h1>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary btn-sm" href="/admin/allbatches">All Batches</a>
+        <a class="btn btn-outline-primary btn-sm" href="/admin/allusers">All Users</a>
+    </div>
+</div>
 
 <!-- Create org panel -->
 <div class="card mb-4">
@@ -222,61 +226,6 @@
             </button>
             <a href="/admin/ocrqueue" class="btn btn-outline-secondary btn-sm">Queue Monitor →</a>
         </div>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-header"><strong>All Batches</strong></div>
-    <div class="card-body p-0">
-        <table class="table table-hover mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>Org</th>
-                    <th>#</th>
-                    <th>Name</th>
-                    <th>Files</th>
-                    <th>Validated</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (!batches.Any())
-                {
-                    <tr>
-                        <td colspan="7" class="text-center text-muted py-3">No batches.</td>
-                    </tr>
-                }
-                else
-                {
-                    foreach (var b in batches.OrderByDescending(x => x.CreatedAtUtc))
-                    {
-                        <tr>
-                            <td class="small">@b.OrganizationName</td>
-                            <td>@b.BatchNumber</td>
-                            <td>@b.Name</td>
-                            <td>@b.FileCount</td>
-                            <td>@b.ValidatedCount</td>
-                            <td>
-                                @if (b.MarkedForDeletionAtUtc.HasValue)
-                                {
-                                    <span class="badge bg-danger">Marked For Deletion</span>
-                                }
-                                else if (b.LockedByUserId != null)
-                                {
-                                    <span class="badge bg-warning text-dark">Locked</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-success">Open</span>
-                                }
-                            </td>
-                            <td>@b.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy")</td>
-                        </tr>
-                    }
-                }
-            </tbody>
-        </table>
     </div>
 </div>
 

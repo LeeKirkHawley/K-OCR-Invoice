@@ -15,4 +15,9 @@ public interface ISuperAdminDataService
     /// them back to the org registry.
     /// </summary>
     Task<BatchDetail[]> GetAllBatchesAcrossOrgsAsync();
+
+    /// <summary>
+    /// Returns all users in the system with their active organization context.
+    /// </summary>
+    Task<SuperAdminUserDetail[]> GetAllUsersAsync();
 }
