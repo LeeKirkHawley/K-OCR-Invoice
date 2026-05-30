@@ -58,10 +58,7 @@
                     <th>Name</th>
                     <th>Description</th>
                     <th>Users</th>
-                    <th>Created</th>
                     <th>Status</th>
-                    <th>Beta OCR Limit</th>
-                    <th>Stripe</th>
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
@@ -69,7 +66,7 @@
                 @if (!Model.Any())
                 {
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-3">No organizations.</td>
+                        <td colspan="5" class="text-center text-muted py-3">No organizations.</td>
                     </tr>
                 }
                 else
@@ -91,7 +88,6 @@
                             </td>
                             <td class="text-muted small">@org.Description</td>
                             <td>@org.UserCount</td>
-                            <td>@org.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy")</td>
                             <td>
                                 @if (isPendingDeletion)
                                 {
@@ -114,49 +110,9 @@
                                     </span>
                                 }
                             </td>
-                            <td id="org-stripe-@org.OrganizationId">
-                                @if (org.IsBetaTestOrganization)
-                                {
-                                    <div class="input-group input-group-sm" style="max-width: 220px;">
-                                        <input type="number"
-                                               id="beta-limit-input-@org.OrganizationId"
-                                               class="form-control"
-                                               min="1"
-                                               value="@org.BetaMaxOcrPages" />
-                                        <button class="btn btn-outline-primary"
-                                                onclick="updateBetaLimit('@org.OrganizationId', this)">
-                                            Save
-                                        </button>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <span class="text-muted small">N/A</span>
-                                }
-                            </td>
-                            <td>
-                                @if (org.IsGuestOrganization || org.IsBetaTestOrganization)
-                                {
-                                    <span class="text-muted small">N/A</span>
-                                }
-                                else if (org.StripeCustomerId != null)
-                                {
-                                    var stripeBadgeClass = org.StripeSubscriptionStatus switch
-                                    {
-                                        "active"   => "bg-success",
-                                        "trialing" => "bg-info text-dark",
-                                        "past_due" => "bg-warning text-dark",
-                                        "canceled" => "bg-secondary",
-                                        _          => "bg-secondary"
-                                    };
-                                    <span class="badge @stripeBadgeClass">@org.StripeSubscriptionStatus</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-warning text-dark">Not provisioned</span>
-                                }
-                            </td>
                             <td class="text-end" id="org-actions-@org.OrganizationId">
+                                <a class="btn btn-sm btn-outline-secondary me-1"
+                                   href="/admin/organizationdetails?orgId=@org.OrganizationId">Details</a>
                                 @if (isPendingDeletion)
                                 {
                                     <button class="btn btn-sm btn-outline-success me-1"
@@ -484,10 +440,7 @@
         try {
             const result = await postJson('/admin/provisionstripe', { orgId, priceId });
             if (result.success) {
-                document.getElementById('org-stripe-' + orgId).innerHTML =
-                    '<span class="badge bg-success">active</span>';
-                btn.remove();
-                showToast('Stripe subscription provisioned.');
+                location.reload();
             } else {
                 showToast(result.error ?? 'Provision failed.', 'error');
                 setButtonLoading(btn, false);

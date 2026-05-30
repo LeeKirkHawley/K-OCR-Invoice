@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using OCRQueue.Abstractions;
 
 namespace KOCRAsp.Controllers;
 
@@ -25,6 +26,7 @@ public class HomeController : Controller
     private readonly ITrialOrganizationLimitService _trialLimitSvc;
     private readonly ITenantContext _tenantContext;
     private readonly IConfigurationService _configSvc;
+    private readonly IOcrQueueRepository _ocrQueueRepo;
     private readonly ILogger<HomeController> _logger;
 
     private static readonly string[] InvoiceExtensions =
@@ -38,6 +40,7 @@ public class HomeController : Controller
         ITrialOrganizationLimitService trialLimitSvc,
         ITenantContext tenantContext,
         IConfigurationService configSvc,
+        IOcrQueueRepository ocrQueueRepo,
         ILogger<HomeController> logger)
     {
         _homePageSvc = homePageSvc;
@@ -47,6 +50,7 @@ public class HomeController : Controller
         _trialLimitSvc = trialLimitSvc;
         _tenantContext = tenantContext;
         _configSvc = configSvc;
+        _ocrQueueRepo = ocrQueueRepo;
         _logger = logger;
     }
 
@@ -213,6 +217,9 @@ public class HomeController : Controller
         return Json(new
         {
             success = result.Success,
+            queued = result.Queued,
+            invoiceId = result.InvoiceId,
+            filePath = result.FilePath,
             pageLimitExceeded = result.PageLimitExceeded,
             error = result.Error,
             invoice = result.Invoice,
@@ -399,7 +406,18 @@ public class HomeController : Controller
 
         var (files, total, actualPage, totalPages) = await _homePageSvc.BuildPagedFileListAsync(
             batch, page, pageSize, _tenantContext.IsGuestOrganization);
-        return Json(new { items = files, total, page = actualPage, pageSize, totalPages });
+        var queuedFilePaths = Array.Empty<string>();
+        if (!string.IsNullOrWhiteSpace(_tenantContext.OrganizationName))
+        {
+            var pendingJobs = await _ocrQueueRepo.GetPendingJobsAsync(_tenantContext.OrganizationName);
+            queuedFilePaths = pendingJobs
+                .Where(j => j.BatchId == batchId && !string.IsNullOrWhiteSpace(j.FilePath))
+                .Select(j => j.FilePath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        return Json(new { items = files, total, page = actualPage, pageSize, totalPages, queuedFilePaths });
     }
 
     [HttpGet]

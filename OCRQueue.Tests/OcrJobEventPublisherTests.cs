@@ -7,6 +7,30 @@ namespace OCRQueue.Tests;
 public class OcrJobEventPublisherTests
 {
     [Fact]
+    public void OnJobEnqueued_EmitsJobToSubscribers()
+    {
+        var publisher = new OcrJobEventPublisher();
+        var enqueuedJobs = new List<OcrJob>();
+
+        publisher.JobEnqueued.Subscribe(job => enqueuedJobs.Add(job));
+
+        var job = new OcrJob(
+            JobId: 1,
+            InvoiceId: 100,
+            BatchId: 10,
+            OrgId: "org-1",
+            OrgName: "TestOrg",
+            FilePath: "/path/to/file.pdf",
+            WorkflowKey: "Default",
+            QueuedAtUtc: DateTime.UtcNow);
+
+        publisher.OnJobEnqueued(job);
+
+        Assert.Single(enqueuedJobs);
+        Assert.Equal(1, enqueuedJobs[0].JobId);
+    }
+
+    [Fact]
     public void OnJobCompleted_EmitsJobToSubscribers()
     {
         var publisher = new OcrJobEventPublisher();
@@ -86,8 +110,13 @@ public class OcrJobEventPublisherTests
     public void Dispose_CompletesObservables()
     {
         var publisher = new OcrJobEventPublisher();
+        var enqueuedFinished = false;
         var completedFinished = false;
         var failedFinished = false;
+
+        publisher.JobEnqueued.Subscribe(
+            onNext: _ => { },
+            onCompleted: () => { enqueuedFinished = true; });
 
         publisher.JobCompleted.Subscribe(
             onNext: _ => { },
@@ -99,6 +128,7 @@ public class OcrJobEventPublisherTests
 
         publisher.Dispose();
 
+        Assert.True(enqueuedFinished);
         Assert.True(completedFinished);
         Assert.True(failedFinished);
     }

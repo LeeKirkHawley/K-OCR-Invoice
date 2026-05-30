@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
+using OCRQueue.Abstractions;
 
 namespace KOCRAsp.Tests.Controllers;
 
@@ -21,6 +22,7 @@ public class HomeControllerTests
     private readonly Mock<ITrialOrganizationLimitService> _mockTrialLimitSvc;
     private readonly Mock<ITenantContext> _mockTenantContext;
     private readonly Mock<IConfigurationService> _mockConfigSvc;
+    private readonly Mock<IOcrQueueRepository> _mockOcrQueueRepo;
     private readonly HomeController _controller;
 
     private const string UserId = "user-id-123";
@@ -36,6 +38,7 @@ public class HomeControllerTests
         _mockTrialLimitSvc = new Mock<ITrialOrganizationLimitService>();
         _mockTenantContext = new Mock<ITenantContext>();
         _mockConfigSvc = new Mock<IConfigurationService>();
+        _mockOcrQueueRepo = new Mock<IOcrQueueRepository>();
 
         _mockTenantContext.Setup(t => t.OrganizationId).Returns(OrgId);
         _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
@@ -46,6 +49,9 @@ public class HomeControllerTests
         _mockConfigSvc.Setup(s => s.GetGuestMaxBatches()).Returns(3);
         _mockConfigSvc.Setup(s => s.GetMaxInvoicesPerBatch(true)).Returns(25);
         _mockConfigSvc.Setup(s => s.GetMaxPagesPerInvoice(true)).Returns(20);
+        _mockOcrQueueRepo
+            .Setup(r => r.GetPendingJobsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<OcrJobEntity>());
         _mockTrialLimitSvc
             .Setup(s => s.GetCurrentStatusAsync())
             .ReturnsAsync(new TrialOrganizationLimitStatus(false, 500, 0));
@@ -58,6 +64,7 @@ public class HomeControllerTests
             _mockTrialLimitSvc.Object,
             _mockTenantContext.Object,
             _mockConfigSvc.Object,
+            _mockOcrQueueRepo.Object,
             Mock.Of<ILogger<HomeController>>());
     }
 

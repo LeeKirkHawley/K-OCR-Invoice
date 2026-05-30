@@ -1,5 +1,6 @@
 using K_OCR.Models;
 using K_OCR.Services;
+using OCRQueue.Abstractions;
 
 namespace KOCRAsp.Services;
 
@@ -15,6 +16,9 @@ public sealed record HomeTenantInfo(
 public sealed record HomeSingleOcrResult(
     bool Success,
     InvoiceDto? Invoice = null,
+    bool Queued = false,
+    int? InvoiceId = null,
+    string? FilePath = null,
     string? Error = null,
     bool PageLimitExceeded = false);
 
@@ -33,34 +37,31 @@ public interface IHomeOcrService
 
 public sealed class HomeOcrService : IHomeOcrService
 {
-    private readonly IInvoiceProcessingService _ocrSvc;
     private readonly IBatchService _batchSvc;
     private readonly DatabaseService _dbSvc;
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly IConfigurationService _configSvc;
-    private readonly IInvoiceActionService _invoiceActionSvc;
-    private readonly IReportingService _reportingSvc;
+    private readonly IOcrEnqueueService _ocrEnqueueSvc;
+    private readonly IOcrQueueRepository _ocrQueueRepo;
     private readonly IStripeUsageService _stripeUsage;
     private readonly ILogger<HomeOcrService> _logger;
 
     public HomeOcrService(
-        IInvoiceProcessingService ocrSvc,
         IBatchService batchSvc,
         DatabaseService dbSvc,
         IOrgConfigService orgConfigSvc,
         IConfigurationService configSvc,
-        IInvoiceActionService invoiceActionSvc,
-        IReportingService reportingSvc,
+        IOcrEnqueueService ocrEnqueueSvc,
+        IOcrQueueRepository ocrQueueRepo,
         IStripeUsageService stripeUsage,
         ILogger<HomeOcrService> logger)
     {
-        _ocrSvc = ocrSvc;
         _batchSvc = batchSvc;
         _dbSvc = dbSvc;
         _orgConfigSvc = orgConfigSvc;
         _configSvc = configSvc;
-        _invoiceActionSvc = invoiceActionSvc;
-        _reportingSvc = reportingSvc;
+        _ocrEnqueueSvc = ocrEnqueueSvc;
+        _ocrQueueRepo = ocrQueueRepo;
         _stripeUsage = stripeUsage;
         _logger = logger;
     }
@@ -80,9 +81,15 @@ public sealed class HomeOcrService : IHomeOcrService
         if (!CanUseOcr(tenant))
             return new HomeSingleOcrResult(false, Error: "OCR is unavailable: subscription inactive.");
 
+        if (string.IsNullOrWhiteSpace(tenant.OrganizationName))
+            return new HomeSingleOcrResult(false, Error: "Organization context is missing.");
+
         var invoice0 = await _dbSvc.GetInvoiceByFilePathAsync(filePath);
+        if (invoice0 is null)
+            return new HomeSingleOcrResult(false, Error: "Invoice not found.");
+
         var maxPages = _configSvc.GetMaxPagesPerInvoice(tenant.IsGuestOrganization);
-        if (invoice0 != null && invoice0.TotalPages > maxPages)
+        if (invoice0.TotalPages > maxPages)
         {
             return new HomeSingleOcrResult(
                 false,
@@ -92,62 +99,41 @@ public sealed class HomeOcrService : IHomeOcrService
 
         try
         {
-            var invoicesDir = Path.GetDirectoryName(filePath);
-            var batchDir = Path.GetDirectoryName(invoicesDir ?? string.Empty);
-            var artifactsDir = !string.IsNullOrEmpty(batchDir)
-                ? Path.Combine(batchDir, "Artifacts")
-                : null;
+            var pending = await _ocrQueueRepo.GetPendingJobsAsync(tenant.OrganizationName);
+            var alreadyQueued = pending.Any(j =>
+                j.BatchId == invoice0.BatchId &&
+                string.Equals(j.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
 
-            double? minConfidence = null;
-            if (!string.IsNullOrEmpty(tenant.OrganizationName))
+            if (alreadyQueued)
             {
-                var orgConfig = await _orgConfigSvc.LoadAsync(tenant.OrganizationName);
-                minConfidence = orgConfig.MinConfidenceThreshold;
+                return new HomeSingleOcrResult(
+                    true,
+                    Queued: true,
+                    InvoiceId: invoice0.Id,
+                    FilePath: filePath);
             }
 
-            var result = await _ocrSvc.ProcessFileAsync(filePath, artifactsDir, minConfidence);
-            if (!result.IsSuccess)
-                return new HomeSingleOcrResult(false, Error: result.Error?.Message ?? "Processing failed.");
+            var orgConfig = await _orgConfigSvc.LoadAsync(tenant.OrganizationName);
+            var workflowKey = string.IsNullOrWhiteSpace(orgConfig.OcrWorkflowKey)
+                ? "Default"
+                : orgConfig.OcrWorkflowKey;
 
-            var invoice = await _ocrSvc.LoadInvoiceAsync(filePath);
-            await _invoiceActionSvc.LogAsync(
-                InvoiceActionTypes.OCRed,
-                Path.GetFileName(filePath),
-                batch?.Name ?? string.Empty,
-                orgUser,
-                invoice?.PageCount ?? 1);
+            var batchId = batch?.BatchId ?? invoice0.BatchId;
+            var enqueued = await _ocrEnqueueSvc.EnqueueFilesAsync(
+                [(filePath, invoice0.Id)],
+                batchId,
+                tenant.OrganizationId,
+                tenant.OrganizationName,
+                workflowKey);
 
-            try
-            {
-                await _reportingSvc.RecordBatchOcrEventAsync(new BatchOcrReportRequest
-                {
-                    OrganizationId = tenant.OrganizationId,
-                    OrganizationName = tenant.OrganizationName,
-                    BatchName = batch?.Name ?? string.Empty,
-                    Invoices =
-                    [
-                        new OcrInvoiceResult
-                        {
-                            FileName = Path.GetFileName(filePath),
-                            OcrSucceeded = result.IsSuccess,
-                            OcrService = "Azure",
-                            PageCount = invoice?.PageCount ?? 1
-                        }
-                    ]
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to record single-file OCR report for {FilePath}.", filePath);
-            }
+            if (enqueued < 1)
+                return new HomeSingleOcrResult(false, Error: "Failed to queue OCR job.");
 
-            if (!tenant.IsTrialOrganization && tenant.StripeCustomerId is { } customerId)
-            {
-                var idempotencyKey = $"file-{Path.GetFileName(filePath)}-{Guid.NewGuid():N}";
-                await _stripeUsage.ReportUsageAsync(customerId, invoice?.PageCount ?? 1, idempotencyKey);
-            }
-
-            return new HomeSingleOcrResult(true, Invoice: invoice);
+            return new HomeSingleOcrResult(
+                true,
+                Queued: true,
+                InvoiceId: invoice0.Id,
+                FilePath: filePath);
         }
         catch (Exception ex)
         {

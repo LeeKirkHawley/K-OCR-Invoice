@@ -61,6 +61,41 @@ public class AdminControllerTests
     }
 
     [Fact]
+    public async Task OrganizationDetails_ReturnsViewForExistingOrganization()
+    {
+        _mockSuperAdminSvc
+            .Setup(s => s.ListOrganizationsAsync())
+            .ReturnsAsync(new[]
+            {
+                new OrganizationOverview
+                {
+                    OrganizationId = "org-1",
+                    Name = "Org One",
+                    IsActive = true,
+                    CreatedAtUtc = DateTime.UtcNow
+                }
+            });
+
+        var result = await _controller.OrganizationDetails("org-1");
+
+        var view = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<AdminOrganizationDetailsViewModel>(view.Model);
+        Assert.Equal("org-1", model.Organization.OrganizationId);
+    }
+
+    [Fact]
+    public async Task OrganizationDetails_ReturnsNotFoundForUnknownOrganization()
+    {
+        _mockSuperAdminSvc
+            .Setup(s => s.ListOrganizationsAsync())
+            .ReturnsAsync(Array.Empty<OrganizationOverview>());
+
+        var result = await _controller.OrganizationDetails("missing");
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
     public async Task AllBatches_ReturnsPagedViewModel()
     {
         var batches = Enumerable.Range(1, 11)

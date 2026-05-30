@@ -54,6 +54,30 @@ public class AdminController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> OrganizationDetails(string orgId)
+    {
+        if (string.IsNullOrWhiteSpace(orgId))
+            return NotFound();
+
+        var organizations = await _superAdminSvc.ListOrganizationsAsync();
+        var organization = organizations.FirstOrDefault(x =>
+            string.Equals(x.OrganizationId, orgId, StringComparison.OrdinalIgnoreCase));
+
+        if (organization is null)
+            return NotFound();
+
+        var deletedOrgRetentionDays = _configuration.GetValue<int>("DeletedOrgRetentionDays", 14);
+
+        var model = new AdminOrganizationDetailsViewModel
+        {
+            Organization = organization,
+            DeletedOrgRetentionDays = deletedOrgRetentionDays
+        };
+
+        return View(model);
+    }
+
+    [HttpGet]
     public async Task<IActionResult> AllBatches(int page = 1, int pageSize = 50, string sort = "created", string dir = "desc", string? orgId = null)
     {
         const int minPageSize = 10;

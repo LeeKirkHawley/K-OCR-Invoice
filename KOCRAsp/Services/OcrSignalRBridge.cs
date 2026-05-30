@@ -16,8 +16,8 @@ namespace KOCRAsp.Services;
 ///     <c>QueueStatsUpdated</c> to the <c>QueueMonitors</c> SignalR group.
 ///   </item>
 ///   <item>
-///     Subscribes to <see cref="IOcrJobEventPublisher.JobCompleted"/> and pushes
-///     <c>InvoiceOcrCompleted</c> to the <c>OcrCompleted_{orgId}</c> per-org group.
+///     Subscribes to job lifecycle streams and pushes per-org messages:
+///     <c>InvoiceOcrQueued</c>, <c>InvoiceOcrUnqueued</c>, and <c>InvoiceOcrCompleted</c>.
 ///   </item>
 /// </list>
 /// </summary>
@@ -29,7 +29,9 @@ public sealed class OcrSignalRBridge : IHostedService, IDisposable
     private readonly ILogger<OcrSignalRBridge> _logger;
 
     private IDisposable? _statsSubscription;
+    private IDisposable? _enqueuedSubscription;
     private IDisposable? _completedSubscription;
+    private IDisposable? _failedSubscription;
 
     public OcrSignalRBridge(
         IHubContext<OcrHub> hubContext,
@@ -49,9 +51,17 @@ public sealed class OcrSignalRBridge : IHostedService, IDisposable
             onNext:  stats => OnStatsChanged(stats),
             onError: ex    => _logger.LogError(ex, "[OcrSignalR] Stats stream faulted."));
 
+        _enqueuedSubscription = _eventPublisher.JobEnqueued.Subscribe(
+            onNext:  job => OnJobEnqueued(job),
+            onError: ex  => _logger.LogError(ex, "[OcrSignalR] JobEnqueued stream faulted."));
+
         _completedSubscription = _eventPublisher.JobCompleted.Subscribe(
             onNext:  job => OnJobCompleted(job),
             onError: ex  => _logger.LogError(ex, "[OcrSignalR] JobCompleted stream faulted."));
+
+        _failedSubscription = _eventPublisher.JobFailed.Subscribe(
+            onNext:  evt => OnJobFailed(evt),
+            onError: ex  => _logger.LogError(ex, "[OcrSignalR] JobFailed stream faulted."));
 
         _logger.LogInformation("[OcrSignalR] Bridge started — subscribed to Rx streams.");
         return Task.CompletedTask;
@@ -60,7 +70,9 @@ public sealed class OcrSignalRBridge : IHostedService, IDisposable
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _statsSubscription?.Dispose();
+        _enqueuedSubscription?.Dispose();
         _completedSubscription?.Dispose();
+        _failedSubscription?.Dispose();
         _logger.LogInformation("[OcrSignalR] Bridge stopped.");
         return Task.CompletedTask;
     }
@@ -68,7 +80,9 @@ public sealed class OcrSignalRBridge : IHostedService, IDisposable
     public void Dispose()
     {
         _statsSubscription?.Dispose();
+        _enqueuedSubscription?.Dispose();
         _completedSubscription?.Dispose();
+        _failedSubscription?.Dispose();
     }
 
     // ── Handlers ─────────────────────────────────────────────────────────────
@@ -88,13 +102,31 @@ public sealed class OcrSignalRBridge : IHostedService, IDisposable
             .SendAsync("QueueStatsUpdated", payload);
     }
 
-    private void OnJobCompleted(OcrJob job)
+    private void OnJobEnqueued(OcrJob job)
     {
         var payload = new
         {
             invoiceId = job.InvoiceId,
             batchId   = job.BatchId,
             jobId     = job.JobId,
+            filePath  = job.FilePath,
+        };
+
+        _ = _hubContext.Clients
+            .Group($"OcrCompleted_{job.OrgId}")
+            .SendAsync("InvoiceOcrQueued", payload);
+    }
+
+    private void OnJobCompleted(OcrJob job)
+    {
+        OnJobUnqueued(job, "Completed");
+
+        var payload = new
+        {
+            invoiceId = job.InvoiceId,
+            batchId   = job.BatchId,
+            jobId     = job.JobId,
+            filePath  = job.FilePath,
         };
 
         _ = _hubContext.Clients
@@ -104,5 +136,24 @@ public sealed class OcrSignalRBridge : IHostedService, IDisposable
         _logger.LogDebug(
             "[OcrSignalR] Pushed InvoiceOcrCompleted — job {JobId}, invoice {InvoiceId}, org {OrgId}.",
             job.JobId, job.InvoiceId, job.OrgId);
+    }
+
+    private void OnJobFailed(OcrJobFailedEvent failedEvent) =>
+        OnJobUnqueued(failedEvent.Job, "Failed");
+
+    private void OnJobUnqueued(OcrJob job, string reason)
+    {
+        var payload = new
+        {
+            invoiceId = job.InvoiceId,
+            batchId   = job.BatchId,
+            jobId     = job.JobId,
+            filePath  = job.FilePath,
+            reason,
+        };
+
+        _ = _hubContext.Clients
+            .Group($"OcrCompleted_{job.OrgId}")
+            .SendAsync("InvoiceOcrUnqueued", payload);
     }
 }

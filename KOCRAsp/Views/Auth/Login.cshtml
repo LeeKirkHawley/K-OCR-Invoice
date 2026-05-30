@@ -119,7 +119,7 @@
         const guestLoginModal    = new bootstrap.Modal(document.getElementById('guestLoginModal'));
         const guestPasswordModal = new bootstrap.Modal(document.getElementById('guestPasswordModal'));
 
-        document.getElementById('btnNewGuestLogin').addEventListener('click', async () => {
+        async function openGuestLoginModal() {
             document.getElementById('guestEmail').value = '';
             document.getElementById('guestModalError').classList.add('d-none');
             document.getElementById('guestUserName').value = 'Loading…';
@@ -128,7 +128,9 @@
             const res  = await fetch('/auth/nextguestno');
             const data = await res.json();
             document.getElementById('guestUserName').value = `Guest${data.nextNo}`;
-        });
+        }
+
+        document.getElementById('btnNewGuestLogin').addEventListener('click', openGuestLoginModal);
 
         document.getElementById('btnCreateGuest').addEventListener('click', async () => {
             const email  = document.getElementById('guestEmail').value.trim();
@@ -180,5 +182,10 @@
         document.getElementById('btnContinueGuest').addEventListener('click', () => {
             window.location.href = '/';
         });
+
+        const openGuest = new URLSearchParams(window.location.search).get('openGuest');
+        if (openGuest === '1') {
+            openGuestLoginModal();
+        }
     </script>
 }

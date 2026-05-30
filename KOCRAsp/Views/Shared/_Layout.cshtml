@@ -262,7 +262,7 @@
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Guest OCR Limit Reached</h5>
+                        <h5 class="modal-title" id="guestOcrLimitModalTitle">Guest Account Notice</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body" id="guestOcrLimitModalBody">Your guest account OCR limit has been reached.</div>
@@ -273,8 +273,10 @@
             </div>
         </div>
         <script>
-            function showGuestOcrLimitModal(message) {
+            function showGuestOcrLimitModal(message, title) {
+                const titleEl = document.getElementById('guestOcrLimitModalTitle');
                 const body = document.getElementById('guestOcrLimitModalBody');
+                if (titleEl) titleEl.textContent = title || 'Guest Account Notice';
                 if (body && message) body.textContent = message;
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('guestOcrLimitModal')).show();
             }

@@ -190,6 +190,7 @@ public sealed class HomePageService : IHomePageService
 
         if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
         {
+            entry.HasOcrResult = true;
             InvoiceDto? dto = null;
             try
             {
@@ -355,6 +356,7 @@ public sealed class HomePageService : IHomePageService
                 entry.TotalPages = invoice.TotalPages;
                 if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
                 {
+                    entry.HasOcrResult = true;
                     InvoiceDto? dto = null;
                     try
                     {

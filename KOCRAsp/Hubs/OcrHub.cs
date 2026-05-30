@@ -16,7 +16,8 @@ namespace KOCRAsp.Hubs;
 ///   <item>
 ///     <term><c>OcrCompleted_{orgId}</c></term>
 ///     <description>
-///       Per-org group that receives <c>InvoiceOcrCompleted</c> messages when a job finishes.
+///       Per-org group that receives invoice lifecycle messages:
+///       <c>InvoiceOcrQueued</c>, <c>InvoiceOcrUnqueued</c>, and <c>InvoiceOcrCompleted</c>.
 ///       Join by calling <c>JoinOrgGroup(orgId)</c>.
 ///     </description>
 ///   </item>
@@ -34,7 +35,7 @@ public class OcrHub : Hub
 
     /// <summary>
     /// Adds the caller to the org-specific group so they receive
-    /// <c>InvoiceOcrCompleted</c> pushes for their organisation.
+    /// invoice OCR lifecycle pushes for their organisation.
     /// </summary>
     /// <param name="orgId">The ASP.NET Identity organisation ID (GUID string).</param>
     public Task JoinOrgGroup(string orgId) =>

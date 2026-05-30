@@ -9,15 +9,17 @@ public class OcrEnqueueServiceTests
 {
     private Mock<IOcrQueueRepository> _mockRepository;
     private Mock<IOcrJobQueue> _mockQueue;
+    private Mock<IOcrJobEventPublisher> _mockEventPublisher;
     private OcrEnqueueService _service;
 
     public OcrEnqueueServiceTests()
     {
         _mockRepository = new Mock<IOcrQueueRepository>();
         _mockQueue = new Mock<IOcrJobQueue>();
+        _mockEventPublisher = new Mock<IOcrJobEventPublisher>();
         var mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger<OcrEnqueueService>>();
 
-        _service = new OcrEnqueueService(_mockRepository.Object, _mockQueue.Object, mockLogger.Object);
+        _service = new OcrEnqueueService(_mockRepository.Object, _mockQueue.Object, _mockEventPublisher.Object, mockLogger.Object);
     }
 
     [Fact]
@@ -86,6 +88,9 @@ public class OcrEnqueueServiceTests
 
         _mockQueue.Verify(
             q => q.EnqueueAsync(It.IsAny<OcrJob>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _mockEventPublisher.Verify(
+            p => p.OnJobEnqueued(It.IsAny<OcrJob>()),
             Times.Once);
     }
 

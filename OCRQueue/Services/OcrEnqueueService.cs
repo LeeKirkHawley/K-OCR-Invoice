@@ -13,15 +13,18 @@ public sealed class OcrEnqueueService : IOcrEnqueueService
 {
     private readonly IOcrQueueRepository _repository;
     private readonly IOcrJobQueue _queue;
+    private readonly IOcrJobEventPublisher _eventPublisher;
     private readonly ILogger<OcrEnqueueService> _logger;
 
     public OcrEnqueueService(
         IOcrQueueRepository repository,
         IOcrJobQueue queue,
+        IOcrJobEventPublisher eventPublisher,
         ILogger<OcrEnqueueService> logger)
     {
         _repository = repository;
         _queue      = queue;
+        _eventPublisher = eventPublisher;
         _logger     = logger;
     }
 
@@ -67,6 +70,7 @@ public sealed class OcrEnqueueService : IOcrEnqueueService
                     QueuedAtUtc: now);
 
                 await _queue.EnqueueAsync(job, ct);
+                _eventPublisher.OnJobEnqueued(job);
                 enqueued++;
 
                 _logger.LogDebug(
