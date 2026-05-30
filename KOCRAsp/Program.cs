@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.FileProviders;
 using OCRQueue.Abstractions;
 using OCRQueue.Services;
 using Serilog;
@@ -343,6 +344,11 @@ app.Use(async (context, next) =>
 });
 app.UseResponseCompression();
 app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "assets")),
+    RequestPath = "/assets"
+});
 app.UseRouting();
 app.UseSession();
 app.UseAuthentication();

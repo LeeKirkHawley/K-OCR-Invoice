@@ -118,6 +118,7 @@
                         <a class="nav-link text-light small" asp-controller="Admin" asp-action="OcrQueue">📋 OCR Queue</a>
                     }
                     <span class="text-light small">@User.Identity.Name</span>
+                    <a class="btn btn-outline-light btn-sm" asp-controller="Auth" asp-action="ChangePassword">Change Password</a>
                     <form method="post" action="/auth/logout" class="d-inline">
                         @Html.AntiForgeryToken()
                         <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>

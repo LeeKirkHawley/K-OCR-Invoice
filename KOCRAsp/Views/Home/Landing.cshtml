@@ -10,14 +10,15 @@
     <div class="container">
         <div class="row justify-content-center">
             <div class="col-lg-10 col-xl-8 text-center">
-                <p class="text-uppercase text-muted small mb-2">Invoice processing</p>
-                <h1 class="display-4 fw-bold mb-3">Hardscrabble Invoice</h1>
+                <img src="~/assets/HardscrabbleHeader.png"
+                     alt="Hardscrabble Invoice"
+                     class="img-fluid mb-3"
+                     style="max-width: 100%; height: auto;" />
                 <p class="lead text-muted mb-4">
                     Sign in to upload, review, and process invoices with batch-based OCR and validation.
                 </p>
                 <div class="d-flex flex-wrap justify-content-center gap-2 mb-4">
                     <a class="btn btn-primary btn-lg" asp-controller="Auth" asp-action="Login">Log in</a>
-                    <a class="btn btn-outline-secondary btn-lg" asp-controller="Auth" asp-action="ForgotPassword">Reset password</a>
                 </div>
             </div>
         </div>

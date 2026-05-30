@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -52,6 +53,9 @@ public class AuthControllerTests
             _mockLogger.Object);
 
         _controller.ControllerContext = ControllerTestHelper.CreateControllerContext();
+        _controller.TempData = new TempDataDictionary(
+            _controller.ControllerContext.HttpContext,
+            Mock.Of<ITempDataProvider>());
     }
 
     [Fact]
@@ -114,6 +118,69 @@ public class AuthControllerTests
         _mockSignInManager.Verify(s => s.SignOutAsync(), Times.Once);
         var redirect = Assert.IsType<RedirectToActionResult>(result);
         Assert.Equal(nameof(AuthController.Login), redirect.ActionName);
+    }
+
+    [Fact]
+    public void ChangePassword_GET_ReturnsView()
+    {
+        var result = _controller.ChangePassword();
+
+        var viewResult = Assert.IsType<ViewResult>(result);
+        Assert.IsType<ChangePasswordViewModel>(viewResult.Model);
+    }
+
+    [Fact]
+    public async Task ChangePassword_POST_Success_SignsOutAndRedirectsToLogin()
+    {
+        var user = new ApplicationUser { Id = "user-1", UserName = "user@test.com" };
+        var model = new ChangePasswordViewModel
+        {
+            CurrentPassword = "OldPass123!",
+            NewPassword = "NewPass123!",
+            ConfirmPassword = "NewPass123!"
+        };
+
+        _mockUserManager
+            .Setup(m => m.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockUserManager
+            .Setup(m => m.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword))
+            .ReturnsAsync(IdentityResult.Success);
+        _mockSignInManager
+            .Setup(m => m.SignOutAsync())
+            .Returns(Task.CompletedTask);
+
+        var result = await _controller.ChangePassword(model);
+
+        _mockSignInManager.Verify(m => m.SignOutAsync(), Times.Once);
+        var redirect = Assert.IsType<RedirectToActionResult>(result);
+        Assert.Equal(nameof(AuthController.Login), redirect.ActionName);
+    }
+
+    [Fact]
+    public async Task ChangePassword_POST_Failure_ReturnsViewWithErrors()
+    {
+        var user = new ApplicationUser { Id = "user-1", UserName = "user@test.com" };
+        var model = new ChangePasswordViewModel
+        {
+            CurrentPassword = "WrongPass123!",
+            NewPassword = "NewPass123!",
+            ConfirmPassword = "NewPass123!"
+        };
+
+        _mockUserManager
+            .Setup(m => m.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockUserManager
+            .Setup(m => m.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword))
+            .ReturnsAsync(IdentityResult.Failed(new IdentityError { Description = "Current password is incorrect." }));
+
+        var result = await _controller.ChangePassword(model);
+
+        var viewResult = Assert.IsType<ViewResult>(result);
+        Assert.Same(model, viewResult.Model);
+        Assert.False(_controller.ModelState.IsValid);
+        Assert.Contains(_controller.ModelState[string.Empty]!.Errors, error => error.ErrorMessage == "Current password is incorrect.");
     }
 
     [Theory]
