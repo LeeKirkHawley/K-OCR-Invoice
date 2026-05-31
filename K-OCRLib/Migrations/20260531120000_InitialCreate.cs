@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace K_OCRLib.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialPerOrgSchema : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -173,6 +173,35 @@ namespace K_OCRLib.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "OcrJobs",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    InvoiceId = table.Column<int>(type: "INTEGER", nullable: true),
+                    BatchId = table.Column<int>(type: "INTEGER", nullable: false),
+                    OrgId = table.Column<string>(type: "TEXT", nullable: false),
+                    OrgName = table.Column<string>(type: "TEXT", nullable: false),
+                    FilePath = table.Column<string>(type: "TEXT", nullable: false),
+                    WorkflowKey = table.Column<string>(type: "TEXT", nullable: false),
+                    Status = table.Column<string>(type: "TEXT", nullable: false),
+                    QueuedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    StartedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    CompletedAtUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    ErrorMessage = table.Column<string>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OcrJobs", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_OcrJobs_Invoices_InvoiceId",
+                        column: x => x.InvoiceId,
+                        principalTable: "Invoices",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_BatchActions_TimestampUtc",
                 table: "BatchActions",
@@ -211,6 +240,21 @@ namespace K_OCRLib.Migrations
                 column: "BatchId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_OcrJobs_InvoiceId",
+                table: "OcrJobs",
+                column: "InvoiceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OcrJobs_QueuedAtUtc",
+                table: "OcrJobs",
+                column: "QueuedAtUtc");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OcrJobs_Status",
+                table: "OcrJobs",
+                column: "Status");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_UserBatchSessions_BatchId",
                 table: "UserBatchSessions",
                 column: "BatchId");
@@ -230,6 +274,9 @@ namespace K_OCRLib.Migrations
 
             migrationBuilder.DropTable(
                 name: "InvoiceItems");
+
+            migrationBuilder.DropTable(
+                name: "OcrJobs");
 
             migrationBuilder.DropTable(
                 name: "UserBatchSessions");
