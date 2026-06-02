@@ -1,6 +1,7 @@
+using K_OCRLib.Services.Interfaces;
 using Tesseract;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 /// <summary>
 /// Runs local Tesseract OCR to produce a secondary text extraction for validation

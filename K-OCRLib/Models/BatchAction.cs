@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace K_OCR.Models;
+namespace K_OCRLib.Models;
 
 public class BatchAction
 {

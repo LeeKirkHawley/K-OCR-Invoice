@@ -1,6 +1,6 @@
-﻿using K_OCR.Models;
+﻿using K_OCRLib.Models;
 
-namespace K_OCR.Services
+namespace K_OCRLib.Services.Interfaces
 {
     public interface IFileService
     {
@@ -19,7 +19,7 @@ namespace K_OCR.Services
         /// field values, sets IsValidationAccepted = true, ProcessedAtUtc, and ValidatedOcrText.
         /// OcrText (original OCR output) is never changed by this method.
         /// </summary>
-        Task SaveValidatedLayoutAsync(string imagePath, K_OCR.Models.InvoiceDto invoice);
+        Task SaveValidatedLayoutAsync(string imagePath, InvoiceDto invoice);
         
         /// <summary>
         /// Load files from a directory, optionally filtered by extensions.
@@ -32,6 +32,6 @@ namespace K_OCR.Services
         /// <summary>
         /// List directories and files for a given path
         /// </summary>
-        IEnumerable<K_OCR.Models.DirectoryEntry> ListDirectory(string? path = null);
+        IEnumerable<DirectoryEntry> ListDirectory(string? path = null);
     }
 }

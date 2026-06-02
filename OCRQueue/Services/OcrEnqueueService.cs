@@ -1,4 +1,4 @@
-using K_OCR.Services;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 using OCRQueue.Abstractions;
 using OCRQueue.Models;

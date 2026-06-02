@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using K_OCR.Identity;
+using K_OCRLib.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 

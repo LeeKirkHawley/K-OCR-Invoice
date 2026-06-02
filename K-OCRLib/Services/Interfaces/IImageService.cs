@@ -1,6 +1,6 @@
 using System.Runtime.Versioning;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services.Interfaces;
 
 /// <summary>
 /// Service for image conversion operations.

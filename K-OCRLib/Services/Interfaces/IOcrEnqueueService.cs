@@ -1,4 +1,4 @@
-namespace K_OCR.Services;
+namespace K_OCRLib.Services.Interfaces;
 
 /// <summary>
 /// Durably persists OCR jobs and enqueues them for background processing.

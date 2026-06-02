@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace K_OCR.Models.Api.OrganizationAdmin;
+namespace K_OCRLib.Models.Api.OrganizationAdmin;
 
 public class InviteUserRequest
 {

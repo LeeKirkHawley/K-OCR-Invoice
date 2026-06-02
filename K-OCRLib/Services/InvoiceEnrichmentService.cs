@@ -1,8 +1,9 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using K_OCR.Models;
+using K_OCRLib.Models;
+using K_OCRLib.Services.Interfaces;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 /// <summary>
 /// Enriches a parsed <see cref="InvoiceDto"/> with the vendor's country of origin and the

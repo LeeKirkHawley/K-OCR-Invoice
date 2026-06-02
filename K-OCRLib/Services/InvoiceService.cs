@@ -1,13 +1,14 @@
 ﻿using Azure;
 using Azure.AI.DocumentIntelligence;
-using K_OCR.Models;
+using K_OCRLib.Models;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
 using System.IO;
 using System.Text.Json;
 
-namespace K_OCR.Services
+namespace K_OCRLib.Services
 {
     public class InvoiceService : IInvoiceService
     {

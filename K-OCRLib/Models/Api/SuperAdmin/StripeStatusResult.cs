@@ -1,4 +1,4 @@
-namespace K_OCR.Models.Api.SuperAdmin;
+namespace K_OCRLib.Models.Api.SuperAdmin;
 
 /// <summary>
 /// Result of a Stripe subscription status sync attempt.

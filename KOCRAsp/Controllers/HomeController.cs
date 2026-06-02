@@ -2,9 +2,6 @@ using System.Security.Claims;
 using System.Text;
 using System.Linq;
 using ClosedXML.Excel;
-using K_OCR.Data;
-using K_OCR.Models;
-using K_OCR.Security;
 using K_OCR.Services;
 using KOCRAsp.Models;
 using KOCRAsp.Services;
@@ -13,6 +10,11 @@ using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OCRQueue.Abstractions;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
+using K_OCRLib.Models;
+using K_OCRLib.Data;
+using K_OCRLib.Security;
 
 namespace KOCRAsp.Controllers;
 

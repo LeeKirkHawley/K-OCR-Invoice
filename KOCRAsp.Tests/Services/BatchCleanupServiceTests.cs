@@ -1,8 +1,8 @@
-using K_OCR.Configuration;
-using K_OCR.Data;
-using K_OCR.Models;
-using K_OCR.Services;
-using KOCRAsp.Services;
+using K_OCRLib.Configuration;
+using K_OCRLib.Data;
+using K_OCRLib.Models;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;

@@ -1,6 +1,6 @@
-using K_OCR.Models.Api.OrganizationAdmin;
+using K_OCRLib.Models.Api.OrganizationAdmin;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services.Interfaces;
 
 public interface IOrganizationAdminService
 {

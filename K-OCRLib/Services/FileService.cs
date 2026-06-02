@@ -1,9 +1,10 @@
 ﻿using System.IO;
-using K_OCR.Models;
+using K_OCRLib.Models;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 
 
-namespace K_OCR.Services
+namespace K_OCRLib.Services
 {
     public class FileService : IFileService
     {
@@ -38,7 +39,7 @@ namespace K_OCR.Services
                 {
                     try
                     {
-                        var validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<K_OCR.Models.InvoiceDto>>(invoice.ValidatedOcrText);
+                        var validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText);
                         if (validatedInvoices != null)
                             context.Layout = validatedInvoices;
                     }
@@ -99,12 +100,12 @@ namespace K_OCR.Services
             }
         }
         
-        public async Task SaveValidatedLayoutAsync(string imagePath, K_OCR.Models.InvoiceDto invoice)
+        public async Task SaveValidatedLayoutAsync(string imagePath, InvoiceDto invoice)
         {
             // Serialize as a single-element list to remain consistent with LoadCachedContextAsync
             // which deserialises ValidatedOcrText as List<InvoiceDto>.
             var validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(
-                new List<K_OCR.Models.InvoiceDto> { invoice }, Newtonsoft.Json.Formatting.Indented);
+                new List<InvoiceDto> { invoice }, Newtonsoft.Json.Formatting.Indented);
 
             var existing = await _databaseService.GetInvoiceByFilePathAsync(imagePath);
             if (existing != null)

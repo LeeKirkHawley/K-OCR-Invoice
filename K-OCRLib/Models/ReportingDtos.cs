@@ -1,4 +1,4 @@
-namespace K_OCR.Models;
+namespace K_OCRLib.Models;
 
 /// <summary>Describes the OCR outcome for a single invoice file within a batch.</summary>
 public class OcrInvoiceResult

@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 /// <summary>
 /// Pure-static helper that normalises raw OCR currency strings into <see cref="decimal"/> values.

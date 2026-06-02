@@ -1,9 +1,9 @@
-﻿using K_OCR.Models;
-using K_OCR.Services;
+﻿using K_OCRLib.Services;
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using K_OCR.Data;
+using K_OCRLib.Models;
+using K_OCRLib.Data;
 
 // ── Per-org DB test helper ────────────────────────────────────────────────────
 // Creates a temporary org folder with a migrated per-org kocr.db for testing.

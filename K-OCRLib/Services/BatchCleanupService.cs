@@ -1,10 +1,12 @@
-using K_OCR.Configuration;
-using K_OCR.Data;
-using K_OCR.Models;
+using K_OCRLib.Models;
+using K_OCRLib.Services;
+using K_OCRLib.Configuration;
+using K_OCRLib.Data;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 public class BatchCleanupService : IBatchCleanupService
 {

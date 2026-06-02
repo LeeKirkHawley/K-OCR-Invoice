@@ -1,4 +1,4 @@
-namespace K_OCR.Identity;
+namespace K_OCRLib.Identity;
 
 public static class OrganizationExtensions
 {

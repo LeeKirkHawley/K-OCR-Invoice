@@ -1,7 +1,8 @@
 using System.Text.RegularExpressions;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 public class PathService : IPathService
 {

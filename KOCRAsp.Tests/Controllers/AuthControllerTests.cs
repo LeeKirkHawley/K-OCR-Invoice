@@ -1,9 +1,7 @@
 using System.Security.Claims;
 using System.ComponentModel.DataAnnotations;
 using KOCRAsp.Controllers;
-using K_OCR.Identity;
 using KOCRAsp.Models;
-using K_OCR.Services;
 using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Authentication;
@@ -14,6 +12,8 @@ using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using K_OCRLib.Services.Interfaces;
+using K_OCRLib.Identity;
 
 namespace KOCRAsp.Tests.Controllers;
 

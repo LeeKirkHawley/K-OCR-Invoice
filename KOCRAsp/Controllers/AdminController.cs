@@ -1,5 +1,8 @@
-using K_OCR.Models.Api.SuperAdmin;
-using K_OCR.Services;
+using K_OCRLib.Identity;
+using K_OCRLib.Models;
+using K_OCRLib.Models.Api.SuperAdmin;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -116,11 +119,11 @@ public class AdminController : Controller
                 .ToArray();
         }
 
-        static int StatusOrder(K_OCR.Models.BatchDetail b) =>
+        static int StatusOrder(BatchDetail b) =>
             b.MarkedForDeletionAtUtc.HasValue ? 2 :
             b.LockedByUserId != null ? 1 : 0;
 
-        IEnumerable<K_OCR.Models.BatchDetail> ordered = normalizedSort switch
+        IEnumerable<BatchDetail> ordered = normalizedSort switch
         {
             "org" when normalizedDir == "asc" => allBatches
                 .OrderBy(b => b.OrganizationName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
@@ -216,7 +219,7 @@ public class AdminController : Controller
                 .ToArray();
         }
 
-        IEnumerable<K_OCR.Models.SuperAdminUserDetail> ordered = normalizedSort switch
+        IEnumerable<SuperAdminUserDetail> ordered = normalizedSort switch
         {
             "org" when normalizedDir == "desc" => users
                 .OrderByDescending(u => u.OrganizationName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
@@ -564,20 +567,20 @@ public class AdminController : Controller
     private Task<UserManagerContext?> GetUserManagerAsync(string userId)
     {
         var userManager = HttpContext.RequestServices
-            .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<K_OCR.Identity.ApplicationUser>>();
+            .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
         return ResolveUser(userManager, userId);
     }
 
     private static async Task<UserManagerContext?> ResolveUser(
-        Microsoft.AspNetCore.Identity.UserManager<K_OCR.Identity.ApplicationUser> mgr, string userId)
+        Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> mgr, string userId)
     {
         var user = await mgr.FindByIdAsync(userId);
         return user is null ? null : new UserManagerContext(mgr, user);
     }
 
     private sealed record UserManagerContext(
-        Microsoft.AspNetCore.Identity.UserManager<K_OCR.Identity.ApplicationUser> UserManager,
-        K_OCR.Identity.ApplicationUser User);
+        Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> UserManager,
+        ApplicationUser User);
 }
 
 // Local request DTOs

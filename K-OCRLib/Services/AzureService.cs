@@ -1,10 +1,11 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using K_OCRLib.Services.Interfaces;
+using Microsoft.Extensions.Configuration;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
-namespace K_OCR.Services
+namespace K_OCRLib.Services
 {
     public class AzureService : IAzureService
     {

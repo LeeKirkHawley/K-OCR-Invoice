@@ -1,7 +1,7 @@
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 public interface IBatchChangeNotifier
 {

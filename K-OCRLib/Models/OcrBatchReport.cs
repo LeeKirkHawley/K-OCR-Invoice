@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace K_OCR.Models;
+namespace K_OCRLib.Models;
 
 /// <summary>Master-DB record of a batch OCR event (one row per batch run).</summary>
 [Table("OcrBatchReports")]

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Stripe;
-using K_OCR.Data;
+using K_OCRLib.Data;
 
 namespace KOCRAsp.Controllers;
 

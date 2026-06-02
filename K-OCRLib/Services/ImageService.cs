@@ -2,10 +2,11 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Docnet.Core;
 using Docnet.Core.Models;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 using SkiaSharp;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 /// <summary>
 /// Service for image conversion operations using SkiaSharp and Docnet.Core.

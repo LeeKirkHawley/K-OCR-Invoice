@@ -1,4 +1,4 @@
-namespace K_OCR.Services;
+namespace K_OCRLib.Services.Interfaces;
 
 /// <summary>
 /// Performs local Tesseract OCR on an image as a secondary validation pass

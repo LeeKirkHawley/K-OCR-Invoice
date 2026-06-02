@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace K_OCR.Data;
+namespace K_OCRLib.Data;
 
 /// <summary>
 /// Design-time factory used by EF migrations. Targets SQL Server (matching

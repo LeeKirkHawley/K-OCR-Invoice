@@ -1,5 +1,5 @@
-using K_OCR.Identity;
-using K_OCR.Models;
+using K_OCRLib.Identity;
+using K_OCRLib.Models;
 
 namespace K_OCR.Services.Workflow;
 

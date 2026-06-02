@@ -1,6 +1,6 @@
-using K_OCR.Models.Api.SuperAdmin;
+using K_OCRLib.Models.Api.SuperAdmin;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services.Interfaces;
 
 public interface ISuperAdminService
 {

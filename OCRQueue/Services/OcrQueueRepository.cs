@@ -1,5 +1,6 @@
-using K_OCR.Data;
-using K_OCR.Models;
+using K_OCRLib.Data;
+using K_OCRLib.Models;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OCRQueue.Abstractions;
@@ -14,11 +15,11 @@ namespace OCRQueue.Services;
 /// </summary>
 public sealed class OcrQueueRepository : IOcrQueueRepository
 {
-    private readonly K_OCR.Services.IPathService _pathService;
+    private readonly IPathService _pathService;
     private readonly ILogger<OcrQueueRepository> _logger;
 
     public OcrQueueRepository(
-        K_OCR.Services.IPathService pathService,
+        IPathService pathService,
         ILogger<OcrQueueRepository> logger)
     {
         _pathService = pathService;

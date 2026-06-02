@@ -1,4 +1,4 @@
-using K_OCR.Services;
+using K_OCRLib.Services;
 using Microsoft.Extensions.Configuration;
 
 namespace K_OCRLib.Tests;

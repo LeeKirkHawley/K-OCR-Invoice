@@ -1,7 +1,8 @@
+using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 public class StripeProvisioningService : IStripeProvisioningService
 {

@@ -1,7 +1,7 @@
-using K_OCR.Data;
-using K_OCR.Identity;
-using K_OCR.Security;
 using K_OCR.Services;
+using K_OCRLib.Data;
+using K_OCRLib.Identity;
+using K_OCRLib.Security;
 
 namespace KOCRAsp.Services;
 

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 
-namespace K_OCR.Identity;
+namespace K_OCRLib.Identity;
 
 public class ApplicationUser : IdentityUser
 {

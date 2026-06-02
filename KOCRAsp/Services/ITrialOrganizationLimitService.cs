@@ -1,5 +1,5 @@
-using K_OCR.Data;
-using K_OCR.Services;
+using K_OCRLib.Data;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace KOCRAsp.Services;

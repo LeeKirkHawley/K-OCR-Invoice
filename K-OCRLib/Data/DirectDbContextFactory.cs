@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace K_OCR.Data;
+namespace K_OCRLib.Data;
 
 /// <summary>
 /// Creates a <see cref="KOCRDbContext"/> bound directly to a SQLite file path.

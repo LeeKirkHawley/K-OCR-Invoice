@@ -1,6 +1,6 @@
 using System.Security.Claims;
 
-namespace K_OCR.Security;
+namespace K_OCRLib.Security;
 
 public static class ClaimsPrincipalExtensions
 {

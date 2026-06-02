@@ -1,7 +1,8 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using K_OCR.Configuration;
+using K_OCRLib.Configuration;
+using K_OCRLib.Services.Interfaces;
 using Serilog;
 
 // The configuration service reads/writes a JSON settings file.
@@ -11,7 +12,7 @@ using Serilog;
 //   directory (AppDomain.CurrentDomain.BaseDirectory). Saves use a JSON merge
 //   so that ASP.NET Core fields (AllowedHosts, Logging, etc.) are preserved.
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 public class ConfigurationService : IConfigurationService
 {
@@ -29,7 +30,7 @@ public class ConfigurationService : IConfigurationService
             GuestMaxBatches = 2,
             GoogleAnalyticsMeasurementId = null,
             SearchConsoleVerificationToken = null,
-            Limits = new K_OCR.Configuration.LimitsSection()
+            Limits = new LimitsSection()
         };
     }
 

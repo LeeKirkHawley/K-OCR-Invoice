@@ -1,5 +1,3 @@
-using K_OCR.Models;
-using K_OCR.Data;
 using K_OCR.Services;
 using KOCRAsp.Controllers;
 using KOCRAsp.Models;
@@ -10,6 +8,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using OCRQueue.Abstractions;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
+using K_OCRLib.Models;
+using K_OCRLib.Data;
 
 namespace KOCRAsp.Tests.Controllers;
 

@@ -1,6 +1,6 @@
-using K_OCR.Security;
+using K_OCRLib.Security;
 
-namespace K_OCR.Identity;
+namespace K_OCRLib.Identity;
 
 public class UserOrganizationMembership
 {

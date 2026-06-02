@@ -1,17 +1,11 @@
-using System.Threading.RateLimiting;
-using K_OCR.Data;
-using K_OCR.Models;
-using K_OCR.Services;
-using Microsoft.EntityFrameworkCore;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using OCRQueue.Abstractions;
-using OCRQueue.Models;
 using OCRQueue.Services;
-using Xunit;
+using System.Threading.RateLimiting;
 
 namespace OCRQueue.Tests;
 

@@ -1,12 +1,13 @@
 using System.Net;
-using K_OCR.Configuration;
+using K_OCRLib.Configuration;
+using K_OCRLib.Services.Interfaces;
 using MailKit;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using MimeKit;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 public class EmailService : IEmailService
 {

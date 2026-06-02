@@ -1,7 +1,3 @@
-using K_OCR.Configuration;
-using K_OCR.Data;
-using K_OCR.Identity;
-using K_OCR.Security;
 using K_OCR.Services;
 using KOCRAsp.Infrastructure;
 using KOCRAsp.Hubs;
@@ -16,6 +12,12 @@ using Microsoft.Extensions.FileProviders;
 using OCRQueue.Abstractions;
 using OCRQueue.Services;
 using Serilog;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
+using K_OCRLib.Data;
+using K_OCRLib.Configuration;
+using K_OCRLib.Identity;
+using K_OCRLib.Security;
 
 
 var builder = WebApplication.CreateBuilder(args);

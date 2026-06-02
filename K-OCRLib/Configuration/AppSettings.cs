@@ -1,4 +1,6 @@
-namespace K_OCR.Configuration;
+using K_OCRLib.Models;
+
+namespace K_OCRLib.Configuration;
 
 public class AppSettings
 {
@@ -35,7 +37,7 @@ public class AppSettings
     /// <summary>
     /// Minimum Azure Document Intelligence confidence score (0.0 – 1.0) required
     /// for a field to pass confidence validation.  Fields whose score is strictly
-    /// below this value are flagged in <see cref="K_OCR.Models.InvoiceDto.ConfidenceConfirmed"/>.
+    /// below this value are flagged in <see cref="InvoiceDto.ConfidenceConfirmed"/>.
     /// </summary>
     public double MinConfidenceThreshold { get; set; } = 0.8;
 

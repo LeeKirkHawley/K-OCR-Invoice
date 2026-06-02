@@ -1,13 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using K_OCR.Data;
-using K_OCR.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using K_OCRLib.Models;
+using K_OCRLib.Data;
 
-namespace K_OCR.Services
+namespace K_OCRLib.Services
 {
     public class DatabaseService
     {

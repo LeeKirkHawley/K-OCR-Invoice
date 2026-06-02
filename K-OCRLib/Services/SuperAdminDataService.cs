@@ -1,9 +1,10 @@
-using K_OCR.Data;
-using K_OCR.Models;
+using K_OCRLib.Data;
+using K_OCRLib.Models;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 /// <summary>
 /// Super-admin cross-org data access via Option A (enumerate org folders).

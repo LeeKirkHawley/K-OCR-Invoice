@@ -1,4 +1,4 @@
-namespace K_OCR.Models.Api.Auth;
+namespace K_OCRLib.Models.Api.Auth;
 
 public class LoginResponse
 {

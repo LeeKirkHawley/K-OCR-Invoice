@@ -1,9 +1,9 @@
-using K_OCR.Configuration;
-using K_OCR.Data;
-using K_OCR.Identity;
-using K_OCR.Models.Api.OrganizationAdmin;
-using K_OCR.Services;
-using K_OCR.Security;
+using K_OCRLib.Data;
+using K_OCRLib.Identity;
+using K_OCRLib.Models.Api.OrganizationAdmin;
+using K_OCRLib.Security;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -30,8 +30,8 @@ public class AdminServiceTests
             await using var appDb = new ApplicationDbContext(appOptions);
             await appDb.Database.EnsureCreatedAsync();
 
-            var org1 = new K_OCR.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
-            var org2 = new K_OCR.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org Two" };
+            var org1 = new K_OCRLib.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
+            var org2 = new K_OCRLib.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org Two" };
             appDb.Organizations.AddRange(org1, org2);
             await appDb.SaveChangesAsync();
 
@@ -62,7 +62,7 @@ public class AdminServiceTests
         var (db, provider, connection) = await CreateIdentityHarnessAsync();
         try
         {
-            var org = new K_OCR.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
+            var org = new K_OCRLib.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
             var user = new ApplicationUser
             {
                 Id = Guid.NewGuid().ToString(),
@@ -107,7 +107,7 @@ public class AdminServiceTests
         var (db, provider, connection) = await CreateIdentityHarnessAsync();
         try
         {
-            var org = new K_OCR.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
+            var org = new K_OCRLib.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
             var user = new ApplicationUser
             {
                 Id = Guid.NewGuid().ToString(),
@@ -145,7 +145,7 @@ public class AdminServiceTests
         var (db, provider, connection) = await CreateIdentityHarnessAsync();
         try
         {
-            var org = new K_OCR.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
+            var org = new K_OCRLib.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One" };
             var user = new ApplicationUser
             {
                 Id = Guid.NewGuid().ToString(),
@@ -184,7 +184,7 @@ public class AdminServiceTests
         var (db, provider, connection) = await CreateIdentityHarnessAsync();
         try
         {
-            var org = new K_OCR.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One", IsActive = true };
+            var org = new K_OCRLib.Identity.Organization { Id = Guid.NewGuid().ToString(), Name = "Org One", IsActive = true };
             db.Organizations.Add(org);
             await db.SaveChangesAsync();
 
@@ -211,7 +211,7 @@ public class AdminServiceTests
         Directory.CreateDirectory(root);
         try
         {
-            var guest = new K_OCR.Identity.Organization
+            var guest = new K_OCRLib.Identity.Organization
             {
                 Id = Guid.NewGuid().ToString(),
                 Name = "Guest One",
@@ -258,7 +258,7 @@ public class AdminServiceTests
         Directory.CreateDirectory(root);
         try
         {
-            var org = new K_OCR.Identity.Organization
+            var org = new K_OCRLib.Identity.Organization
             {
                 Id = Guid.NewGuid().ToString(),
                 Name = "Delete Me",
@@ -329,7 +329,7 @@ public class AdminServiceTests
 
         await using var db = new KOCRDbContext(options);
         await db.Database.MigrateAsync();
-        var batch = new K_OCR.Models.Batch
+        var batch = new K_OCRLib.Models.Batch
         {
             Name = batchName,
             BatchNumber = batchNumber,
@@ -342,7 +342,7 @@ public class AdminServiceTests
 
         for (var i = 0; i < invoiceCount; i++)
         {
-            db.Invoices.Add(new K_OCR.Models.Invoice
+            db.Invoices.Add(new K_OCRLib.Models.Invoice
             {
                 BatchId = batch.BatchId,
                 FilePath = $"{batchName}-{i}.pdf",

@@ -1,5 +1,7 @@
-using K_OCR.Configuration;
-using K_OCR.Services;
+using K_OCRLib.Configuration;
+using K_OCRLib.Services;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using Moq;
 
 namespace K_OCRLib.Tests;

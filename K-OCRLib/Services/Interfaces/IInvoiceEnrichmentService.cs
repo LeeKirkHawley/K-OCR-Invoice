@@ -1,6 +1,6 @@
-using K_OCR.Models;
+using K_OCRLib.Models;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services.Interfaces;
 
 /// <summary>
 /// Enriches a parsed <see cref="InvoiceDto"/> with country of origin and currency information

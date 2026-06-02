@@ -1,7 +1,7 @@
-using K_OCR.Models;
+using K_OCRLib.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace K_OCR.Data;
+namespace K_OCRLib.Data;
 
 public class ReportingDbContext : DbContext
 {

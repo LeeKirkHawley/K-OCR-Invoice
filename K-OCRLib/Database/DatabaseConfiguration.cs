@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using K_OCR.Configuration;
-using K_OCR.Data;
-using K_OCR.Services;
 using Microsoft.Data.Sqlite;
+using K_OCRLib.Services;
+using K_OCRLib.Data;
+using K_OCRLib.Configuration;
 
-namespace K_OCR.Database
+namespace K_OCRLib.Database
 {
     /// <summary>
     /// Legacy helper — superseded by the per-org DB factory registered in Program.cs.

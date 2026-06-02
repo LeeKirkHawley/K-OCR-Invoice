@@ -1,7 +1,7 @@
-using K_OCR.Data;
-using K_OCR.Identity;
-using K_OCR.Models.Api.Auth;
-using K_OCR.Services;
+using K_OCRLib.Data;
+using K_OCRLib.Identity;
+using K_OCRLib.Models.Api.Auth;
+using K_OCRLib.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;

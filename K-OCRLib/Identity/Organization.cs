@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace K_OCR.Identity;
+namespace K_OCRLib.Identity;
 
 public class Organization
 {

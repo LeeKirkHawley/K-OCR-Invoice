@@ -1,8 +1,8 @@
-using K_OCR.Configuration;
-using K_OCR.Data;
 using K_OCR.Services;
+using K_OCRLib.Configuration;
+using K_OCRLib.Data;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Moq;
 
 namespace K_OCRLib.Tests;

@@ -1,7 +1,9 @@
 using System.Text;
 using ClosedXML.Excel;
-using K_OCR.Models;
 using K_OCR.Services;
+using K_OCRLib.Models;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 

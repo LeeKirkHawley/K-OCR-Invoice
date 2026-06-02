@@ -1,6 +1,6 @@
-using K_OCR.Models.Api.Auth;
+using K_OCRLib.Models.Api.Auth;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services.Interfaces;
 
 public interface IAuthService
 {

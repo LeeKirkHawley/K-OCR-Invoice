@@ -1,7 +1,7 @@
-using K_OCR.Identity;
-using K_OCR.Models;
+using K_OCRLib.Identity;
+using K_OCRLib.Services.Interfaces;
 
-namespace K_OCR.Models
+namespace K_OCRLib.Models
 {
     public class PipelineContext
     {
@@ -11,7 +11,7 @@ namespace K_OCR.Models
 
         /// <summary>
         /// Optional directory used to store per-page PNG images when the input is a PDF.
-        /// Passed to <see cref="K_OCR.Services.ITesseractValidationService.ExtractTextAsync"/>.
+        /// Passed to <see cref="ITesseractValidationService.ExtractTextAsync"/>.
         /// </summary>
         public string? ArtifactsDirectory { get; set; }
 

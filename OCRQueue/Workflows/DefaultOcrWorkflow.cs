@@ -1,7 +1,7 @@
-using K_OCR.Data;
-using K_OCR.Identity;
-using K_OCR.Services;
 using K_OCR.Services.Workflow;
+using K_OCRLib.Data;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

@@ -1,5 +1,5 @@
-using K_OCR.Configuration;
-using K_OCR.Services;
+using K_OCRLib.Configuration;
+using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Controllers;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Http;

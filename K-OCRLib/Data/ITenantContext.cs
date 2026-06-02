@@ -1,6 +1,6 @@
-using K_OCR.Identity;
+using K_OCRLib.Identity;
 
-namespace K_OCR.Data;
+namespace K_OCRLib.Data;
 
 /// <summary>
 /// Provides tenant identity so <c>KOCRDbContext</c> can be routed to the

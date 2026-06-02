@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace K_OCR.Models.Api.SuperAdmin;
+namespace K_OCRLib.Models.Api.SuperAdmin;
 
 public class CreateOrganizationRequest
 {

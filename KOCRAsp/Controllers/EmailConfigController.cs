@@ -1,5 +1,5 @@
-using K_OCR.Configuration;
-using K_OCR.Services;
+using K_OCRLib.Configuration;
+using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

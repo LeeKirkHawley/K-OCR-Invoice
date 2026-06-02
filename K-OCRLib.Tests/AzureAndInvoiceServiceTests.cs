@@ -1,5 +1,6 @@
-using K_OCR.Models;
-using K_OCR.Services;
+using K_OCRLib.Models;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;

@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
-using K_OCR.Configuration;
-using K_OCR.Services;
+using K_OCRLib.Configuration;
+using K_OCRLib.Services;
 
 namespace K_OCRLib.Tests;
 

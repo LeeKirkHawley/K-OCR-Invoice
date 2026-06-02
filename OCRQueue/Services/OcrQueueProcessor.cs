@@ -1,7 +1,7 @@
 using System.Threading.RateLimiting;
-using K_OCR.Data;
-using K_OCR.Models;
-using K_OCR.Services;
+using K_OCRLib.Data;
+using K_OCRLib.Models;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

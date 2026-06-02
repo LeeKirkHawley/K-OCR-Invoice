@@ -1,10 +1,8 @@
-using K_OCR.Configuration;
-using K_OCR.Data;
-using K_OCR.Models;
-using K_OCR.Security;
-using K_OCR.Services;
+using K_OCRLib.Data;
+using K_OCRLib.Models;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Controllers;
-using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;

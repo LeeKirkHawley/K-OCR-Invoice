@@ -1,11 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using K_OCR.Data;
-using K_OCR.Services;
 using System;
+using K_OCRLib.Services;
+using K_OCRLib.Data;
 
-namespace K_OCR.DatabaseExample
+namespace K_OCRLib
 {
     public class Program
     {

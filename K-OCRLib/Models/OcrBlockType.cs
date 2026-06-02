@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace K_OCR.Models
+namespace K_OCRLib.Models
 {    public enum OcrBlockType
     {
         Text,

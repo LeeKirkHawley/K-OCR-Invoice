@@ -1,9 +1,9 @@
 using System.Security.Claims;
-using K_OCR.Security;
+using K_OCRLib.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace K_OCR.Identity;
+namespace K_OCRLib.Identity;
 
 /// <summary>
 /// Shared logic for building K-OCR custom claims from an <see cref="ApplicationUser"/>.

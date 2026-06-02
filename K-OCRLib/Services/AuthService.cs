@@ -1,12 +1,13 @@
 using System.Text;
-using K_OCR.Identity;
-using K_OCR.Models.Api.Auth;
+using K_OCRLib.Identity;
+using K_OCRLib.Models.Api.Auth;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 public class AuthService : IAuthService
 {

@@ -1,14 +1,14 @@
-using K_OCR.Identity;
 using System.Security.Claims;
-using K_OCR.Models.Api.SuperAdmin;
-using K_OCR.Security;
 using KOCRAsp.Models;
 using Microsoft.AspNetCore.Authorization;
-using K_OCR.Services;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using K_OCRLib.Services.Interfaces;
+using K_OCRLib.Identity;
+using K_OCRLib.Models.Api.SuperAdmin;
+using K_OCRLib.Security;
 
 namespace KOCRAsp.Controllers;
 

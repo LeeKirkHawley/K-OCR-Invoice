@@ -1,7 +1,8 @@
 using System.Text.Json;
-using K_OCR.Configuration;
+using K_OCRLib.Configuration;
+using K_OCRLib.Services.Interfaces;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services;
 
 public class OrgConfigService : IOrgConfigService
 {

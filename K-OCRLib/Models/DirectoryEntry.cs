@@ -1,4 +1,4 @@
-namespace K_OCR.Models
+namespace K_OCRLib.Models
 {
     public class DirectoryEntry
     {

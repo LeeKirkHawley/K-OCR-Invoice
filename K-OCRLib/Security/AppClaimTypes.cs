@@ -1,4 +1,4 @@
-namespace K_OCR.Security;
+namespace K_OCRLib.Security;
 
 /// <summary>
 /// Application-specific claim type URIs added to the Identity cookie by

@@ -1,10 +1,9 @@
-using K_OCR.Models;
-using K_OCR.Services;
-using K_OCR.Data;
-using K_OCR.Identity;
-using KOCRAsp.Services;
+using K_OCRLib.Data;
+using K_OCRLib.Identity;
+using K_OCRLib.Models;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;

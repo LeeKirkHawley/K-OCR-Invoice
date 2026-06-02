@@ -1,4 +1,4 @@
-namespace K_OCR.Models;
+namespace K_OCRLib.Models;
 
 /// <summary>
 /// Durable record of an OCR job stored in the org's per-org SQLite database.

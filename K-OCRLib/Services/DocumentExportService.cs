@@ -1,8 +1,9 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using K_OCR.Models;
+using K_OCRLib.Models;
+using K_OCRLib.Services.Interfaces;
 
-namespace K_OCR.Services
+namespace K_OCRLib.Services
 {
     public class DocumentExportService : IDocumentExportService
     {

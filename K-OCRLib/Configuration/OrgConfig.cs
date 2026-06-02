@@ -1,4 +1,4 @@
-namespace K_OCR.Configuration;
+namespace K_OCRLib.Configuration;
 
 /// <summary>
 /// Per-organisation configuration stored as OrgConfig.json in the org's folder.

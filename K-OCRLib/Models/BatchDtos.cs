@@ -1,4 +1,4 @@
-namespace K_OCR.Models;
+namespace K_OCRLib.Models;
 
 /// <summary>Lightweight projection of a Batch — no large OCR blobs.</summary>
 public class BatchSummary

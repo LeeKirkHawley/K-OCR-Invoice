@@ -1,16 +1,14 @@
-using System.Security.Claims;
-using K_OCR.Configuration;
-using K_OCR.Data;
-using K_OCR.Identity;
-using K_OCR.Security;
-using K_OCR.Services;
+using K_OCRLib.Configuration;
+using K_OCRLib.Data;
+using K_OCRLib.Models.Api.OrganizationAdmin;
+using K_OCRLib.Models.Api.SuperAdmin;
+using K_OCRLib.Security;
+using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Models;
-using K_OCR.Models.Api.OrganizationAdmin;
-using K_OCR.Models.Api.SuperAdmin;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace KOCRAsp.Controllers;
 

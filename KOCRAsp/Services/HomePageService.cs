@@ -1,10 +1,11 @@
 using System.Security.Claims;
-using K_OCR.Data;
-using K_OCR.Models;
-using K_OCR.Services;
+using K_OCRLib.Services;
+using K_OCRLib.Models;
+using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Models;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
+using K_OCRLib.Data;
 
 namespace KOCRAsp.Services;
 

@@ -1,6 +1,6 @@
-using K_OCR.Configuration;
+using K_OCRLib.Configuration;
 
-namespace K_OCR.Services;
+namespace K_OCRLib.Services.Interfaces;
 
 public interface IOrgConfigService
 {

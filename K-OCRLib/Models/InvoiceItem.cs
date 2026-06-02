@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace K_OCR.Models
+namespace K_OCRLib.Models
 {
     [Table("InvoiceItems")]
     public class InvoiceItem

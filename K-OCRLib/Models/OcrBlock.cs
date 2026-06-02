@@ -1,4 +1,4 @@
-﻿using K_OCR.Models;
+﻿using K_OCRLib.Models;
 using Tesseract;
 
 public class OcrBlock

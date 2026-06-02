@@ -1,5 +1,5 @@
-using K_OCR.Models;
-using K_OCR.Services;
+using K_OCRLib.Models;
+using K_OCRLib.Services;
 
 namespace K_OCRLib.Tests;
 
