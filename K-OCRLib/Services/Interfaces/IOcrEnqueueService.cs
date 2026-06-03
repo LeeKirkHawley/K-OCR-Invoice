@@ -2,13 +2,13 @@ namespace K_OCRLib.Services.Interfaces;
 
 /// <summary>
 /// Durably persists OCR jobs and enqueues them for background processing.
-/// Implemented in the OCRQueue library; registered as a singleton in the host.
+/// Implemented by OCRQueue and consumed by the library and web host.
 /// </summary>
 public interface IOcrEnqueueService
 {
     /// <summary>
-    /// Creates a durable <c>OcrJobEntity</c> record for each file and pushes it
-    /// into the in-memory queue for processing by <c>OcrQueueProcessor</c>.
+    /// Creates a durable OCR queue record for each file and pushes it into the in-memory queue
+    /// for processing by the OCRQueue background processor.
     /// </summary>
     /// <param name="files">
     /// Pairs of (absolute file path, existing Invoice.Id) for every invoice to process.
@@ -18,7 +18,7 @@ public interface IOcrEnqueueService
     /// <param name="orgId">The ASP.NET Identity organisation ID (GUID string).</param>
     /// <param name="orgName">The organisation's display name (used to locate its SQLite DB).</param>
     /// <param name="workflowKey">
-    /// The workflow to run (e.g. "Default"). Resolved via <c>OcrWorkflowRegistry</c>.
+    /// The workflow to run (e.g. "Default"). Resolved via the OCRQueue workflow registry.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The number of jobs successfully enqueued.</returns>

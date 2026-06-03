@@ -35,7 +35,7 @@ public class OcrEnqueueServiceTests
         _mockRepository.Setup(r => r.CreateJobAsync(It.IsAny<OcrJob>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((OcrJob job, string orgName, CancellationToken ct) =>
             {
-                var entity = new K_OCRLib.Models.OcrJobEntity
+                var entity = new OcrJobRecord
                 {
                     Id = 1,
                     InvoiceId = job.InvoiceId,
@@ -68,7 +68,7 @@ public class OcrEnqueueServiceTests
         _mockRepository.Setup(r => r.CreateJobAsync(It.IsAny<OcrJob>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((OcrJob job, string orgName, CancellationToken ct) =>
             {
-                var entity = new K_OCRLib.Models.OcrJobEntity
+                var entity = new OcrJobRecord
                 {
                     Id = 1,
                     InvoiceId = job.InvoiceId,
@@ -103,7 +103,7 @@ public class OcrEnqueueServiceTests
         _mockRepository
             .Setup(r => r.CreateJobAsync(It.IsAny<OcrJob>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((OcrJob job, string orgName, CancellationToken ct) =>
-                new K_OCRLib.Models.OcrJobEntity
+                new OcrJobRecord
                 {
                     Id = 42,
                     InvoiceId = job.InvoiceId,
@@ -144,7 +144,7 @@ public class OcrEnqueueServiceTests
         _mockRepository.Setup(r => r.CreateJobAsync(It.IsAny<OcrJob>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((OcrJob job, string orgName, CancellationToken ct) =>
             {
-                var entity = new K_OCRLib.Models.OcrJobEntity
+                var entity = new OcrJobRecord
                 {
                     Id = 1,
                     InvoiceId = job.InvoiceId,
@@ -183,7 +183,7 @@ public class OcrEnqueueServiceTests
                 if (callCount == 1)
                     throw new Exception("Database error");
 
-                var entity = new K_OCRLib.Models.OcrJobEntity
+                var entity = new OcrJobRecord
                 {
                     Id = 2,
                     InvoiceId = job.InvoiceId,

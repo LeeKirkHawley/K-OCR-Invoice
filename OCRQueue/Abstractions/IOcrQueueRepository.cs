@@ -1,4 +1,3 @@
-using K_OCRLib.Models;
 using OCRQueue.Models;
 
 namespace OCRQueue.Abstractions;
@@ -11,9 +10,9 @@ namespace OCRQueue.Abstractions;
 public interface IOcrQueueRepository
 {
     /// <summary>Returns all Queued and Processing jobs for the given org, ordered by queue time.</summary>
-    Task<IReadOnlyList<OcrJobEntity>> GetPendingJobsAsync(string orgName, CancellationToken ct = default);
+    Task<IReadOnlyList<OcrJobRecord>> GetPendingJobsAsync(string orgName, CancellationToken ct = default);
 
-    Task<OcrJobEntity> CreateJobAsync(OcrJob job, string orgName, CancellationToken ct = default);
+    Task<OcrJobRecord> CreateJobAsync(OcrJob job, string orgName, CancellationToken ct = default);
 
     /// <summary>Resets an interrupted Processing job back to Queued so it can be re-enqueued on startup.</summary>
     Task MarkQueuedAsync(int jobId, string orgName, CancellationToken ct = default);

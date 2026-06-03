@@ -26,21 +26,36 @@ public sealed class OcrQueueRepository : IOcrQueueRepository
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<OcrJobEntity>> GetPendingJobsAsync(
+    public async Task<IReadOnlyList<OcrJobRecord>> GetPendingJobsAsync(
         string orgName, CancellationToken ct = default)
     {
         await using var db = OpenOrgDb(orgName);
         return await db.OcrJobs
             .Where(j => j.Status == OcrJobStatus.Queued || j.Status == OcrJobStatus.Processing)
             .OrderBy(j => j.QueuedAtUtc)
+            .Select(j => new OcrJobRecord
+            {
+                Id = j.Id,
+                InvoiceId = j.InvoiceId,
+                BatchId = j.BatchId,
+                OrgId = j.OrgId,
+                OrgName = j.OrgName,
+                FilePath = j.FilePath,
+                WorkflowKey = j.WorkflowKey,
+                Status = j.Status,
+                QueuedAtUtc = j.QueuedAtUtc,
+                StartedAtUtc = j.StartedAtUtc,
+                CompletedAtUtc = j.CompletedAtUtc,
+                ErrorMessage = j.ErrorMessage,
+            })
             .ToListAsync(ct);
     }
 
-    public async Task<OcrJobEntity> CreateJobAsync(
+    public async Task<OcrJobRecord> CreateJobAsync(
         OcrJob job, string orgName, CancellationToken ct = default)
     {
         await using var db = OpenOrgDb(orgName);
-        var entity = new OcrJobEntity
+        var entity = new K_OCRLib.Models.OcrJobEntity
         {
             InvoiceId    = job.InvoiceId,
             BatchId      = job.BatchId,
@@ -53,7 +68,7 @@ public sealed class OcrQueueRepository : IOcrQueueRepository
         };
         db.OcrJobs.Add(entity);
         await db.SaveChangesAsync(ct);
-        return entity;
+        return ToRecord(entity);
     }
 
     public async Task MarkQueuedAsync(int jobId, string orgName, CancellationToken ct = default)
@@ -108,4 +123,21 @@ public sealed class OcrQueueRepository : IOcrQueueRepository
         ctx.Database.Migrate();
         return ctx;
     }
+
+    private static OcrJobRecord ToRecord(K_OCRLib.Models.OcrJobEntity entity) =>
+        new()
+        {
+            Id = entity.Id,
+            InvoiceId = entity.InvoiceId,
+            BatchId = entity.BatchId,
+            OrgId = entity.OrgId,
+            OrgName = entity.OrgName,
+            FilePath = entity.FilePath,
+            WorkflowKey = entity.WorkflowKey,
+            Status = entity.Status,
+            QueuedAtUtc = entity.QueuedAtUtc,
+            StartedAtUtc = entity.StartedAtUtc,
+            CompletedAtUtc = entity.CompletedAtUtc,
+            ErrorMessage = entity.ErrorMessage,
+        };
 }

@@ -12,6 +12,7 @@ using K_OCRLib.Services;
 using K_OCRLib.Services.Interfaces;
 using K_OCRLib.Models;
 using K_OCRLib.Data;
+using OCRQueue.Models;
 
 namespace KOCRAsp.Tests.Controllers;
 
@@ -53,7 +54,7 @@ public class HomeControllerTests
         _mockConfigSvc.Setup(s => s.GetMaxPagesPerInvoice(true)).Returns(20);
         _mockOcrQueueRepo
             .Setup(r => r.GetPendingJobsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<OcrJobEntity>());
+            .ReturnsAsync(Array.Empty<OcrJobRecord>());
         _mockTrialLimitSvc
             .Setup(s => s.GetCurrentStatusAsync())
             .ReturnsAsync(new TrialOrganizationLimitStatus(false, 500, 0));

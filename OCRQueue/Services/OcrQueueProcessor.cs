@@ -259,7 +259,7 @@ public sealed class OcrQueueProcessor : BackgroundService, IOcrQueueProcessor
         }
     }
 
-    private static OcrJob EntityToJob(OcrJobEntity entity, string orgId) =>
+    private static OcrJob EntityToJob(OcrJobRecord entity, string orgId) =>
         new(
             JobId:       entity.Id,
             InvoiceId:   entity.InvoiceId ?? 0,
