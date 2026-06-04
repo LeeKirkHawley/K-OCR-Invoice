@@ -163,6 +163,7 @@
 </div>
 
 <div id="invoiceContextMenu" class="invoice-context-menu" style="display:none;">
+    <button type="button" id="invoiceMenuRunOcrBtn" class="invoice-context-item">Run OCR</button>
     <button type="button" id="invoiceMenuRemoveBtn" class="invoice-context-item">Remove Invoice from Batch</button>
     <button type="button" id="invoiceMenuMoveBtn" class="invoice-context-item">Move Invoice to another Batch</button>
 </div>
@@ -340,6 +341,7 @@
         if (!menu) return;
 
         _contextMenuFilePath = filePath;
+        configureRunOcrButton(document.getElementById('invoiceMenuRunOcrBtn'), filePath, isFileOverPageLimit(filePath));
         menu.style.display = 'block';
 
         const viewportWidth = window.innerWidth;
@@ -549,6 +551,14 @@
         } catch (err) {
             showToast(err.message, 'error');
         }
+    });
+
+    document.getElementById('invoiceMenuRunOcrBtn').addEventListener('click', async function () {
+        const filePath = _contextMenuFilePath;
+        hideInvoiceContextMenu();
+        if (!filePath) return;
+
+        await runOcrOnFile(filePath, this);
     });
 
     document.getElementById('invoiceMenuMoveBtn').addEventListener('click', async function () {
@@ -766,30 +776,56 @@
         const container = document.getElementById('invoiceFields');
         const btn = document.createElement('button');
         btn.id = 'runOcrBtn';
-        if (_isBetaTestOrganization && _betaLimitExceeded) {
-            btn.className = 'btn btn-sm btn-secondary mt-2';
-            btn.textContent = '▶ Run OCR';
-            btn.disabled = true;
-            btn.title = `Beta OCR page limit reached (${_betaUsedPages}/${_betaMaxPages}).`;
-        } else if (exceedsLimit) {
-            btn.className = 'btn btn-sm btn-secondary mt-2';
-            btn.textContent = '▶ Run OCR';
-            btn.disabled = true;
-            btn.title = `This invoice exceeds the ${_maxPagesPerInvoice}-page limit and cannot be OCR'd.`;
-        } else if (isFileQueued(filePath)) {
-            btn.className = 'btn btn-sm btn-secondary mt-2';
-            btn.textContent = '▶ Run OCR';
-            btn.dataset.queueToggle = 'true';
-            btn.disabled = true;
-            btn.title = 'This invoice is already queued for OCR.';
-            btn.onclick = () => runOcrOnFile(filePath, btn);
-        } else {
-            btn.className = 'btn btn-sm btn-primary mt-2';
-            btn.textContent = '▶ Run OCR';
-            btn.dataset.queueToggle = 'true';
-            btn.onclick = () => runOcrOnFile(filePath, btn);
-        }
+        configureRunOcrButton(btn, filePath, exceedsLimit);
         container.appendChild(btn);
+    }
+
+    function isFileOverPageLimit(filePath) {
+        const item = findFileListItem(filePath);
+        return item?.dataset.exceedsLimit === 'true';
+    }
+
+    function getRunOcrButtonState(filePath, exceedsLimit) {
+        if (_isBetaTestOrganization && _betaLimitExceeded) {
+            return {
+                className: 'btn btn-sm btn-secondary mt-2',
+                disabled: true,
+                title: `Beta OCR page limit reached (${_betaUsedPages}/${_betaMaxPages}).`,
+            };
+        }
+
+        if (exceedsLimit) {
+            return {
+                className: 'btn btn-sm btn-secondary mt-2',
+                disabled: true,
+                title: `This invoice exceeds the ${_maxPagesPerInvoice}-page limit and cannot be OCR'd.`,
+            };
+        }
+
+        if (isFileQueued(filePath)) {
+            return {
+                className: 'btn btn-sm btn-secondary mt-2',
+                disabled: true,
+                title: 'This invoice is already queued for OCR.',
+            };
+        }
+
+        return {
+            className: 'btn btn-sm btn-primary mt-2',
+            disabled: false,
+            title: '',
+        };
+    }
+
+    function configureRunOcrButton(btn, filePath, exceedsLimit) {
+        if (!btn) return;
+        const state = getRunOcrButtonState(filePath, exceedsLimit);
+        btn.className = state.className;
+        btn.textContent = '▶ Run OCR';
+        btn.dataset.queueToggle = 'true';
+        btn.disabled = state.disabled;
+        btn.title = state.title;
+        btn.onclick = () => runOcrOnFile(filePath, btn);
     }
 
     async function runOcrOnFile(filePath, btn) {
@@ -802,8 +838,7 @@
             showToast('This invoice is already queued for OCR.', 'warning');
             return;
         }
-        setButtonLoading(btn, true);
-        setButtonLoading(btn, true);
+        if (btn) setButtonLoading(btn, true);
         try {
             const fd = new FormData();
             fd.append('filePath', filePath);
@@ -813,7 +848,7 @@
                 clearFileQueued(filePath);
                 markQueueIndicators();
                 showToast(result.error ?? 'Invoice exceeds page limit.', 'error');
-                setButtonLoading(btn, false);
+                if (btn) setButtonLoading(btn, false);
                 return;
             }
             if (result.betaLimitExceeded) {
@@ -822,7 +857,7 @@
             if (result.success && result.queued) {
                 markFileQueued(result.filePath ?? filePath);
                 showToast('OCR queued.');
-                setButtonLoading(btn, false);
+                if (btn) setButtonLoading(btn, false);
                 return;
             }
             if (result.success && result.invoice) {
@@ -841,13 +876,13 @@
                 clearFileQueued(filePath);
                 markQueueIndicators();
                 showToast(result.error ?? 'OCR failed.', 'error');
-                setButtonLoading(btn, false);
+                if (btn) setButtonLoading(btn, false);
             }
         } catch (err) {
             clearFileQueued(filePath);
             markQueueIndicators();
             showToast('OCR error: ' + err.message, 'error');
-            setButtonLoading(btn, false);
+            if (btn) setButtonLoading(btn, false);
         }
     }
 

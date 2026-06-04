@@ -64,7 +64,16 @@ namespace K_OCRLib.Services
         
         public async Task SaveContextAsync(string imagePath, PipelineContext context)
         {
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
+            string json = "";
+            try
+            {
+                json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to serialize pipeline context for {FileName}.", Path.GetFileName(imagePath));
+            }
+
             var isFullyProcessed = context.Layout != null && !string.IsNullOrWhiteSpace(context.TesseractOcrText);
 
             // Serialize validated invoice with TesseractConfirmed for database storage
@@ -104,8 +113,18 @@ namespace K_OCRLib.Services
         {
             // Serialize as a single-element list to remain consistent with LoadCachedContextAsync
             // which deserialises ValidatedOcrText as List<InvoiceDto>.
-            var validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(
-                new List<InvoiceDto> { invoice }, Newtonsoft.Json.Formatting.Indented);
+            string validatedJson = ""; 
+
+
+            try
+            {
+                validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+                    new List<InvoiceDto> { invoice }, Newtonsoft.Json.Formatting.Indented);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to deserialize validated json for {FileName}.", Path.GetFileName(imagePath));
+            }
 
             var existing = await _databaseService.GetInvoiceByFilePathAsync(imagePath);
             if (existing != null)

@@ -177,6 +177,15 @@
     background: #f1f3f5;
 }
 
+.invoice-context-item:disabled {
+    color: #6c757d;
+    cursor: not-allowed;
+}
+
+.invoice-context-item:disabled:hover {
+    background: transparent;
+}
+
 /* ── Document viewer ──────────────────────────────────────────── */
 .viewer-toolbar {
     gap: 6px;

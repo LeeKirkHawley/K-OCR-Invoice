@@ -136,8 +136,20 @@ public class InvoiceValidationService : IInvoiceValidationService
             return; // Not extracted by Azure — nothing to validate
 
         var normalizedValue = NormalizeWhitespace(value);
-        flags[fieldName] = normalizedTess.Contains(normalizedValue, StringComparison.OrdinalIgnoreCase);
-        //System.Diagnostics.Debug.Assert(flags[fieldName] == true);
+        
+        //flags[fieldName] = normalizedTess.Contains(normalizedValue, StringComparison.OrdinalIgnoreCase);
+        // instead of checking the whole Azure field against the tesseract text, we check whether each
+        // individual work in the azure test is present in the Tesseract text.
+        string[] individualWords = normalizedValue.Split(' ');
+        foreach(string word in individualWords)
+        {
+            flags[fieldName] = true;
+            if(!normalizedTess.Contains(word, StringComparison.OrdinalIgnoreCase))
+            {
+                flags[fieldName] = false;
+                break;
+            }
+        }
     }
 
     /// <summary>
