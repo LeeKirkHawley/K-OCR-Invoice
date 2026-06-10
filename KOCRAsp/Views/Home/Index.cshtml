@@ -940,15 +940,17 @@
             html += '<h6 class="mt-2">Line Items</h6>';
             html += '<div class="table-responsive li-table-wrap"><table class="table table-sm table-bordered li-table" id="liTable">';
             html += '<colgroup>'
-                  + '<col class="li-col" id="liColDesc" style="width:50%">'
+                  + '<col class="li-col" id="liColDesc" style="width:40%">'
                   + '<col class="li-col" id="liColQty"  style="width:10%">'
                   + '<col class="li-col" id="liColUp"   style="width:20%">'
+                  + '<col class="li-col" id="liColAmt"  style="width:10%">'
                   + '<col class="li-col" id="liColAmt"  style="width:20%">'
                   + '</colgroup>';
             html += '<thead><tr>'
                   + '<th class="li-th">Description<span class="li-col-drag" data-col="0"></span></th>'
                   + '<th class="li-th">Qty<span class="li-col-drag" data-col="1"></span></th>'
                   + '<th class="li-th">Unit Price<span class="li-col-drag" data-col="2"></span></th>'
+                  + '<th class="li-th">Tax<span class="li-col-drag" data-col="1"></span></th>'
                   + '<th class="li-th">Total</th>'
                   + '</tr></thead><tbody>';
             for (let i = 0; i < inv.items.length; i++) {
@@ -958,11 +960,13 @@
                 const dSusp = isItemFieldSuspect(inv, item, 'Description', i);
                 const qSusp = isItemFieldSuspect(inv, item, 'Quantity',    i);
                 const uSusp = isItemFieldSuspect(inv, item, 'UnitPrice',   i);
+                const tSusp = isItemFieldSuspect(inv, item, 'TaxRate',         i);
                 const aSusp = isItemFieldSuspect(inv, item, 'Amount',      i);
 
                 const dTip = buildItemFieldTooltip(inv, item, 'Description', i, item.description);
                 const qTip = buildItemFieldTooltip(inv, item, 'Quantity',    i, item.quantity);
                 const uTip = buildItemFieldTooltip(inv, item, 'UnitPrice',   i, item.unitPrice);
+                const tTip = buildItemFieldTooltip(inv, item, 'TaxRate',     i, item.taxRate);
                 const aTip = buildItemFieldTooltip(inv, item, 'Amount',      i, item.amount);
 
                 const vtip = t => `data-vtip="${escapeHtml(t.value)}" data-vtip-errors="${escapeHtml(t.errors.join('\n'))}"`;
@@ -973,6 +977,7 @@
                              <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${escapeHtml(unitPrice)}" /></td>
+                             <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(tTip)} data-item-idx="${i}" data-field="taxRate"         data-fieldkey="${fk}" value="${escapeHtml(taxRate)}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="amount"      data-fieldkey="${fk}" value="${escapeHtml(amount)}" /></td>
                          </tr>`;
             }

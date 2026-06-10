@@ -50,7 +50,8 @@ namespace K_OCRLib.Services
                     { "Description", new[] { "Item", "Item Description", "Product", "Service" } },
                     { "Quantity",    new[] { "Qty", "QTY" } },
                     { "UnitPrice",   new[] { "Unit Price", "Price", "Rate", "Net price", "Net Price" } },
-                    { "Amount",      new[] { "Line Total", "LineAmount" } }
+                    { "Amount",      new[] { "Line Total", "LineAmount" } },
+                    { "Tax",         new[] { "Tax", "Tax Amount", "Sales Tax", "VAT", "GST", "VAT [%]" } }
                 };
 
                 // Merge any custom entries from FieldMappings.json on top of the defaults.
@@ -495,6 +496,18 @@ namespace K_OCRLib.Services
                                 itemFieldConfidences[nameof(InvoiceItemDto.Amount)] = vAmt.Confidence.Value;
                         }
 
+                        string? lineTax = null;
+                        var taxKey = TryGetItemFieldKey(dict, "TaxRate");
+                        if (taxKey != null && dict.TryGetValue(taxKey, out var vTax))
+                        {
+                            //if (vTax.ValueCurrency?.Amount is double ld) lineTax = (decimal)ld;
+                            //else if (vTax.ValueDouble is double nd2) lineTax = (decimal)nd2;
+                            //else if (vTax.ValueInt64 is long nl2) lineTax = nl2;
+                            lineTax = vTax.Content;
+                            if (vTax.Confidence.HasValue)
+                                itemFieldConfidences[nameof(InvoiceItemDto.TaxRate)] = vTax.Confidence.Value;
+                        }
+
                         // Get bounding boxes for the entire line item
                         var itemBoxes = new List<BoundingBoxDto>();
                         if (item.BoundingRegions != null)
@@ -519,7 +532,8 @@ namespace K_OCRLib.Services
                             UnitPrice       = unitPrice,
                             Amount          = lineTotal,
                             BoundingBoxes   = itemBoxes,
-                            FieldConfidences = itemFieldConfidences
+                            FieldConfidences = itemFieldConfidences,
+                            TaxRate         = lineTax
                         });
                     }
                 }

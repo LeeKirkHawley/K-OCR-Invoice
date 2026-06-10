@@ -431,11 +431,13 @@ public class HomeController : Controller
         if (string.IsNullOrWhiteSpace(filePath))
             return Json(new { success = false, error = "File path required." });
 
-        var invoice = await _homePageSvc.LoadInvoiceAsync(filePath);
+        InvoiceDto? invoice = await _homePageSvc.LoadInvoiceAsync(filePath);
         if (invoice == null)
             return Json(new { success = false, error = "No processed invoice for this file." });
 
-        return Json(new { success = true, invoice });
+        JsonResult result = Json(new { success = true, invoice });
+
+        return result;
     }
 
     [HttpPost]

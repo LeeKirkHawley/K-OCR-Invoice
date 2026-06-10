@@ -12,6 +12,7 @@ namespace K_OCRLib.Models
         public decimal? Quantity { get; set; }
         public decimal? UnitPrice { get; set; }
         public decimal? Amount { get; set; }
+        public string? TaxRate { get; set; }
         public List<BoundingBoxDto> BoundingBoxes { get; init; } = new();
 
         /// <summary>

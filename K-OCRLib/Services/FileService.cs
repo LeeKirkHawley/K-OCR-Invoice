@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using K_OCRLib.Models;
 using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Logging;
