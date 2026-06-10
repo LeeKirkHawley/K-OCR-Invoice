@@ -942,8 +942,8 @@
             html += '<colgroup>'
                   + '<col class="li-col" id="liColDesc" style="width:40%">'
                   + '<col class="li-col" id="liColQty"  style="width:10%">'
-                  + '<col class="li-col" id="liColUp"   style="width:20%">'
-                  + '<col class="li-col" id="liColAmt"  style="width:10%">'
+                  + '<col class="li-col" id="liColUp"   style="width:25%">'
+                  + '<col class="li-col" id="liColTaxRate"  style="width:5%">'
                   + '<col class="li-col" id="liColAmt"  style="width:20%">'
                   + '</colgroup>';
             html += '<thead><tr>'
@@ -977,7 +977,7 @@
                              <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${escapeHtml(unitPrice)}" /></td>
-                             <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(tTip)} data-item-idx="${i}" data-field="taxRate"         data-fieldkey="${fk}" value="${escapeHtml(taxRate)}" /></td>
+                             <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(tTip)} data-item-idx="${i}" data-field="taxRate"         data-fieldkey="${fk}" value="${escapeHtml(item.taxRate)}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="amount"      data-fieldkey="${fk}" value="${escapeHtml(amount)}" /></td>
                          </tr>`;
             }
