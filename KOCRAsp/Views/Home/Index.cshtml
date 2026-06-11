@@ -917,6 +917,7 @@
 
     function renderInvoiceFields(inv) {
         const container = document.getElementById('invoiceFields');
+        const hasTaxData = inv.items?.some(item => item.taxRate);
 
         let html = '<table class="table table-sm invoice-field-table"><tbody>';
         for (const f of HEADER_FIELDS) {
@@ -943,14 +944,14 @@
                   + '<col class="li-col" id="liColDesc" style="width:40%">'
                   + '<col class="li-col" id="liColQty"  style="width:10%">'
                   + '<col class="li-col" id="liColUp"   style="width:25%">'
-                  + '<col class="li-col" id="liColTaxRate"  style="width:5%">'
+                  + (hasTaxData ?'<col class="li-col" id="liColTaxRate"  style="width:5%">' : '')
                   + '<col class="li-col" id="liColAmt"  style="width:20%">'
                   + '</colgroup>';
             html += '<thead><tr>'
                   + '<th class="li-th">Description<span class="li-col-drag" data-col="0"></span></th>'
                   + '<th class="li-th">Qty<span class="li-col-drag" data-col="1"></span></th>'
                   + '<th class="li-th">Unit Price<span class="li-col-drag" data-col="2"></span></th>'
-                  + '<th class="li-th">Tax<span class="li-col-drag" data-col="1"></span></th>'
+                  + (hasTaxData ? '<th class="li-th">Tax<span class="li-col-drag" data-col="1"></span></th>' : '')
                   + '<th class="li-th">Total</th>'
                   + '</tr></thead><tbody>';
             for (let i = 0; i < inv.items.length; i++) {
@@ -977,7 +978,7 @@
                              <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
                              <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${escapeHtml(unitPrice)}" /></td>
-                             <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(tTip)} data-item-idx="${i}" data-field="taxRate"         data-fieldkey="${fk}" value="${escapeHtml(item.taxRate)}" /></td>
+                             ${hasTaxData ? `<td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(tTip)} data-item-idx="${i}" data-field="taxRate" data-fieldkey="${fk}" value="${escapeHtml(item.taxRate)}" /></td>` : ''}
                              <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="amount"      data-fieldkey="${fk}" value="${escapeHtml(amount)}" /></td>
                          </tr>`;
             }
