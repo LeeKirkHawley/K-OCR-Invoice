@@ -50,7 +50,8 @@ public class ConfidenceValidationService : IConfidenceValidationService
             nameof(InvoiceItemDto.Description),
             nameof(InvoiceItemDto.Quantity),
             nameof(InvoiceItemDto.UnitPrice),
-            nameof(InvoiceItemDto.Amount)
+            nameof(InvoiceItemDto.Amount),
+            nameof(InvoiceItemDto.TaxRate)
         };
         foreach (var item in invoice.Items)
         {

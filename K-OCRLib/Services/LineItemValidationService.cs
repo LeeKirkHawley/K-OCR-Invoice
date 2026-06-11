@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using K_OCRLib.Models;
 using K_OCRLib.Services.Interfaces;
+using Microsoft.IdentityModel.Tokens;
 
 namespace K_OCRLib.Services;
 
@@ -16,7 +17,7 @@ public class LineItemValidationService : ILineItemValidationService
             invoice.MathConfirmed = new Dictionary<string, bool>();
         }
         
-        // Validate each line item's math (Quantity × UnitPrice = Amount)
+        // Validate each line item's math (Quantity × UnitPrice + LineItemTax = Amount)
         if (invoice.Items != null && invoice.Items.Count > 0)
         {
             for (int i = 0; i < invoice.Items.Count; i++)
@@ -28,6 +29,28 @@ public class LineItemValidationService : ILineItemValidationService
                 {
                     decimal expectedAmount = item.Quantity.Value * item.UnitPrice.Value;
                     decimal actualAmount = item.Amount.Value;
+                    if (!item.TaxRate.IsNullOrEmpty())
+                    {
+                        if(item.TaxRate.Contains("%"))
+                        {
+                            string taxRateString = item.TaxRate.Replace("%", "");
+                            if (decimal.TryParse(taxRateString, out decimal taxRate))
+                            {
+                                decimal tax = expectedAmount * (taxRate * (decimal)0.01);
+                                decimal expectedAmountWithTax = expectedAmount + tax;
+                                if (expectedAmountWithTax > expectedAmount)
+                                    expectedAmount = expectedAmountWithTax;
+                            }
+                            else
+                            {
+                                Console.WriteLine("Not a valid decimal number");
+                            }
+                        }
+                        else
+                        {
+                            // may be some other representation of a line item tax
+                        }
+                    }
                     bool isValid = Math.Abs(expectedAmount - actualAmount) <= Tolerance;
                     
                     invoice.MathConfirmed[fieldKey] = isValid;

@@ -113,6 +113,8 @@ public class InvoiceValidationService : IInvoiceValidationService
                     item.UnitPrice, normalizedTess);
                 CheckDecimalField(item.TesseractConfirmed, nameof(InvoiceItemDto.Amount),
                     item.Amount, normalizedTess);
+                CheckStringField(item.TesseractConfirmed, nameof(InvoiceItemDto.TaxRate),
+                    item.TaxRate, normalizedTess);
             }
         }
     }
@@ -231,7 +233,8 @@ public class InvoiceValidationService : IInvoiceValidationService
             Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.Description), !string.IsNullOrWhiteSpace(item.Description));
             Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.Quantity),    item.Quantity.HasValue);
             Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.UnitPrice),   item.UnitPrice.HasValue);
-            Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.Amount),   item.Amount.HasValue);
+            Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.Amount),    item.Amount.HasValue);
+            Flag(item.TesseractConfirmed, nameof(InvoiceItemDto.TaxRate),   item.Amount.HasValue);
         }
     }
 
