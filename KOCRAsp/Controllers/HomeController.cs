@@ -15,6 +15,7 @@ using K_OCRLib.Services.Interfaces;
 using K_OCRLib.Models;
 using K_OCRLib.Data;
 using K_OCRLib.Security;
+using K_OCRLib.Configuration;
 
 namespace KOCRAsp.Controllers;
 
@@ -28,6 +29,7 @@ public class HomeController : Controller
     private readonly ITrialOrganizationLimitService _trialLimitSvc;
     private readonly ITenantContext _tenantContext;
     private readonly IConfigurationService _configSvc;
+    private readonly IOrgConfigService _orgConfigSvc;
     private readonly IOcrQueueRepository _ocrQueueRepo;
     private readonly ILogger<HomeController> _logger;
 
@@ -42,6 +44,7 @@ public class HomeController : Controller
         ITrialOrganizationLimitService trialLimitSvc,
         ITenantContext tenantContext,
         IConfigurationService configSvc,
+        IOrgConfigService orgConfigSvc,
         IOcrQueueRepository ocrQueueRepo,
         ILogger<HomeController> logger)
     {
@@ -52,6 +55,7 @@ public class HomeController : Controller
         _trialLimitSvc = trialLimitSvc;
         _tenantContext = tenantContext;
         _configSvc = configSvc;
+        _orgConfigSvc = orgConfigSvc;
         _ocrQueueRepo = ocrQueueRepo;
         _logger = logger;
     }
@@ -99,6 +103,10 @@ public class HomeController : Controller
         var guestMaxInvoices = isGuest ? _configSvc.GetMaxInvoicesPerBatch(isGuest: true) : 0;
         var guestMaxPages = isGuest ? _configSvc.GetMaxPagesPerInvoice(isGuest: true) : 0;
 
+        var orgConfig = _tenantContext.OrganizationName is { } orgName
+            ? await _orgConfigSvc.LoadAsync(orgName)
+            : new OrgConfig();
+
         return View(new HomeIndexViewModel
         {
             OrgId = orgId,
@@ -123,6 +131,7 @@ public class HomeController : Controller
             GuestActiveBatchCount = batches.Count,
             GuestMaxInvoicesPerBatch = guestMaxInvoices,
             GuestMaxPagesPerInvoice = guestMaxPages,
+            MinConfidenceThreshold = orgConfig.MinConfidenceThreshold,
         });
     }
 

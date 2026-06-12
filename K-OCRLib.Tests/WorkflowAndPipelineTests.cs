@@ -22,7 +22,7 @@ public class WorkflowAndPipelineTests
             new ConfigurationBuilder().Build(),
             Mock.Of<ILogger<InvoiceProcessingService>>());
 
-        var result = await service.ProcessFileAsync("invoice.pdf", "artifacts", 0.9, new Organization(), new Batch());
+        var result = await service.ProcessFileAsync("invoice.pdf", "artifacts", new Organization(), new Batch());
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(result.Context);
@@ -72,29 +72,6 @@ public class WorkflowAndPipelineTests
     }
 
     [Fact]
-    public async Task ConfidenceValidationStep_UsesOverrideThreshold()
-    {
-        var validation = new Mock<IConfidenceValidationService>();
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["MinConfidenceThreshold"] = "0.75"
-            })
-            .Build();
-
-        var step = new ConfidenceValidationStep(validation.Object, config);
-        var invoice = new InvoiceDto();
-
-        await step.ExecuteAsync(new PipelineContext
-        {
-            Layout = [invoice],
-            MinConfidenceThreshold = 0.9
-        });
-
-        validation.Verify(v => v.ValidateConfidence(invoice, 0.9), Times.Once);
-    }
-
-    [Fact]
     public async Task EnrichmentStep_DelegatesToInvoiceEnrichmentService()
     {
         var enrichment = new Mock<IInvoiceEnrichmentService>();
@@ -133,8 +110,6 @@ public class WorkflowAndPipelineTests
             .ReturnsAsync("Acme Corp");
 
         var validation = new Mock<IInvoiceValidationService>();
-        var lineItems = new Mock<ILineItemValidationService>();
-        var confidence = new Mock<IConfidenceValidationService>();
         var enrichment = new Mock<IInvoiceEnrichmentService>();
         var fileService = new Mock<IFileService>();
 
@@ -142,8 +117,6 @@ public class WorkflowAndPipelineTests
             new AzureOcrStep(invoiceService.Object, Mock.Of<ILogger<AzureOcrStep>>()),
             new TesseractOcrStep(tessService.Object, Mock.Of<ILogger<TesseractOcrStep>>()),
             new TesseractValidationStep(validation.Object),
-            new LineItemValidationStep(lineItems.Object),
-            new ConfidenceValidationStep(confidence.Object, new ConfigurationBuilder().Build()),
             new EnrichmentStep(enrichment.Object),
             new SaveContextStep(fileService.Object),
             Mock.Of<ILogger<InvoiceProcessingWorkflow>>());

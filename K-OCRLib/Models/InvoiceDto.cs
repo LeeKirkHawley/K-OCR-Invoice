@@ -24,15 +24,6 @@ namespace K_OCRLib.Models
         public Dictionary<string, double> FieldConfidences { get; set; } = new();
 
         /// <summary>
-        /// Per-field confidence validation result.
-        /// Key = property name of the field (e.g. nameof(Description)).
-        /// Value = true if the field's Azure confidence meets the configured minimum;
-        ///         false if the confidence is below the threshold and the field is flagged.
-        /// Fields absent from this dictionary were not checked.
-        /// </summary>
-        public Dictionary<string, bool> ConfidenceConfirmed { get; set; } = new();
-
-        /// <summary>
         /// Per-field Tesseract cross-validation result.
         /// Key = property name of the field (e.g. nameof(Description)).
         /// Value = true if the field value was found in the Tesseract OCR text (confirmed);
@@ -83,24 +74,6 @@ namespace K_OCRLib.Models
         /// </summary>
         public Dictionary<string, bool> TesseractConfirmed { get; set; } = new();
 
-        /// <summary>
-        /// Per-field confidence validation result.
-        /// Key = property name of the field (e.g. nameof(InvoiceDto.VendorName)).
-        /// Value = true if the field's Azure confidence meets the configured minimum;
-        ///         false if the confidence is below the threshold and the field is flagged.
-        /// Fields absent from this dictionary were not checked.
-        /// </summary>
-        public Dictionary<string, bool> ConfidenceConfirmed { get; set; } = new();
-
-        /// <summary>
-        /// Per-field mathematical validation result.
-        /// Key = field identifier (e.g. "Subtotal", "Total", "LineItem[0].Amount").
-        /// Value = true if the mathematical calculation is correct (within tolerance);
-        ///         false if the math doesn't add up and is therefore flagged as suspect.
-        /// Fields absent from this dictionary were not checked.
-        /// </summary>
-        public Dictionary<string, bool> MathConfirmed { get; set; } = new();
-        
         /// <summary>
         /// Indicates whether the user has manually accepted this invoice's validation.
         /// When true, validation checks will be skipped and no validation indicators will be shown.

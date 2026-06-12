@@ -207,10 +207,7 @@ public sealed class HomePageService : IHomePageService
                 entry.IsSavedOrAccepted = dto.IsValidationAccepted;
                 if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
                 {
-                    entry.HasSuspectFields =
-                        dto.TesseractConfirmed.Values.Any(v => !v)
-                        || (dto.MathConfirmed?.Values.Any(v => !v) ?? false)
-                        || (dto.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
+                    entry.HasSuspectFields = dto.TesseractConfirmed.Values.Any(v => !v);
                     entry.IsValidated = !entry.HasSuspectFields;
                 }
             }
@@ -373,10 +370,7 @@ public sealed class HomePageService : IHomePageService
                         entry.IsSavedOrAccepted = dto.IsValidationAccepted;
                         if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
                         {
-                            entry.HasSuspectFields =
-                                dto.TesseractConfirmed.Values.Any(v => !v)
-                                || (dto.MathConfirmed?.Values.Any(v => !v) ?? false)
-                                || (dto.ConfidenceConfirmed?.Values.Any(v => !v) ?? false);
+                            entry.HasSuspectFields = dto.TesseractConfirmed.Values.Any(v => !v);
                             entry.IsValidated = !entry.HasSuspectFields;
                         }
                     }

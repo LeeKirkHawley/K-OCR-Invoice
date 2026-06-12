@@ -375,6 +375,7 @@
     const _guestActiveBatchCount = @Model.GuestActiveBatchCount;
     const _guestMaxInvoicesPerBatch = @Model.GuestMaxInvoicesPerBatch;
     const _guestMaxPagesPerInvoice = @Model.GuestMaxPagesPerInvoice;
+    const _minConfidenceThreshold = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
 
     function showBetaDialog(message) {
         const body = document.getElementById('betaLimitModalBody');
@@ -693,6 +694,7 @@
             const data = await result.json();
             if (data.success && data.invoice) {
                 _currentInvoice = data.invoice;
+                attachValidation(_currentInvoice);
                 renderInvoiceFields(data.invoice);
                 updateValidationStatusLabel(data.invoice);
                 updateViewerCurrencyLabel(data.invoice);
@@ -864,6 +866,7 @@
                 clearFileQueued(filePath);
                 markQueueIndicators();
                 _currentInvoice = result.invoice;
+                attachValidation(_currentInvoice);
                 renderInvoiceFields(result.invoice);
                 updateValidationStatusLabel(result.invoice);
                 updateViewerCurrencyLabel(result.invoice);
@@ -1235,23 +1238,76 @@
         return pairs.join(' ');
     }
 
+    // Mirrors LineItemValidationService — computes math pass/fail from raw invoice values.
+    // Returns a dict keyed the same way as the old server-side MathConfirmed.
+    function computeMathConfirmed(inv) {
+        const TOL = 0.02;
+        const mc = {};
+
+        // Line items: qty × unitPrice (± tax) ≈ amount
+        const items = inv.items ?? [];
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (it.quantity != null && it.unitPrice != null && it.amount != null) {
+                let expected = it.quantity * it.unitPrice;
+                const tr = it.taxRate;
+                if (tr && tr.includes('%')) {
+                    const pct = parseFloat(tr.replace('%', ''));
+                    if (!isNaN(pct)) {
+                        const tax = expected * (pct / 100);
+                        expected = expected + tax;
+                    }
+                }
+                mc[`LineItem[${i}].Amount`] = Math.abs(expected - it.amount) <= TOL;
+            }
+        }
+
+        // Subtotal: sum of line item amounts ≈ subtotal
+        const lineAmounts = items.filter(it => it.amount != null).map(it => it.amount);
+        if (lineAmounts.length > 0 && inv.subtotal != null) {
+            const sum = lineAmounts.reduce((a, b) => a + b, 0);
+            mc['Subtotal'] = Math.abs(sum - inv.subtotal) <= TOL;
+        }
+
+        // Total: subtotal + totalTax − discount ≈ total
+        if (inv.total != null) {
+            let expected = 0;
+            if (inv.subtotal != null) {
+                expected += inv.subtotal;
+            } else if (lineAmounts.length > 0) {
+                expected += lineAmounts.reduce((a, b) => a + b, 0);
+            }
+            if (inv.totalTax  != null) expected += inv.totalTax;
+            if (inv.discount  != null) expected -= inv.discount;
+            mc['Total'] = Math.abs(expected - inv.total) <= TOL;
+        }
+
+        return mc;
+    }
+
+    // Attaches computed validation to an invoice object so all suspect functions
+    // use fresh values rather than stale persisted data.
+    function attachValidation(inv) {
+        inv._mathConfirmed = computeMathConfirmed(inv);
+    }
+
     function isSuspect(inv, key) {
         if (inv.isValidationAccepted) return false;
         const tc = inv.tesseractConfirmed;
-        const cc = inv.confidenceConfirmed;
-        const mc = inv.mathConfirmed;
+        const mc = inv._mathConfirmed ?? {};
+        const fc = inv.fieldConfidences;
         return (tc && key in tc && tc[key] === false)
-            || (cc && key in cc && cc[key] === false)
-            || (mc && key in mc && mc[key] === false);
+            || (mc && key in mc && mc[key] === false)
+            || (fc && key in fc && fc[key] < _minConfidenceThreshold);
     }
 
     function fieldTooltip(inv, key) {
         const reasons = [];
         const tc = inv.tesseractConfirmed;
-        const cc = inv.confidenceConfirmed;
-        const mc = inv.mathConfirmed;
+        const mc = inv._mathConfirmed ?? {};
+        const fc = inv.fieldConfidences;
         if (tc && key in tc && tc[key] === false) reasons.push('Tesseract mismatch');
-        if (cc && key in cc && cc[key] === false) reasons.push('Low Azure confidence');
+        if (fc && key in fc && fc[key] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
         if (mc && key in mc && mc[key] === false) reasons.push('Math error');
         return reasons.join(' · ');
     }
@@ -1260,10 +1316,10 @@
     function buildFieldTooltip(inv, key, value) {
         const errors = [];
         const tc = inv.tesseractConfirmed;
-        const cc = inv.confidenceConfirmed;
-        const mc = inv.mathConfirmed;
+        const mc = inv._mathConfirmed ?? {};
+        const fc = inv.fieldConfidences;
         if (tc && key in tc && tc[key] === false) errors.push('Tesseract mismatch');
-        if (cc && key in cc && cc[key] === false) errors.push('Low Azure confidence');
+        if (fc && key in fc && fc[key] < _minConfidenceThreshold) errors.push('Low Azure confidence');
         if (mc && key in mc && mc[key] === false) errors.push('Math error');
         const valueStr = (value !== null && value !== undefined && value !== '') ? String(value) : '—';
         return { value: valueStr, errors };
@@ -1271,19 +1327,21 @@
     function isItemSuspect(inv, item, idx) {
         if (inv.isValidationAccepted) return false;
         const tc = item.tesseractConfirmed ?? {};
-        const cc = item.confidenceConfirmed ?? {};
-        if (Object.values(tc).some(v => v === false) || Object.values(cc).some(v => v === false)) return true;
-        const mc = inv.mathConfirmed ?? {};
+        const fc = item.fieldConfidences ?? {};
+        const mc = inv._mathConfirmed ?? {};
+        if (Object.values(tc).some(v => v === false)) return true;
+        if (Object.keys(fc).some(k => fc[k] < _minConfidenceThreshold)) return true;
         return mc[`LineItem[${idx}].Amount`] === false;
     }
 
     function isItemFieldSuspect(inv, item, fieldKey, idx) {
         if (inv.isValidationAccepted) return false;
         const tc = item.tesseractConfirmed ?? {};
-        const cc = item.confidenceConfirmed ?? {};
-        if (tc[fieldKey] === false || cc[fieldKey] === false) return true;
+        const fc = item.fieldConfidences ?? {};
+        const mc = inv._mathConfirmed ?? {};
+        if (tc[fieldKey] === false) return true;
+        if (fieldKey in fc && fc[fieldKey] < _minConfidenceThreshold) return true;
         if (fieldKey === 'Amount') {
-            const mc = inv.mathConfirmed ?? {};
             return mc[`LineItem[${idx}].Amount`] === false;
         }
         return false;
@@ -1293,11 +1351,11 @@
         if (inv.isValidationAccepted) return '';
         const reasons = [];
         const tc = item.tesseractConfirmed ?? {};
-        const cc = item.confidenceConfirmed ?? {};
+        const fc = item.fieldConfidences ?? {};
+        const mc = inv._mathConfirmed ?? {};
         if (tc[fieldKey] === false) reasons.push('Tesseract mismatch');
-        if (cc[fieldKey] === false) reasons.push('Low Azure confidence');
+        if (fieldKey in fc && fc[fieldKey] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
         if (fieldKey === 'Amount') {
-            const mc = inv.mathConfirmed ?? {};
             if (mc[`LineItem[${idx}].Amount`] === false) reasons.push('Math error');
         }
         return reasons.join(' · ');
@@ -1308,11 +1366,11 @@
         const errors = [];
         if (!inv.isValidationAccepted) {
             const tc = item.tesseractConfirmed ?? {};
-            const cc = item.confidenceConfirmed ?? {};
+            const fc = item.fieldConfidences ?? {};
+            const mc = inv._mathConfirmed ?? {};
             if (tc[fieldKey] === false) errors.push('Tesseract mismatch');
-            if (cc[fieldKey] === false) errors.push('Low Azure confidence');
+            if (fieldKey in fc && fc[fieldKey] < _minConfidenceThreshold) errors.push('Low Azure confidence');
             if (fieldKey === 'Amount') {
-                const mc = inv.mathConfirmed ?? {};
                 if (mc[`LineItem[${idx}].Amount`] === false) errors.push('Math error');
             }
         }
@@ -1325,10 +1383,10 @@
         const fieldReasons = {};
         const add = (field, reason) => { (fieldReasons[field] ??= []).push(reason); };
         const tc = item.tesseractConfirmed ?? {};
-        const cc = item.confidenceConfirmed ?? {};
+        const fc = item.fieldConfidences ?? {};
+        const mc = inv._mathConfirmed ?? {};
         for (const [k, v] of Object.entries(tc)) if (v === false) add(k, 'Tesseract mismatch');
-        for (const [k, v] of Object.entries(cc)) if (v === false) add(k, 'Low Azure confidence');
-        const mc = inv.mathConfirmed ?? {};
+        for (const [k, v] of Object.entries(fc)) if (v < _minConfidenceThreshold) add(k, 'Low Azure confidence');
         if (mc[`LineItem[${idx}].Amount`] === false) add('Amount', 'Math error');
         return Object.entries(fieldReasons)
             .map(([k, v]) => `${k}: ${v.join(', ')}`)

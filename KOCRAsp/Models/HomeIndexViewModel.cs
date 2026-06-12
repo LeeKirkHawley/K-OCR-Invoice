@@ -27,4 +27,5 @@ public class HomeIndexViewModel
     public int GuestActiveBatchCount { get; set; }
     public int GuestMaxInvoicesPerBatch { get; set; }
     public int GuestMaxPagesPerInvoice { get; set; }
+    public double MinConfidenceThreshold { get; set; } = 0.8;
 }

@@ -29,14 +29,13 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     public async Task<ProcessingResult> ProcessFileAsync(
         string filePath,
         string? artifactsDirectory = null,
-        double? minConfidenceThreshold = null,
         Organization? organization = null,
         Batch? batch = null)
     {
         var result = new ProcessingResult();
         try
         {
-            var context = await _workflow.RunAsync(filePath, artifactsDirectory, minConfidenceThreshold, organization, batch);
+            var context = await _workflow.RunAsync(filePath, artifactsDirectory, organization, batch);
             result.Context = context;
             result.Json = Newtonsoft.Json.JsonConvert.SerializeObject(context, Newtonsoft.Json.Formatting.Indented);
         }
@@ -52,7 +51,6 @@ public class InvoiceProcessingService : IInvoiceProcessingService
         IEnumerable<string> filePaths,
         IProgress<(int completed, int total, string currentFile)>? progress = null,
         string? artifactsDirectory = null,
-        double? minConfidenceThreshold = null,
         Batch? batch = null,
         Organization? organization = null)
     {
@@ -80,7 +78,7 @@ public class InvoiceProcessingService : IInvoiceProcessingService
 
                 progress?.Report((completed, total, fileName));
 
-                var result = await ProcessFileAsync(filePath, artifactsDirectory, minConfidenceThreshold, organization, batch);
+                var result = await ProcessFileAsync(filePath, artifactsDirectory, organization, batch);
 
                 lock (results)
                 {

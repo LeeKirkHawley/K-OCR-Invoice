@@ -82,20 +82,18 @@ public sealed class DefaultOcrWorkflow : IQueuedOcrWorkflow
         var azureStep  = sp.GetRequiredService<AzureOcrStep>();
         var tessStep   = sp.GetRequiredService<TesseractOcrStep>();
         var tessVal    = sp.GetRequiredService<TesseractValidationStep>();
-        var lineVal    = sp.GetRequiredService<LineItemValidationStep>();
-        var confVal    = sp.GetRequiredService<ConfidenceValidationStep>();
         var enrichStep = sp.GetRequiredService<EnrichmentStep>();
 
         var workflow = new InvoiceProcessingWorkflow(
-            azureStep, tessStep, tessVal, lineVal, confVal, enrichStep, saveStep,
+            azureStep, tessStep, tessVal, enrichStep, saveStep,
             _loggerFactory.CreateLogger<InvoiceProcessingWorkflow>());
 
         await workflow.RunAsync(
-            filePath:          job.FilePath,
+            filePath:           job.FilePath,
             artifactsDirectory: artifactsDir,
-            organization:      org,
-            batch:             batch,
-            cancellationToken: ct);
+            organization:       org,
+            batch:              batch,
+            cancellationToken:  ct);
     }
 
     private static KOCRDbContext OpenOrgDb(string dbPath)

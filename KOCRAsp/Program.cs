@@ -209,8 +209,6 @@ builder.Services.AddSingleton<IImageService, ImageService>();
 builder.Services.AddSingleton<IInvoiceService, InvoiceService>();
 builder.Services.AddSingleton<IAnalysisService, AnalysisService>();
 builder.Services.AddSingleton<IInvoiceValidationService, InvoiceValidationService>();
-builder.Services.AddSingleton<ILineItemValidationService, LineItemValidationService>();
-builder.Services.AddSingleton<IConfidenceValidationService, ConfidenceValidationService>();
 builder.Services.AddSingleton<IDocumentExportService, DocumentExportService>();
 builder.Services.AddSingleton<ITesseractValidationService>(sp =>
     new TesseractValidationService(sp.GetRequiredService<IImageService>()));
@@ -254,8 +252,6 @@ builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<K_OCR.Services.Workflow.AzureOcrStep>();
 builder.Services.AddScoped<K_OCR.Services.Workflow.TesseractOcrStep>();
 builder.Services.AddScoped<K_OCR.Services.Workflow.TesseractValidationStep>();
-builder.Services.AddScoped<K_OCR.Services.Workflow.LineItemValidationStep>();
-builder.Services.AddScoped<K_OCR.Services.Workflow.ConfidenceValidationStep>();
 builder.Services.AddScoped<K_OCR.Services.Workflow.EnrichmentStep>();
 builder.Services.AddScoped<K_OCR.Services.Workflow.SaveContextStep>();
 builder.Services.AddScoped<K_OCR.Services.Workflow.InvoiceProcessingWorkflow>();

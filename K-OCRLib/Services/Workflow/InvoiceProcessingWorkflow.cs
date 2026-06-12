@@ -17,8 +17,6 @@ public class InvoiceProcessingWorkflow
     private readonly AzureOcrStep _azureOcrStep;
     private readonly TesseractOcrStep _tesseractOcrStep;
     private readonly TesseractValidationStep _tesseractValidationStep;
-    private readonly LineItemValidationStep _lineItemValidationStep;
-    private readonly ConfidenceValidationStep _confidenceValidationStep;
     private readonly EnrichmentStep _enrichmentStep;
     private readonly SaveContextStep _saveContextStep;
     private readonly ILogger<InvoiceProcessingWorkflow> _logger;
@@ -27,8 +25,6 @@ public class InvoiceProcessingWorkflow
         AzureOcrStep azureOcrStep,
         TesseractOcrStep tesseractOcrStep,
         TesseractValidationStep tesseractValidationStep,
-        LineItemValidationStep lineItemValidationStep,
-        ConfidenceValidationStep confidenceValidationStep,
         EnrichmentStep enrichmentStep,
         SaveContextStep saveContextStep,
         ILogger<InvoiceProcessingWorkflow> logger)
@@ -36,8 +32,6 @@ public class InvoiceProcessingWorkflow
         _azureOcrStep = azureOcrStep;
         _tesseractOcrStep = tesseractOcrStep;
         _tesseractValidationStep = tesseractValidationStep;
-        _lineItemValidationStep = lineItemValidationStep;
-        _confidenceValidationStep = confidenceValidationStep;
         _enrichmentStep = enrichmentStep;
         _saveContextStep = saveContextStep;
         _logger = logger;
@@ -51,9 +45,6 @@ public class InvoiceProcessingWorkflow
     /// <param name="artifactsDirectory">
     /// Optional directory for per-page PNG artifacts when the input is a PDF.
     /// </param>
-    /// <param name="minConfidenceThreshold">
-    /// Optional per-run confidence threshold override.
-    /// </param>
     /// <param name="organization">
     /// The organization on whose behalf the pipeline is running. Passed to each
     /// step's pre-run and post-run hooks for per-organization customization.
@@ -65,7 +56,6 @@ public class InvoiceProcessingWorkflow
     public async Task<PipelineContext> RunAsync(
         string filePath,
         string? artifactsDirectory = null,
-        double? minConfidenceThreshold = null,
         Organization? organization = null,
         Batch? batch = null,
         CancellationToken cancellationToken = default)
@@ -74,7 +64,6 @@ public class InvoiceProcessingWorkflow
         {
             InputPath = filePath,
             ArtifactsDirectory = artifactsDirectory,
-            MinConfidenceThreshold = minConfidenceThreshold,
             Organization = organization,
             Batch = batch,
         };
@@ -91,8 +80,6 @@ public class InvoiceProcessingWorkflow
         IWorkflowStep[] sequentialSteps =
         [
             _tesseractValidationStep,
-            _lineItemValidationStep,
-            _confidenceValidationStep,
             _enrichmentStep,
             _saveContextStep,
         ];

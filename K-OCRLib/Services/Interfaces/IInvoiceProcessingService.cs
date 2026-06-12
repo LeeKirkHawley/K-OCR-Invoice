@@ -12,7 +12,6 @@ public interface IInvoiceProcessingService
     Task<ProcessingResult> ProcessFileAsync(
         string filePath,
         string? artifactsDirectory = null,
-        double? minConfidenceThreshold = null,
         Organization? organization = null,
         Batch? batch = null);
 
@@ -24,7 +23,6 @@ public interface IInvoiceProcessingService
         IEnumerable<string> filePaths,
         IProgress<(int completed, int total, string currentFile)>? progress = null,
         string? artifactsDirectory = null,
-        double? minConfidenceThreshold = null,
         Batch? batch = null,
         Organization? organization = null);
 
