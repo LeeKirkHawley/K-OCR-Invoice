@@ -26,7 +26,9 @@ public class HomeControllerTests
     private readonly Mock<ITenantContext> _mockTenantContext;
     private readonly Mock<IConfigurationService> _mockConfigSvc;
     private readonly Mock<IOcrQueueRepository> _mockOcrQueueRepo;
+    private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
     private readonly HomeController _controller;
+    private readonly Mock<ILogger<HomeController>> _logger;
 
     private const string UserId = "user-id-123";
     private const string OrgId = "org-id-123";
@@ -42,6 +44,8 @@ public class HomeControllerTests
         _mockTenantContext = new Mock<ITenantContext>();
         _mockConfigSvc = new Mock<IConfigurationService>();
         _mockOcrQueueRepo = new Mock<IOcrQueueRepository>();
+        _mockOrgConfigSvc = new Mock<IOrgConfigService>();
+        _logger = new Mock<ILogger<HomeController>>(); 
 
         _mockTenantContext.Setup(t => t.OrganizationId).Returns(OrgId);
         _mockTenantContext.Setup(t => t.OrganizationName).Returns(OrgName);
@@ -58,6 +62,9 @@ public class HomeControllerTests
         _mockTrialLimitSvc
             .Setup(s => s.GetCurrentStatusAsync())
             .ReturnsAsync(new TrialOrganizationLimitStatus(false, 500, 0));
+        _mockOrgConfigSvc
+            .Setup(s => s.LoadAsync(OrgName))
+            .ReturnsAsync(new K_OCRLib.Configuration.OrgConfig { MinConfidenceThreshold = 0.8 });
 
         _controller = new HomeController(
             _mockHomePageSvc.Object,
@@ -67,8 +74,9 @@ public class HomeControllerTests
             _mockTrialLimitSvc.Object,
             _mockTenantContext.Object,
             _mockConfigSvc.Object,
+            _mockOrgConfigSvc.Object,
             _mockOcrQueueRepo.Object,
-            Mock.Of<ILogger<HomeController>>());
+            _logger.Object);
     }
 
     private void SetControllerContext(string? currentBatchId = null)
