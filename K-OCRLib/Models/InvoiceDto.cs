@@ -52,7 +52,7 @@ namespace K_OCRLib.Models
         public string PurchaseOrder { get; init; } = string.Empty;
         public decimal? Subtotal { get; init; }
         public decimal? TotalTax { get; init; }
-        public decimal? Shipping { get; init; }
+        public decimal? Discount { get; init; }
         public decimal? Total { get; init; }
         public List<InvoiceItemDto> Items { get; init; } = new();
         

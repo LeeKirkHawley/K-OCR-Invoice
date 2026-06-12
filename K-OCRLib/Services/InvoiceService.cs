@@ -42,7 +42,7 @@ namespace K_OCRLib.Services
                     { "VendorName",    new[] { "Vendor", "Seller", "From", "Bill From", "Company Name", "Billed By" } },
                     { "CustomerName",  new[] { "Customer", "Buyer", "To", "Bill To", "Billed To", "Client" } },
                     { "PurchaseOrder", new[] { "PO", "PO Number", "P.O.", "Purchase Order Number", "Order #" } },
-                    { "Shipping",      new[] { "Shipping Cost", "Delivery Fee", "Freight", "Shipping & Handling" } }
+                    { "Discount",      new[] { "TotalDiscount", "Total Discount", "Discount Amount", "Discount", "Discount %", "DiscountPercent" } }
                 };
 
                 _itemFieldSynonyms = new Dictionary<string, string[]>
@@ -548,7 +548,7 @@ namespace K_OCRLib.Services
                     PurchaseOrder = GetString("PurchaseOrder"),
                     Subtotal      = GetDecimal("Subtotal"),
                     TotalTax      = GetDecimal("TotalTax"),
-                    Shipping      = GetDecimal("Shipping"),
+                    Discount      = GetDecimal("Discount"),
                     Total         = GetDecimal("Total"),
                     CurrencyCode       = detectedCurrencyCode,
                     Items             = items,

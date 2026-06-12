@@ -46,7 +46,7 @@ public class FileServiceTests
                 InvoiceId = "INV-1",
                 Subtotal = 10m,
                 TotalTax = 2m,
-                Shipping = 3m,
+                Discount = 3m,
                 Total = 15m,
                 InvoiceDate = "2026-01-01",
                 DueDate = "2026-02-01",

@@ -39,7 +39,7 @@ public class InvoiceValidationService : IInvoiceValidationService
     [
         nameof(InvoiceDto.Subtotal),
         nameof(InvoiceDto.TotalTax),
-        nameof(InvoiceDto.Shipping),
+        nameof(InvoiceDto.Discount),
         nameof(InvoiceDto.Total),
     ];
 
@@ -58,7 +58,7 @@ public class InvoiceValidationService : IInvoiceValidationService
             !string.IsNullOrWhiteSpace(invoice.PurchaseOrder) ||
             invoice.Subtotal.HasValue ||
             invoice.TotalTax.HasValue ||
-            invoice.Shipping.HasValue ||
+            invoice.Discount.HasValue ||
             invoice.Total.HasValue ||
             (invoice.Items != null && invoice.Items.Count > 0);
 
@@ -93,7 +93,7 @@ public class InvoiceValidationService : IInvoiceValidationService
         {
             [nameof(InvoiceDto.Subtotal)]  = invoice.Subtotal,
             [nameof(InvoiceDto.TotalTax)]  = invoice.TotalTax,
-            [nameof(InvoiceDto.Shipping)]  = invoice.Shipping,
+            [nameof(InvoiceDto.Discount)]  = invoice.Discount,
             [nameof(InvoiceDto.Total)]     = invoice.Total,
         };
 
@@ -225,7 +225,7 @@ public class InvoiceValidationService : IInvoiceValidationService
         Flag(invoice.TesseractConfirmed, nameof(InvoiceDto.PurchaseOrder), !string.IsNullOrWhiteSpace(invoice.PurchaseOrder));
         Flag(invoice.TesseractConfirmed, nameof(InvoiceDto.Subtotal),      invoice.Subtotal.HasValue);
         Flag(invoice.TesseractConfirmed, nameof(InvoiceDto.TotalTax),      invoice.TotalTax.HasValue);
-        Flag(invoice.TesseractConfirmed, nameof(InvoiceDto.Shipping),      invoice.Shipping.HasValue);
+        Flag(invoice.TesseractConfirmed, nameof(InvoiceDto.Discount),      invoice.Discount.HasValue);
         Flag(invoice.TesseractConfirmed, nameof(InvoiceDto.Total),         invoice.Total.HasValue);
 
         foreach (var item in invoice.Items)

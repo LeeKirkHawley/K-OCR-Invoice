@@ -99,7 +99,7 @@ public class LineItemValidationService : ILineItemValidationService
             return;
         }
         
-        // Calculate expected total: Subtotal + Tax + Shipping - any other adjustments
+        // Calculate expected total: Subtotal + Tax - Discount - any other adjustments
         decimal expectedTotal = 0m;
         
         if (invoice.Subtotal.HasValue)
@@ -119,9 +119,9 @@ public class LineItemValidationService : ILineItemValidationService
             expectedTotal += invoice.TotalTax.Value;
         }
         
-        if (invoice.Shipping.HasValue)
+        if (invoice.Discount.HasValue)
         {
-            expectedTotal += invoice.Shipping.Value;
+            expectedTotal -= invoice.Discount.Value;
         }
         
         decimal actualTotal = invoice.Total.Value;

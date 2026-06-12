@@ -37,7 +37,7 @@ namespace K_OCRLib.Models
         public decimal? TotalTax { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
-        public decimal? Shipping { get; set; }
+        public decimal? Discount { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal? Total { get; set; }

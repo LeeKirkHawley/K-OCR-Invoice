@@ -895,11 +895,11 @@
         { key: 'PurchaseOrder', label: 'PO #',      prop: 'purchaseOrder' },
         { key: 'Subtotal',      label: 'Subtotal',  prop: 'subtotal'      },
         { key: 'TotalTax',      label: 'Tax',       prop: 'totalTax'      },
-        { key: 'Shipping',      label: 'Shipping',  prop: 'shipping'      },
+        { key: 'Discount',      label: 'Discount',  prop: 'discount'      },
         { key: 'Total',         label: 'Total',     prop: 'total'         },
     ];
 
-    const HEADER_MONEY_FIELDS = new Set(['subtotal', 'totalTax', 'shipping', 'total']);
+    const HEADER_MONEY_FIELDS = new Set(['subtotal', 'totalTax', 'discount', 'total']);
     const ITEM_MONEY_FIELDS   = new Set(['unitPrice', 'amount']);
 
     function stripCurrencySymbols(v) {
@@ -923,7 +923,7 @@
         for (const f of HEADER_FIELDS) {
             const raw     = inv[f.prop];
             const isNum   = f.prop === 'subtotal' || f.prop === 'totalTax' ||
-                            f.prop === 'shipping'  || f.prop === 'total';
+                            f.prop === 'discount'  || f.prop === 'total';
             const value   = isNum ? fmtMoney(raw) : (raw ?? '');
             const suspect = isSuspect(inv, f.key);
             const tipData = buildFieldTooltip(inv, f.key, value);

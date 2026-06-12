@@ -81,7 +81,7 @@ public sealed class HomeExportService : IHomeExportService
         using var wb = new XLWorkbook();
 
         var ws = wb.Worksheets.Add("Invoices");
-        string[] hdrs = ["File", "Vendor", "Customer", "Invoice #", "Invoice Date", "Due Date", "PO #", "Subtotal", "Tax", "Shipping", "Total"];
+        string[] hdrs = ["File", "Vendor", "Customer", "Invoice #", "Invoice Date", "Due Date", "PO #", "Subtotal", "Tax", "Discount", "Total"];
         for (int c = 0; c < hdrs.Length; c++)
         {
             var cell = ws.Cell(1, c + 1);
@@ -102,7 +102,7 @@ public sealed class HomeExportService : IHomeExportService
             ws.Cell(row, 7).Value = inv.PurchaseOrder;
             ws.Cell(row, 8).Value = inv.Subtotal.HasValue ? (double)inv.Subtotal.Value : (double?)null;
             ws.Cell(row, 9).Value = inv.TotalTax.HasValue ? (double)inv.TotalTax.Value : (double?)null;
-            ws.Cell(row, 10).Value = inv.Shipping.HasValue ? (double)inv.Shipping.Value : (double?)null;
+            ws.Cell(row, 10).Value = inv.Discount.HasValue ? (double)inv.Discount.Value : (double?)null;
             ws.Cell(row, 11).Value = inv.Total.HasValue ? (double)inv.Total.Value : (double?)null;
         }
         ws.Columns().AdjustToContents();

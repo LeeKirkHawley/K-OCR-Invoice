@@ -136,7 +136,7 @@ namespace K_OCRLib.Services
                 existing.PurchaseOrder        = invoice.PurchaseOrder;
                 existing.Subtotal             = invoice.Subtotal;
                 existing.TotalTax             = invoice.TotalTax;
-                existing.Shipping             = invoice.Shipping;
+                existing.Discount             = invoice.Discount;
                 existing.Total                = invoice.Total;
                 existing.InvoiceDate          = DateTime.TryParse(invoice.InvoiceDate, out var invDate) ? invDate : null;
                 existing.DueDate              = DateTime.TryParse(invoice.DueDate,     out var dueDate) ? dueDate : null;

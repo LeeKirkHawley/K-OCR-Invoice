@@ -51,7 +51,7 @@ public class ValidationServiceTests
         {
             Subtotal = 20m,
             TotalTax = 2m,
-            Shipping = 3m,
+            Discount = 3m,
             Total = 25m,
             Items =
             [
@@ -76,7 +76,7 @@ public class ValidationServiceTests
         {
             Subtotal = 80m,
             TotalTax = 0m,
-            Shipping = -5m,
+            Discount = -5m,
             Total = 75m,
             Items =
             [

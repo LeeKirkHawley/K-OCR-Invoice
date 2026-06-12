@@ -31,7 +31,7 @@ public class ConfidenceValidationService : IConfidenceValidationService
             nameof(InvoiceDto.PurchaseOrder),
             nameof(InvoiceDto.Subtotal),
             nameof(InvoiceDto.TotalTax),
-            nameof(InvoiceDto.Shipping),
+            nameof(InvoiceDto.Discount),
             nameof(InvoiceDto.Total)
         };
         foreach (var field in headerFields)

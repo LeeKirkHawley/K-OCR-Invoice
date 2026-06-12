@@ -153,7 +153,7 @@ namespace K_OCRLib.Services
                     PurchaseOrder        = i.PurchaseOrder,
                     Subtotal             = i.Subtotal,
                     TotalTax             = i.TotalTax,
-                    Shipping             = i.Shipping,
+                    Discount             = i.Discount,
                     Total                = i.Total,
                     FilePath             = i.FilePath,
                     UploadedAtUtc        = i.UploadedAtUtc,
