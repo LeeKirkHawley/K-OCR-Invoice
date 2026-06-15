@@ -264,6 +264,7 @@
     let _refreshAbort     = null;
     let _contextMenuFilePath = null;
     let _pendingMoveFilePath = null;
+    let _ocrLoaded = false;
 
     const _queuedFilePathKeys = new Set();
 
@@ -692,6 +693,7 @@
         try {
             const result = await fetch('/home/getinvoice?filePath=' + encodeURIComponent(filePath));
             const data = await result.json();
+            _ocrLoaded = data?.invoice != null;
             if (data.success && data.invoice) {
                 _currentInvoice = data.invoice;
                 attachValidation(_currentInvoice);
@@ -1160,6 +1162,9 @@
         if (!wrap || !_currentInvoice) return;
 
         wrap.querySelector('.viewer-bbox-overlay')?.remove();
+
+        if(!_ocrLoaded)
+            return;
 
         const inv = _currentInvoice;
         const pw  = inv.originalPageWidth;

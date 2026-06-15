@@ -348,7 +348,15 @@
     transition: opacity 0.15s;
 }
 
-.bbox-ok       { stroke: #50c878; }
+
+/*This datalist the bounding-box highlight for fields with no detected issues*/
+/*Setting them stop opaque so they don't normally show */
+/* May want to optionally make them visible for debugging */
+/*.bbox-ok       { stroke: #50c878; }*/
+.bbox-ok {
+    stroke: #50c878;
+    opacity: 0.0;
+}
 .bbox-suspect  { stroke: #e05050; opacity: 0.55; }
 .bbox-selected { stroke: #ffaa00; fill: rgba(255,170,0,0.18); opacity: 1; stroke-width: 4; filter: drop-shadow(0 0 2px rgba(255,170,0,0.3)); }
 
