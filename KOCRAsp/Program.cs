@@ -356,8 +356,8 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/assets"
 });
 
-// Serve the compiled MkDocs "site" directory at /manual
-var manualPath = Path.Combine(builder.Environment.ContentRootPath, "Documents", "Manual-MkDocs", "site");
+// Serve the compiled manual site from wwwroot/Manual at /manual
+var manualPath = Path.Combine(builder.Environment.WebRootPath ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot"), "Manual");
 app.UseFileServer(new FileServerOptions
 {
     FileProvider = new PhysicalFileProvider(manualPath),
