@@ -330,8 +330,16 @@ app.UseStatusCodePagesWithReExecute("/error/{0}");
 app.UseHttpsRedirection();
 app.Use(async (context, next) =>
 {
+    var requestPath = context.Request.Path.Value ?? string.Empty;
+    // Bypass canonical-redirect for static manual site so /manual/ can be served by static file middleware.
+    if (requestPath.StartsWith("/manual", StringComparison.OrdinalIgnoreCase))
+    {
+        await next();
+        return;
+    }
+
     if ((HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method)) &&
-        UrlCanonicalizer.NeedsRedirect(context.Request.Path.Value ?? string.Empty, out var canonicalPath))
+        UrlCanonicalizer.NeedsRedirect(requestPath, out var canonicalPath))
     {
         var location = canonicalPath + context.Request.QueryString;
         context.Response.Redirect(location, permanent: true);
@@ -346,6 +354,16 @@ app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "assets")),
     RequestPath = "/assets"
+});
+
+// Serve the compiled MkDocs "site" directory at /manual
+var manualPath = Path.Combine(builder.Environment.ContentRootPath, "Documents", "Manual-MkDocs", "site");
+app.UseFileServer(new FileServerOptions
+{
+    FileProvider = new PhysicalFileProvider(manualPath),
+    RequestPath = "/manual",
+    EnableDefaultFiles = true,
+    EnableDirectoryBrowsing = false
 });
 app.UseRouting();
 app.UseSession();
