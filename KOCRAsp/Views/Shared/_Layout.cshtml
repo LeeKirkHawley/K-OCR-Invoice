@@ -109,21 +109,29 @@
             @if (User.Identity?.IsAuthenticated == true)
             {
                 <div class="d-flex align-items-center gap-3 ms-auto">
-                    @if (User.IsActiveOrganizationAdmin())
-                    {
-                        <a class="nav-link text-light small" asp-controller="OrgConfig" asp-action="Index">🏢 Org Config</a>
-                    }
-                    @if (User.IsInRole(RoleNames.SuperAdmin))
-                    {
-                        <a class="nav-link text-light small" asp-controller="Settings" asp-action="Index">⚙️ Settings</a>
-                        <a class="nav-link text-light small" asp-controller="Admin" asp-action="Index">🔧 Admin</a>
-                        <a class="nav-link text-light small" asp-controller="Admin" asp-action="OcrQueue">📋 OCR Queue</a>
-                    }
-                    <a class="btn btn-outline-light btn-sm" asp-controller="Auth" asp-action="ChangePassword">Change Password</a>
-                    <form method="post" action="/auth/logout" class="d-inline">
-                        @Html.AntiForgeryToken()
-                        <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
-                    </form>
+                    <div class="dropdown">
+                        <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" id="mainMenuDropdown" data-bs-toggle="dropdown" aria-expanded="false">Menu</button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="mainMenuDropdown">
+                            @if (User.IsActiveOrganizationAdmin())
+                            {
+                                <li><a class="dropdown-item" asp-controller="OrgConfig" asp-action="Index">🏢 Org Config</a></li>
+                            }
+                            @if (User.IsInRole(RoleNames.SuperAdmin))
+                            {
+                                <li><a class="dropdown-item" asp-controller="Settings" asp-action="Index">⚙️ Settings</a></li>
+                                <li><a class="dropdown-item" asp-controller="Admin" asp-action="Index">🔧 Admin</a></li>
+                                <li><a class="dropdown-item" asp-controller="Admin" asp-action="OcrQueue">📋 OCR Queue</a></li>
+                            }
+                            <li><a class="dropdown-item" href="/Manual" target="_blank" rel="noopener noreferrer">📖 Manual</a></li>
+                            <li><a class="dropdown-item" asp-controller="Auth" asp-action="ChangePassword">Change Password</a></li>
+                            <li>
+                                <form method="post" action="/auth/logout">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-link dropdown-item">Logout</button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             }
         </nav>
