@@ -84,6 +84,8 @@
         <nav class="navbar navbar-dark bg-dark fixed-top px-3">
             <div class="d-flex align-items-center">
                 <a class="navbar-brand fw-bold mb-0" href="/">Hardscrabble Invoice</a>
+                <span class="text-light small">@User.Identity.Name</span>
+
                 @if (orgOptions.Length > 0)
                 {
                     <span class="text-secondary px-2">–</span>
@@ -117,7 +119,6 @@
                         <a class="nav-link text-light small" asp-controller="Admin" asp-action="Index">🔧 Admin</a>
                         <a class="nav-link text-light small" asp-controller="Admin" asp-action="OcrQueue">📋 OCR Queue</a>
                     }
-                    <span class="text-light small">@User.Identity.Name</span>
                     <a class="btn btn-outline-light btn-sm" asp-controller="Auth" asp-action="ChangePassword">Change Password</a>
                     <form method="post" action="/auth/logout" class="d-inline">
                         @Html.AntiForgeryToken()
