@@ -35,11 +35,11 @@
     </None>
   </ItemGroup>
 
-    <ItemGroup>
+    <!--<ItemGroup>
         <Content Include="Documents\Manual-MkDocs\site\**\*">
             <Link>wwwroot\manual\%(RecursiveDir)%(Filename)%(Extension)</Link>
             <CopyToPublishDirectory>Always</CopyToPublishDirectory>
         </Content>
-    </ItemGroup>
+    </ItemGroup>-->
 
 </Project>
