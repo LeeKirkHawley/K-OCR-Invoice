@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="None">
+        
+        
+        <link rel="shortcut icon" href="img/favicon.ico">
+        <title>My Docs</title>
+        <link href="css/bootstrap.min.css" rel="stylesheet">
+        <link href="css/fontawesome.min.css" rel="stylesheet">
+        <link href="css/brands.min.css" rel="stylesheet">
+        <link href="css/solid.min.css" rel="stylesheet">
+        <link href="css/v4-font-face.min.css" rel="stylesheet">
+        <link href="css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body class="homepage">
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href=".">My Docs</a>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#hardscrabble-invoice" class="nav-link">Hardscrabble Invoice</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#features" class="nav-link">Features</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#limits" class="nav-link">Limits</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#ui-panels" class="nav-link">UI Panels:</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#batches" class="nav-link">Batches</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#the-ocr-process" class="nav-link">The OCR Process</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#queuing" class="nav-link">Queuing</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#invoice-validation" class="nav-link">Invoice Validation</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#downloading-finished-invoice-data" class="nav-link">Downloading Finished Invoice Data</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#user-lifetime" class="nav-link">User Lifetime</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#organization-lifetime" class="nav-link">Organization Lifetime</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="hardscrabble-invoice">Hardscrabble Invoice</h1>
+<p>Hardscrabble Invoice is an invoice management app. Its purpose is to allow the user to upload invoices, OCR them to get the important field values for both normal invoice fields and line items, and give the user a usable edit-and-validation user interface that automatically identifies possible inaccuracies. It then exports the validated data to JSON or Excel files.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Upload invoices - Add PDFs or images to a batch and keep related invoices together.</li>
+<li>Review OCR results - Check extracted fields, validate totals, and correct issues before export.</li>
+<li>Export batch data - Move finished work into JSON or Excel for downstream processing.</li>
+<li>Supported Invoice Files - pdf, jpg, png</li>
+</ul>
+<h2 id="limits">Limits</h2>
+<p><strong>User Limits:</strong>
+Batches: Unlimited
+Invoices per Batch: 100 
+Pages per Invoice: 20</p>
+<p><strong>Guest User Limits:</strong>
+Batches: 2
+Invoices per Batch: 20
+Pages Per Invoice: 20</p>
+<p><strong>Beta User Limits:</strong>
+Max OCRed Pages: 500</p>
+<h2 id="ui-panels">UI Panels:</h2>
+<p><img alt="Hardscrabble Invoice Panels" src="Panels.png" title="Panels" /></p>
+<p><strong>The Invoice List Panel</strong> contains a Batch selector, a list of the Invoices in the Batch, and some buttons to select batches. Selecting an Invoice by clicking it in the list displays the Invoice in the Invoice Panel.</p>
+<p><strong>The Invoice Panel</strong> is where the Invoice is displayed. </p>
+<p><strong>The Validation Panel</strong> is where the OCR data for the displayed Invoice can be inspected for errors. It has 3 tabs:
+- Validation - this is where the user can see and edit the OCR data.
+- Raw JSON - This is the raw data returned by the OCR process.
+- Updated JSON - This is the edited data. When the OCR data is edited and validated, the finished text will be displayed here. This is the data that will be exported.</p>
+<h2 id="batches">Batches</h2>
+<p><img alt="The Batch User Interface" src="BatchUI.png" title="Batch User Interface" /></p>
+<p>This image shows one batch containing one Invoice. There are two dots to the left of the invoice name. The green dot indicates that the invoice uploaded successfully. The orange dot indicates that the invoice has not yet been approved.</p>
+<p>Invoices are processed in batches. An organization has a list of its batches. Each batch will contain multiple images. </p>
+<p><strong>Uploading Invoices:</strong> Usually a user will create a batch, upload multiple invoices (pdf, jpg, or png files) to the batch. Successfully uploaded files will have a green dot next to them. </p>
+<h2 id="the-ocr-process">The OCR Process</h2>
+<p><strong>OCRing Invoices:</strong> Once the upload is done, the batch can be submitted for OCR by clicking the "OCR All" button - the batch will be sent to the OCR Queue, and a red "Q" will appear to the left of each invoice name. The OCR will take place in the background. When each image has finished processing, the red "Q" will be replaced by an orange dot. </p>
+<p>Single invoices can be OCRed (or re-OCRed) by right-clicking the invoice and selecting "Run OCR". For Invoices that have not been OCRed, there is also a "Run OCR" button in the Validation panel.</p>
+<p><strong>The OCR Process:</strong>
+Hardscrabble Invoice employs a 2-step OCR process. The main process uses Azure Document Intelligence to OCR the invoice. The secondary process employs a local OCR solution that runs while Azure Document Intelligence process the invoice. </p>
+<h2 id="queuing">Queuing</h2>
+<p><strong>Invoice Queuing:</strong> Hardscrabble Invoice runs a processing queue that accepts Batch OCR jobs. These jobs are run in succession. Finishing any job may take some time. When the job is done, the orange dot in the Invoice List on the Invoices that were successfully OCRed are changed to green dots.</p>
+<p><strong>Upload Process:</strong>
+After a batch is created and/or selected, clicking the Upload Invoices button will open a dialog box on the user's machine that will allow him to select any number of invoices for upload to that batch.</p>
+<h2 id="invoice-validation">Invoice Validation</h2>
+<p><strong>Automatic Error Checks:</strong>
+When both OCR process are done, the results are compared an analyzed for several types of errors:
+    1. Azure Document Intelligence Field Confidence
+    2. Secondary OCR Field Confidence
+    3. Per-field mismatches between the two OCR results
+    4. Math errors in line items.
+    5. Math errors in invoice total.</p>
+<p><strong>Validation:</strong> As the user tabs through the fields in the validation panel, the corresponding field is highlighted on the invoice image. If the user clicks on a particular field in either window, the corresponding field is highlighted in the other window. </p>
+<p>When the user clicks on an OCRed field in the Invoice panel, the corresponding field will be highlighted in the Validation panel.</p>
+<p>There are several ways Hardscrabble Invoice tries to identify problem fields:
+- OCR confidence as returned by Azure Document Intelligence and the secondary OCR.
+- Checking that the two OCR process get the same value.
+- Checking that the math for line item totals and the invoice total is correct.</p>
+<p>Possible errors that have been identified by the automatic validation are marked in red. <strong>This does not mean that the OCR result is incorrect</strong> - just that confidence in that field is low, for one or more of the reasons listed above. When the user verifies that the OCR result doesn't match what he sees on the scanned invoice, he can edit the value.</p>
+<p>The user can save his changes at any time by clicking on the Save button at the bottom of the edit form. When satisfied that the results are correct, the user can accept them by clicking on the Accept button. This causes the orange button to the left of the Invoice name in the Invoice List Panel to change to green. Note that if the user spots an error after an Invoice is accepte, he can still make changes and save.</p>
+<p>The user can simply click the Accept button if all fields look correct.</p>
+<p>When the user hovers over a field, a tooltip will appear. This will contain, at a minimum, the field value. If any possible alerts are found, the user will also see the alerts in red.</p>
+<h2 id="downloading-finished-invoice-data">Downloading Finished Invoice Data</h2>
+<p><strong>Invoice Download:</strong>
+Once all Invoices in a Batch have been accepted for validation, the Export Batch button in the Invoice List toobar becomes enabled. The user will see a menu with "Export to JSON" and "Export to Excel" menu items. Clicking either of these buttons will open a dialog that will allow selecting a folder for the file to be written too, and naming the new file. </p>
+<p>NOTE: The organization admin can disable the requirement that all Invoices in the Batch have to be accepted before export.</p>
+<p><strong>Batch Deletion</strong>
+When a batch has been validated and uploaded to the customer, the batch is marked for deletion. The batch will be permanently deleted 14 days after it is marked for deletion.</p>
+<h2 id="user-lifetime">User Lifetime</h2>
+<p>A user can be a member of multiple Organizations, as org admin and/or as a regular user. A user will not be deleted from the system as long as he is a member of any org. A user can be in one of three roles: </p>
+<h2 id="organization-lifetime">Organization Lifetime</h2>
+<p><strong>Organization Deletion</strong>
+When Organizations are deleted, the organization data is retained for 2 weeks. During that period, it is possible to reactivate the Organization by contacting Hardscrabble. When the retention period is over, the Organization and all of its data will be physically and permanently deleted.</p>
+<p><strong>User Management</strong>
+The organization admin can invite users to the org and delete users. A user can be in one of three roles: User, Validator, and Org Admin. Users can create batches, upload and edit Invoices. Validators have all rights of Users and can validate Invoices.</p>
+<p>Deleting one org removes that org’s memberships; the user account stays as long as they have at least one remaining membership.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = ".",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="js/base.js"></script>
+        <script src="search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
+
+<!--
+MkDocs version : 1.6.1
+Build Date UTC : 2026-06-16 15:59:54.269443+00:00
+-->
