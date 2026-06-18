@@ -235,6 +235,8 @@ builder.Services.AddSingleton<IOcrQueueProcessor>(sp => sp.GetRequiredService<Oc
 builder.Services.AddHostedService(sp => sp.GetRequiredService<OcrQueueProcessor>());
 // Bridge: Rx streams → SignalR push
 builder.Services.AddHostedService<OcrSignalRBridge>();
+// Bridge: batch change notifications → SignalR push
+builder.Services.AddHostedService<BatchSignalRBridge>();
 
 // ── Stripe ───────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IStripeUsageService, StripeUsageService>();

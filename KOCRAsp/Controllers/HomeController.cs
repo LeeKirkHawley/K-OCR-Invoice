@@ -32,6 +32,7 @@ public class HomeController : Controller
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly IOcrQueueRepository _ocrQueueRepo;
     private readonly ILogger<HomeController> _logger;
+    private readonly K_OCRLib.Services.IBatchChangeNotifier _batchNotifier;
 
     private static readonly string[] InvoiceExtensions =
         [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"];
@@ -46,7 +47,8 @@ public class HomeController : Controller
         IConfigurationService configSvc,
         IOrgConfigService orgConfigSvc,
         IOcrQueueRepository ocrQueueRepo,
-        ILogger<HomeController> logger)
+        ILogger<HomeController> logger,
+        K_OCRLib.Services.IBatchChangeNotifier batchNotifier)
     {
         _homePageSvc = homePageSvc;
         _homeOcrSvc = homeOcrSvc;
@@ -58,6 +60,7 @@ public class HomeController : Controller
         _orgConfigSvc = orgConfigSvc;
         _ocrQueueRepo = ocrQueueRepo;
         _logger = logger;
+        _batchNotifier = batchNotifier;
     }
 
     [HttpGet]
@@ -174,7 +177,9 @@ public class HomeController : Controller
             {
                 var clientPath = clientPaths?.ElementAtOrDefault(index);
                 clientPath = string.IsNullOrWhiteSpace(clientPath) ? f.FileName : clientPath;
-                return new FileUpload(f.FileName, clientPath, f.OpenReadStream());
+                // Ensure server-side filename does not contain directory components supplied by the client
+                var safeFileName = Path.GetFileName(f.FileName);
+                return new FileUpload(safeFileName, clientPath, f.OpenReadStream());
             })
             .ToList();
 
@@ -184,13 +189,33 @@ public class HomeController : Controller
             User.FindFirstValue(ClaimTypes.Email) ?? userId,
             batch?.Name ?? string.Empty);
 
+        var uploadedFileNames = uploads.Take(result.FilesUploaded).Select(u => u.FileName).ToArray();
+
+        // Notify other clients in this org that the batch changed (files added)
+        try
+        {
+            if (result.Success && result.FilesUploaded > 0)
+            {
+                var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(orgId))
+                {
+                    _batchNotifier.Notify(orgId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to notify batch change after upload");
+        }
+
         return Json(new
         {
             success = result.Success,
             filesUploaded = result.FilesUploaded,
             filesSkippedByLimit = result.FilesSkippedByLimit,
             error = result.ErrorMessage,
-            conflicts = result.ConflictingFileNames
+            conflicts = result.ConflictingFileNames,
+            uploadedFileNames = uploadedFileNames
         });
     }
 
