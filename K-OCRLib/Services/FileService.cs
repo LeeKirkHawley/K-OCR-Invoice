@@ -56,6 +56,15 @@ namespace K_OCRLib.Services
                     context.TesseractOcrText = invoice.TesseractOcrText;
                 }
 
+                // Attach raw OcrText to each invoice for edit detection on the frontend
+                if (context?.Layout != null && !string.IsNullOrEmpty(invoice.OcrText))
+                {
+                    foreach (var invoiceDto in context.Layout)
+                    {
+                        invoiceDto.OcrText = invoice.OcrText;
+                    }
+                }
+
                 return context;
             }
 

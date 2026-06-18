@@ -375,7 +375,15 @@
 .inv-suspect-input.form-control { border-color: #e08080 !important; background-color: #fff8f8 !important; }
 .inv-suspect-input.form-control:focus { border-color: #c04040 !important; box-shadow: 0 0 0 0.2rem rgba(192,64,64,0.2) !important; }
 
-/* ── Validation custom tooltip ────────────────────────────────── */
+/* ── Saved/accepted field highlighting (green in validation panel) ──────── */
+.inv-saved-input.form-control { border-color: #28a745 !important; background-color: #f8fff9 !important; }
+.inv-saved-input.form-control:focus { border-color: #198754 !important; box-shadow: 0 0 0 0.2rem rgba(40,167,69,0.2) !important; }
+
+/* Saved field takes precedence over suspect/alert highlighting */
+.inv-suspect-input.inv-saved-input.form-control { border-color: #28a745 !important; background-color: #f8fff9 !important; }
+.inv-suspect-input.inv-saved-input.form-control:focus { border-color: #198754 !important; box-shadow: 0 0 0 0.2rem rgba(40,167,69,0.2) !important; }
+
+/* ── Validation custom tooltip ────────────────────────────────– */
 .kocr-vtip {
     position: fixed;
     z-index: 10000;

@@ -89,5 +89,7 @@ namespace K_OCRLib.Models
         /// <summary>ISO 4217 currency code detected for this invoice (e.g. "USD", "EUR").</summary>
         public string? CurrencyCode { get; set; }
         
+        /// <summary>Raw OCR text (JSON string) from the original OCR process.</summary>
+        public string? OcrText { get; set; }
     }
 }

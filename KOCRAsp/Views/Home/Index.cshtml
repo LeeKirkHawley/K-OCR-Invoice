@@ -311,6 +311,8 @@
     let _ocrLoaded = false;
 
     const _queuedFilePathKeys = new Set();
+    const _editedFieldKeys = new Set();
+    const _savedFieldKeys = new Set();
 
     function normalizeFilePathKey(filePath) {
         return String(filePath ?? '').replace(/\//g, '\\').toLowerCase();
@@ -838,7 +840,7 @@
             }
             document.getElementById('rawJsonContent').textContent =
                 JSON.stringify(stripBboxFields(data.invoice) ?? null, null, 2);
-        } 
+        }
         catch (err) 
         {
             showToast('Failed to load invoice: ' + err.message, 'error');
@@ -1068,6 +1070,9 @@
         const container = document.getElementById('invoiceFields');
         const hasTaxData = inv.items?.some(item => item.taxRate);
 
+        _editedFieldKeys.clear();
+        _savedFieldKeys.clear();
+
         let html = '<table class="table table-sm invoice-field-table"><tbody>';
         for (const f of HEADER_FIELDS) {
             const raw     = inv[f.prop];
@@ -1162,17 +1167,33 @@
             input.addEventListener('change', () => {
                 const itemIdx = input.dataset.itemIdx;
                 const field   = input.dataset.field;
+                const fieldKey = input.dataset.fieldkey;
+                
                 if (itemIdx !== undefined) {
                     const i = parseInt(itemIdx);
                     if (_currentInvoice?.items?.[i] != null) {
                         const value = ITEM_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
                         input.value = value;
                         _currentInvoice.items[i][field] = value;
+                        
+                        // Track if field is edited (changed from original)
+                        if (isFieldEdited(fieldKey, value)) {
+                            _editedFieldKeys.add(fieldKey);
+                        } else {
+                            _editedFieldKeys.delete(fieldKey);
+                        }
                     }
                 } else {
                     const value = HEADER_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
                     input.value = value;
                     applyFieldEdit(field, value);
+                    
+                    // Track if field is edited (changed from original)
+                    if (isFieldEdited(fieldKey, value)) {
+                        _editedFieldKeys.add(fieldKey);
+                    } else {
+                        _editedFieldKeys.delete(fieldKey);
+                    }
                 }
             });
             input.addEventListener('focus', () => selectField(input.dataset.fieldkey));
@@ -1549,6 +1570,12 @@
             const result = await postJson('/home/saveinvoice',
                 { filePath: _currentFilePath, invoice: _currentInvoice });
             if (result.success) {
+                // Mark all edited fields as saved
+                for (const fieldKey of _editedFieldKeys) {
+                    _savedFieldKeys.add(fieldKey);
+                }
+                // Apply saved styling to all saved fields
+                refreshSavedFieldStyling();
                 showToast('Invoice saved.');
                 document.getElementById('validatedJsonContent').textContent =
                     JSON.stringify(stripBboxFields(_currentInvoice), null, 2);
@@ -1572,6 +1599,16 @@
             fd.append('filePath', _currentFilePath);
             const result = await postForm('/home/acceptvalidation', fd);
             if (result.success) {
+                // Mark ALL fields as saved when invoice is accepted
+                const container = document.getElementById('invoiceFields');
+                if (container) {
+                    container.querySelectorAll('.inv-field').forEach(input => {
+                        const fieldKey = input.dataset.fieldkey;
+                        if (fieldKey) _savedFieldKeys.add(fieldKey);
+                    });
+                }
+                // Apply saved styling to all fields
+                refreshSavedFieldStyling();
                 showToast('Validation accepted.');
                 if (_currentInvoice) {
                     _currentInvoice.isValidationAccepted = true;
@@ -1926,6 +1963,60 @@
             ...rest,
             items: (items ?? []).map(({ boundingBoxes, ...itemRest }) => itemRest)
         };
+    }
+
+     // Check if a field value differs from the raw OCR text stored in the invoice
+    function isFieldEdited(fieldKey, currentValue) {
+        if (!_currentInvoice || !_currentInvoice.ocrText) return false;
+        
+        try {
+            const rawInvoiceData = JSON.parse(_currentInvoice.ocrText);
+            
+            // Extract field type and index from fieldKey (e.g., "Item_0_Desc" or "InvoiceNumber")
+            if (fieldKey.startsWith('Item_')) {
+                const match = fieldKey.match(/Item_(\d+)_(Desc|Qty|Price|Tax|Amt)/);
+                if (!match) return false;
+                const itemIdx = parseInt(match[1]);
+                const fieldType = {
+                    'Desc': 'description',
+                    'Qty': 'quantity',
+                    'Price': 'unitPrice',
+                    'Tax': 'taxRate',
+                    'Amt': 'amount'
+                }[match[2]];
+                const origValue = rawInvoiceData.items?.[itemIdx]?.[fieldType] ?? '';
+                return String(currentValue) !== String(origValue);
+            } else {
+                // Map field keys to property names
+                const fieldMap = {
+                    'InvoiceNumber': 'invoiceNumber',
+                    'InvoiceDate': 'invoiceDate',
+                    'DueDate': 'dueDate',
+                    'VendorName': 'vendorName',
+                    'Subtotal': 'subtotal',
+                    'TotalTax': 'totalTax',
+                    'Discount': 'discount',
+                    'Total': 'total'
+                };
+                const prop = fieldMap[fieldKey] || fieldKey;
+                const origValue = rawInvoiceData[prop] ?? '';
+                return String(currentValue) !== String(origValue);
+            }
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function refreshSavedFieldStyling() {
+        const container = document.getElementById('invoiceFields');
+        if (!container) return;
+        
+        container.querySelectorAll('.inv-field').forEach(input => {
+            const fieldKey = input.dataset.fieldkey;
+            if (fieldKey && _savedFieldKeys.has(fieldKey)) {
+                input.classList.add('inv-saved-input');
+            }
+        });
     }
 
     // ── Init ────────────────────────────────────────────────────
