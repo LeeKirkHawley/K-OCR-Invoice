@@ -1,6 +1,4 @@
-using System.Text;
 using ClosedXML.Excel;
-using K_OCR.Services;
 using K_OCRLib.Models;
 using K_OCRLib.Services;
 using K_OCRLib.Services.Interfaces;

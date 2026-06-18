@@ -422,13 +422,15 @@
     const _guestMaxPagesPerInvoice = @Model.GuestMaxPagesPerInvoice;
     const _minConfidenceThreshold = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
 
-    function showBetaDialog(message) {
+    function showBetaDialog(message) 
+    {
         const body = document.getElementById('betaLimitModalBody');
         if (body) body.textContent = message;
         bootstrap.Modal.getOrCreateInstance(document.getElementById('betaLimitModal')).show();
     }
 
-    function setBetaLimitStateFromServer(data) {
+    function setBetaLimitStateFromServer(data) 
+    {
         if (!_isBetaTestOrganization) return;
         const wasExceeded = _betaLimitExceeded;
         if (typeof data.betaLimitExceeded === 'boolean') _betaLimitExceeded = data.betaLimitExceeded;
@@ -442,7 +444,8 @@
         }
     }
 
-    function applyBetaLimitState() {
+    function applyBetaLimitState() 
+    {
         const uploadInput = document.getElementById('uploadInput');
             const filePickerInput = document.getElementById('file-input');
             const folderPickerInput = document.getElementById('folder-input');
@@ -450,7 +453,8 @@
             if (filePickerInput) filePickerInput.disabled = _isBetaTestOrganization && _betaLimitExceeded;
             if (folderPickerInput) folderPickerInput.disabled = _isBetaTestOrganization && _betaLimitExceeded;
             if (!_isBetaTestOrganization || !_betaLimitExceeded) return;
-        for (const id of ['batchOcrBtn', 'runOcrBtn']) {
+        for (const id of ['batchOcrBtn', 'runOcrBtn']) 
+        {
             const el = document.getElementById(id);
             if (!el) continue;
             el.disabled = true;
@@ -458,12 +462,15 @@
         }
     }
 
-    function maybeShowInitialBetaDialog() {
+    function maybeShowInitialBetaDialog() 
+    {
         if (!_isBetaTestOrganization) return;
-        if (_showBetaWelcomeDialog && _isOrgAdmin) {
+        if (_showBetaWelcomeDialog && _isOrgAdmin) 
+        {
             showBetaDialog(`You have ${_betaPagesRemaining} OCR page scans remaining (${_betaUsedPages}/${_betaMaxPages} used). Please report any bugs you find during beta testing.`);
         }
-        if (_betaLimitExceeded) {
+        if (_betaLimitExceeded) 
+        {
             _betaExceededDialogShown = true;
             showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
         }
@@ -477,13 +484,15 @@
             `${_guestMaxInvoicesPerBatch} files per batch, and ${_guestMaxPagesPerInvoice} pages per file. ` +
             `You currently have ${_guestActiveBatchCount} of ${_guestMaxBatches} batches.`;
 
-        const showWhenReady = () => {
+        const showWhenReady = () => 
+        {
             if (typeof showGuestOcrLimitModal !== 'function') return;
             if (!document.getElementById('guestOcrLimitModal')) return;
             showGuestOcrLimitModal(message, 'Guest Account Limits');
         };
 
-        if (document.readyState === 'loading') {
+        if (document.readyState === 'loading') 
+        {
             document.addEventListener('DOMContentLoaded', showWhenReady, { once: true });
         } else {
             showWhenReady();
@@ -491,7 +500,8 @@
     }
 
     // ── Batch selector ──────────────────────────────────────────
-    document.getElementById('batchSelector').addEventListener('change', function () {
+    document.getElementById('batchSelector').addEventListener('change', function () 
+    {
         const batchId = this.value;
         if (!batchId) return;
         const fd = new FormData();
@@ -504,48 +514,65 @@
     // ── File upload (legacy single-file input handler if present) ─────────────────────────────────────────────
     const _legacyUploadInput = document.getElementById('uploadInput');
     if (_legacyUploadInput) {
-        _legacyUploadInput.addEventListener('change', async function () {
-        if (_isBetaTestOrganization && _betaLimitExceeded) {
-            showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
-            this.value = '';
-            return;
-        }
+        _legacyUploadInput.addEventListener('change', async function () 
+        {
+            if (_isBetaTestOrganization && _betaLimitExceeded) 
+            {
+                showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+                this.value = '';
+                return;
+            }
 
-        if (!this.files.length) return;
-        const fd = new FormData();
-        for (const f of this.files) {
-            fd.append('files', f);
-            fd.append('clientPaths', f.webkitRelativePath || f.name);
-        }
-        showUploadOverlay();
-        try {
-            const result = await postForm('/home/uploadfiles', fd);
-            setBetaLimitStateFromServer(result);
-            if (result.success) {
-                showToast(`Uploaded ${result.filesUploaded} file(s).`);
-                if (result.filesSkippedByLimit > 0) {
-                    if (_isGuestOrganization) {
-                        showGuestOcrLimitModal(
+            if (!this.files.length) return;
+            const fd = new FormData();
+            for (const f of this.files) 
+            {
+                fd.append('files', f);
+                fd.append('clientPaths', f.webkitRelativePath || f.name);
+            }
+            showUploadOverlay();
+
+            try 
+            {
+                const result = await postForm('/home/uploadfiles', fd);
+                setBetaLimitStateFromServer(result);
+                if (result.success) 
+                {
+                    showToast(`Uploaded ${result.filesUploaded} file(s).`);
+                    if (result.filesSkippedByLimit > 0) 
+                    {
+                        if (_isGuestOrganization) 
+                        {
+                            showGuestOcrLimitModal(
                             `${result.filesSkippedByLimit} file(s) were not uploaded: the batch has reached its limit of ${_guestMaxInvoicesPerBatch} files. ` +
                             `Create a new batch to upload more (up to ${_guestMaxBatches} batches allowed).`,
                             'Guest Batch Limit Reached'
                         );
-                    } else {
+                    } 
+                    else 
+                    {
                         showToast(`${result.filesSkippedByLimit} file(s) were not uploaded: batch invoice limit reached.`, 'warning');
                     }
                 }
                 await refreshFileList(1);
                 await refreshBatchDropdown();
                 await updateExportButtonState();
-            } else {
-                if (result.betaLimitExceeded) {
+            } 
+            else 
+            {
+                if (result.betaLimitExceeded) 
+                {
                     showBetaDialog(result.error ?? `This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
                 }
                 showToast(result.error ?? 'Upload failed.', 'error');
             }
-        } catch (err) {
+        } 
+        catch (err) 
+        {
             showToast('Upload error: ' + err.message, 'error');
-        } finally {
+        } 
+        finally 
+        {
             hideUploadOverlay();
         }
         this.value = '';
@@ -553,25 +580,31 @@
         }
 
         // ── Refresh ─────────────────────────────────────────────────
-    document.getElementById('refreshBtn').addEventListener('click', async () => {
-        await refreshFileList();
-        await refreshBatchDropdown();
-    });
+        document.getElementById('refreshBtn').addEventListener('click', async () => 
+        {
+            await refreshFileList();
+            await refreshBatchDropdown();
+        });
 
     // ── Batch OCR ───────────────────────────────────────────────
-    document.getElementById('batchOcrBtn').addEventListener('click', async function () {
-        if (_isBetaTestOrganization && _betaLimitExceeded) {
-            showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
-            return;
+        document.getElementById('batchOcrBtn').addEventListener('click', async function () 
+        {
+            if (_isBetaTestOrganization && _betaLimitExceeded) 
+            {
+                showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+                return;
         }
 
-        try {
+        try 
+        {
             const checkResult = await fetch('/home/GetAlreadyOcrdFiles');
             const checkData   = await checkResult.json();
-            if (checkData.files && checkData.files.length > 0) {
+            if (checkData.files && checkData.files.length > 0) 
+            {
                 const list = document.getElementById('reOcrFileList');
                 list.innerHTML = '';
-                checkData.files.forEach(f => {
+                checkData.files.forEach(f => 
+                {
                     const li = document.createElement('li');
                     li.className = 'list-group-item py-1 px-2 small';
                     li.textContent = f;
@@ -580,33 +613,44 @@
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('reOcrModal')).show();
                 return;
             }
-        } catch { /* network error – fall through to OCR */ }
+        } 
+        catch 
+        { 
+            /* network error – fall through to OCR */ 
+        }
         startBatchOcr(false);
     });
 
-    document.getElementById('reOcrSkipBtn').addEventListener('click', function () {
+    document.getElementById('reOcrSkipBtn').addEventListener('click', function () 
+    {
         bootstrap.Modal.getInstance(document.getElementById('reOcrModal')).hide();
         startBatchOcr(true);
     });
 
-    document.getElementById('reOcrAllBtn').addEventListener('click', function () {
+    document.getElementById('reOcrAllBtn').addEventListener('click', function () 
+    {
         bootstrap.Modal.getInstance(document.getElementById('reOcrModal')).hide();
         startBatchOcr(false);
     });
 
-    document.getElementById('invoiceMenuRemoveBtn').addEventListener('click', async function () {
+    document.getElementById('invoiceMenuRemoveBtn').addEventListener('click', async function () 
+    {
         const filePath = _contextMenuFilePath;
         hideInvoiceContextMenu();
         if (!filePath) return;
 
-        try {
+        try 
+        {
             await removeInvoiceFromBatch(filePath);
-        } catch (err) {
+        } 
+        catch (err) 
+        {
             showToast(err.message, 'error');
         }
     });
 
-    document.getElementById('invoiceMenuRunOcrBtn').addEventListener('click', async function () {
+    document.getElementById('invoiceMenuRunOcrBtn').addEventListener('click', async function () 
+    {
         const filePath = _contextMenuFilePath;
         hideInvoiceContextMenu();
         if (!filePath) return;
@@ -614,7 +658,8 @@
         await runOcrOnFile(filePath, this);
     });
 
-    document.getElementById('invoiceMenuMoveBtn').addEventListener('click', async function () {
+    document.getElementById('invoiceMenuMoveBtn').addEventListener('click', async function () 
+    {
         const filePath = _contextMenuFilePath;
         hideInvoiceContextMenu();
         if (!filePath) return;
@@ -622,7 +667,8 @@
         await openMoveInvoiceModal(filePath);
     });
 
-    document.getElementById('moveInvoiceConfirmBtn').addEventListener('click', async function () {
+    document.getElementById('moveInvoiceConfirmBtn').addEventListener('click', async function () 
+    {
         if (!_pendingMoveFilePath) return;
 
         const targetBatchId = parseInt(document.getElementById('moveInvoiceBatchSelect').value, 10);
@@ -631,67 +677,87 @@
             return;
         }
 
-        try {
+        try 
+        {
             await moveInvoiceToBatch(_pendingMoveFilePath, targetBatchId);
             bootstrap.Modal.getInstance(document.getElementById('moveInvoiceModal'))?.hide();
-        } catch (err) {
+        } 
+        catch (err) 
+        {
             showToast(err.message, 'error');
         }
     });
 
-    document.getElementById('moveInvoiceModal').addEventListener('hidden.bs.modal', () => {
+    document.getElementById('moveInvoiceModal').addEventListener('hidden.bs.modal', () => 
+    {
         _pendingMoveFilePath = null;
     });
 
-    document.addEventListener('click', (e) => {
+    document.addEventListener('click', (e) => 
+    {
         const menu = document.getElementById('invoiceContextMenu');
         if (!menu || menu.style.display === 'none') return;
         const target = e.target instanceof Node ? e.target : null;
         if (!target || !menu.contains(target)) hideInvoiceContextMenu();
     });
 
-    document.addEventListener('contextmenu', (e) => {
+    document.addEventListener('contextmenu', (e) => 
+    {
         const target = e.target instanceof Element ? e.target : null;
         if (target?.closest('.file-list-item') || target?.closest('#invoiceContextMenu')) return;
         hideInvoiceContextMenu();
     });
 
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', (e) => 
+    {
         if (e.key === 'Escape') hideInvoiceContextMenu();
     });
 
-    async function startBatchOcr(skipAlreadyOcrd) {
-        if (_isBetaTestOrganization && _betaLimitExceeded) {
+    async function startBatchOcr(skipAlreadyOcrd) 
+    {
+        if (_isBetaTestOrganization && _betaLimitExceeded) 
+        {
             showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
             return;
         }
 
-        try {
+        try 
+        {
             const fd = new FormData();
             if (skipAlreadyOcrd) fd.append('skipAlreadyOcrd', 'true');
             const result = await postForm('/home/batchocr', fd);
             setBetaLimitStateFromServer(result);
-            if (result.success) {
-                if (result.allSkipped) {
+            if (result.success) 
+            {
+                if (result.allSkipped) 
+                {
                     showToast('All files are already processed or already queued — nothing new to OCR.');
-                } else {
+                } 
+                else 
+                {
                     (result.queuedFilePaths ?? []).forEach(markFileQueued);
                     markQueueIndicators();
                     showToast('Batch OCR started. Already queued invoices were not re-queued.');
                 }
-            } else {
-                if (result.betaLimitExceeded) {
+            } 
+            else 
+            {
+                if (result.betaLimitExceeded) 
+                {
                     showBetaDialog(result.error ?? `This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
                 }
                 showToast(result.error ?? 'OCR failed.', 'error');
             }
-        } catch (err) {
+        } 
+        catch (err) 
+        {
             showToast('Batch OCR error: ' + err.message, 'error');
         }
     }
 
     // ── File click ──────────────────────────────────────────────
-    function activateFileListItem(item) {
+    function activateFileListItem(item) 
+    {
         if (!item) return;
         document.querySelectorAll('.file-list-item').forEach(el => el.classList.remove('active'));
         item.classList.add('active');
@@ -699,19 +765,23 @@
         selectFile(item.dataset.filepath, exceedsLimit);
     }
 
-    window.handleFileListItemClick = function (item, event) {
+    window.handleFileListItemClick = function (item, event) 
+    {
         if (event && typeof event.button === 'number' && event.button !== 0) return;
         activateFileListItem(item);
     };
 
-    window.handleFileListItemKeydown = function (event, item) {
+    window.handleFileListItemKeydown = function (event, item) 
+    {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         activateFileListItem(item);
     };
 
-    function handleFileListItemContextMenu(event, item) {
-        if (event) {
+    function handleFileListItemContextMenu(event, item) 
+    {
+        if (event) 
+        {
             event.preventDefault();
             event.stopPropagation();
         }
@@ -719,7 +789,8 @@
         return false;
     }
 
-    function resetInvoiceSelection() {
+    function resetInvoiceSelection() 
+    {
         _currentFilePath = null;
         _currentInvoice = null;
         _selectedFieldKey = null;
@@ -736,16 +807,19 @@
         updateViewerCurrencyLabel(null);
     }
 
-    async function selectFile(filePath, exceedsLimit) {
+    async function selectFile(filePath, exceedsLimit) 
+{
         _currentFilePath  = filePath;
         _selectedFieldKey = null;
         updateViewerCurrencyLabel(null);
         loadDocumentPages(filePath);
-        try {
+        try 
+        {
             const result = await fetch('/home/getinvoice?filePath=' + encodeURIComponent(filePath));
             const data = await result.json();
             _ocrLoaded = data?.invoice != null;
-            if (data.success && data.invoice) {
+            if (data.success && data.invoice) 
+            {
                 _currentInvoice = data.invoice;
                 attachValidation(_currentInvoice);
                 renderInvoiceFields(data.invoice);
@@ -753,7 +827,9 @@
                 updateViewerCurrencyLabel(data.invoice);
                 document.getElementById('validatedJsonContent').textContent =
                     data.invoice.isValidationAccepted ? JSON.stringify(stripBboxFields(data.invoice), null, 2) : '';
-            } else {
+            } 
+            else 
+            {
                 document.getElementById('invoiceFields').innerHTML =
                     '<p class="text-muted">No invoice data yet. Run OCR to process this file.</p>';
                 renderRunOcrButton(filePath, exceedsLimit);
@@ -762,12 +838,15 @@
             }
             document.getElementById('rawJsonContent').textContent =
                 JSON.stringify(stripBboxFields(data.invoice) ?? null, null, 2);
-        } catch (err) {
+        } 
+        catch (err) 
+        {
             showToast('Failed to load invoice: ' + err.message, 'error');
         }
     }
 
-    async function loadDocumentPages(filePath) {
+    async function loadDocumentPages(filePath) 
+    {
         const container = document.getElementById('viewerPagesContainer');
         const msg       = document.getElementById('noDocMsg');
         const toolbar   = document.getElementById('viewerToolbar');
@@ -776,24 +855,28 @@
         msg.style.display     = 'none';
         toolbar.style.display = '';
 
-        try {
+        try 
+        {
             const resp = await fetch('/api/pages?path=' + encodeURIComponent(filePath));
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const paths = await resp.json();
 
-            if (!paths || !paths.length) {
+            if (!paths || !paths.length) 
+            {
                 msg.style.display     = '';
                 toolbar.style.display = 'none';
                 return;
             }
 
             const multiPage = paths.length > 1;
-            paths.forEach((pagePath, idx) => {
+            paths.forEach((pagePath, idx) => 
+            {
                 const pageNum  = idx + 1;
                 const pageWrap = document.createElement('div');
                 pageWrap.className = 'viewer-page-wrap';
 
-                if (multiPage) {
+                if (multiPage) 
+                {
                     const lbl = document.createElement('div');
                     lbl.className   = 'viewer-page-label';
                     lbl.textContent = `Page ${pageNum}`;
@@ -810,7 +893,8 @@
                 img.alt       = `Page ${pageNum}`;
                 img.loading   = 'lazy';
                 img.src       = '/api/image?path=' + encodeURIComponent(pagePath);
-                img.onload = () => {
+                img.onload = () => 
+                {
                     if (idx === 0) { _viewerZoomPct = 100; applyViewerZoom(); }
                     renderBboxOverlayForPage(pageNum);
                 };
@@ -820,14 +904,17 @@
                 pageWrap.appendChild(imgWrap);
                 container.appendChild(pageWrap);
             });
-        } catch (err) {
+        } 
+        catch (err) 
+        {
             showToast('Failed to load pages: ' + err.message, 'error');
             msg.style.display     = '';
             toolbar.style.display = 'none';
         }
     }
 
-    function renderRunOcrButton(filePath, exceedsLimit) {
+    function renderRunOcrButton(filePath, exceedsLimit) 
+    {
         const container = document.getElementById('invoiceFields');
         const btn = document.createElement('button');
         btn.id = 'runOcrBtn';
@@ -835,13 +922,16 @@
         container.appendChild(btn);
     }
 
-    function isFileOverPageLimit(filePath) {
+    function isFileOverPageLimit(filePath) 
+    {
         const item = findFileListItem(filePath);
         return item?.dataset.exceedsLimit === 'true';
     }
 
-    function getRunOcrButtonState(filePath, exceedsLimit) {
-        if (_isBetaTestOrganization && _betaLimitExceeded) {
+    function getRunOcrButtonState(filePath, exceedsLimit) 
+    {
+        if (_isBetaTestOrganization && _betaLimitExceeded) 
+        {
             return {
                 className: 'btn btn-sm btn-secondary mt-2',
                 disabled: true,
@@ -849,7 +939,8 @@
             };
         }
 
-        if (exceedsLimit) {
+        if (exceedsLimit) 
+        {
             return {
                 className: 'btn btn-sm btn-secondary mt-2',
                 disabled: true,
@@ -857,7 +948,8 @@
             };
         }
 
-        if (isFileQueued(filePath)) {
+        if (isFileQueued(filePath)) 
+        {
             return {
                 className: 'btn btn-sm btn-secondary mt-2',
                 disabled: true,
@@ -872,7 +964,8 @@
         };
     }
 
-    function configureRunOcrButton(btn, filePath, exceedsLimit) {
+    function configureRunOcrButton(btn, filePath, exceedsLimit) 
+    {
         if (!btn) return;
         const state = getRunOcrButtonState(filePath, exceedsLimit);
         btn.className = state.className;

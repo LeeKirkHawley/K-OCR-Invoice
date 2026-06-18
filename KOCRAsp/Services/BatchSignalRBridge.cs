@@ -1,8 +1,6 @@
+using K_OCRLib.Services;
 using KOCRAsp.Hubs;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using K_OCRLib.Services;
 
 namespace KOCRAsp.Services;
 

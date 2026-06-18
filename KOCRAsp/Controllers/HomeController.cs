@@ -1,21 +1,17 @@
-using System.Security.Claims;
-using System.Text;
-using System.Linq;
-using ClosedXML.Excel;
-using K_OCR.Services;
+using K_OCRLib.Configuration;
+using K_OCRLib.Data;
+using K_OCRLib.Models;
+using K_OCRLib.Security;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Models;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using OCRQueue.Abstractions;
-using K_OCRLib.Services;
-using K_OCRLib.Services.Interfaces;
-using K_OCRLib.Models;
-using K_OCRLib.Data;
-using K_OCRLib.Security;
-using K_OCRLib.Configuration;
+using System.Security.Claims;
+using System.Text;
 
 namespace KOCRAsp.Controllers;
 
@@ -34,8 +30,8 @@ public class HomeController : Controller
     private readonly ILogger<HomeController> _logger;
     private readonly K_OCRLib.Services.IBatchChangeNotifier _batchNotifier;
 
-    private static readonly string[] InvoiceExtensions =
-        [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"];
+    //private static readonly string[] InvoiceExtensions =
+    //    [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"];
 
     public HomeController(
         IHomePageService homePageSvc,

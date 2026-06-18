@@ -1,4 +1,7 @@
-using K_OCR.Services;
+using K_OCRLib.Data;
+using K_OCRLib.Models;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Controllers;
 using KOCRAsp.Models;
 using KOCRAsp.Services;
@@ -8,10 +11,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using OCRQueue.Abstractions;
-using K_OCRLib.Services;
-using K_OCRLib.Services.Interfaces;
-using K_OCRLib.Models;
-using K_OCRLib.Data;
 using OCRQueue.Models;
 
 namespace KOCRAsp.Tests.Controllers;
@@ -27,6 +26,7 @@ public class HomeControllerTests
     private readonly Mock<IConfigurationService> _mockConfigSvc;
     private readonly Mock<IOcrQueueRepository> _mockOcrQueueRepo;
     private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
+    private readonly Mock<K_OCRLib.Services.IBatchChangeNotifier> _mockBatchNotifier;
     private readonly HomeController _controller;
     private readonly Mock<ILogger<HomeController>> _logger;
 
@@ -45,6 +45,7 @@ public class HomeControllerTests
         _mockConfigSvc = new Mock<IConfigurationService>();
         _mockOcrQueueRepo = new Mock<IOcrQueueRepository>();
         _mockOrgConfigSvc = new Mock<IOrgConfigService>();
+        _mockBatchNotifier = new Mock<K_OCRLib.Services.IBatchChangeNotifier>();
         _logger = new Mock<ILogger<HomeController>>(); 
 
         _mockTenantContext.Setup(t => t.OrganizationId).Returns(OrgId);
@@ -76,7 +77,8 @@ public class HomeControllerTests
             _mockConfigSvc.Object,
             _mockOrgConfigSvc.Object,
             _mockOcrQueueRepo.Object,
-            _logger.Object);
+            _logger.Object,
+            _mockBatchNotifier.Object);
     }
 
     private void SetControllerContext(string? currentBatchId = null)
