@@ -18,7 +18,7 @@ namespace K_OCRLib.Services
         }
         public async Task<PipelineContext?> LoadContextAsync(string imagePath)
         {
-            var invoice = await _databaseService.GetInvoiceByFilePathAsync(imagePath);
+            Invoice? invoice = await _databaseService.GetInvoiceByFilePathAsync(imagePath);
             if (invoice != null)
             {
                 PipelineContext? context = null;
