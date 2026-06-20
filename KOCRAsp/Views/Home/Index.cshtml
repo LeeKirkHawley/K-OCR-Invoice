@@ -314,6 +314,27 @@
     const _editedFieldKeys = new Set();
     const _savedFieldKeys = new Set();
 
+    const _orgId             = '@Html.Raw(Model.OrgId)';
+    const _currentBatchId    = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
+    const _maxPagesPerInvoice = @Model.MaxPagesPerInvoice;
+    const _isBetaTestOrganization = @(Model.IsBetaTestOrganization.ToString().ToLowerInvariant());
+    const _isOrgAdmin = @(Model.IsOrgAdmin.ToString().ToLowerInvariant());
+    const _showBetaWelcomeDialog = @(Model.ShowBetaWelcomeDialog.ToString().ToLowerInvariant());
+    let _betaLimitExceeded = @(Model.BetaOcrLimitExceeded.ToString().ToLowerInvariant());
+    let _betaUsedPages = @Model.BetaUsedOcrPages;
+    let _betaMaxPages = @Model.BetaMaxOcrPages;
+    let _betaPagesRemaining = @Model.BetaRemainingOcrPages;
+    let _betaExceededDialogShown = _betaLimitExceeded;
+
+    const _isGuestOrganization = @(Model.IsGuestOrganization.ToString().ToLowerInvariant());
+    const _showGuestWelcomeDialog = @(Model.ShowGuestWelcomeDialog.ToString().ToLowerInvariant());
+    const _guestMaxBatches = @Model.GuestMaxBatches;
+    const _guestActiveBatchCount = @Model.GuestActiveBatchCount;
+    const _guestMaxInvoicesPerBatch = @Model.GuestMaxInvoicesPerBatch;
+    const _guestMaxPagesPerInvoice = @Model.GuestMaxPagesPerInvoice;
+    const _minConfidenceThreshold = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+
+
     function normalizeFilePathKey(filePath) {
         return String(filePath ?? '').replace(/\//g, '\\').toLowerCase();
     }
@@ -403,26 +424,6 @@
         menu.style.left = `${Math.max(8, left)}px`;
         menu.style.top = `${Math.max(8, top)}px`;
     }
-
-    const _orgId             = '@Html.Raw(Model.OrgId)';
-    const _currentBatchId    = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
-    const _maxPagesPerInvoice = @Model.MaxPagesPerInvoice;
-    const _isBetaTestOrganization = @(Model.IsBetaTestOrganization.ToString().ToLowerInvariant());
-    const _isOrgAdmin = @(Model.IsOrgAdmin.ToString().ToLowerInvariant());
-    const _showBetaWelcomeDialog = @(Model.ShowBetaWelcomeDialog.ToString().ToLowerInvariant());
-    let _betaLimitExceeded = @(Model.BetaOcrLimitExceeded.ToString().ToLowerInvariant());
-    let _betaUsedPages = @Model.BetaUsedOcrPages;
-    let _betaMaxPages = @Model.BetaMaxOcrPages;
-    let _betaPagesRemaining = @Model.BetaRemainingOcrPages;
-    let _betaExceededDialogShown = _betaLimitExceeded;
-
-    const _isGuestOrganization = @(Model.IsGuestOrganization.ToString().ToLowerInvariant());
-    const _showGuestWelcomeDialog = @(Model.ShowGuestWelcomeDialog.ToString().ToLowerInvariant());
-    const _guestMaxBatches = @Model.GuestMaxBatches;
-    const _guestActiveBatchCount = @Model.GuestActiveBatchCount;
-    const _guestMaxInvoicesPerBatch = @Model.GuestMaxInvoicesPerBatch;
-    const _guestMaxPagesPerInvoice = @Model.GuestMaxPagesPerInvoice;
-    const _minConfidenceThreshold = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
 
     function showBetaDialog(message) 
     {
@@ -811,6 +812,10 @@
 
     async function selectFile(filePath, exceedsLimit) 
 {
+        // Clear saved fields if loading a different invoice
+        if (filePath !== _currentFilePath) {
+            _savedFieldKeys.clear();
+        }
         _currentFilePath  = filePath;
         _selectedFieldKey = null;
         updateViewerCurrencyLabel(null);
@@ -827,19 +832,24 @@
                 renderInvoiceFields(data.invoice);
                 updateValidationStatusLabel(data.invoice);
                 updateViewerCurrencyLabel(data.invoice);
+                // Raw JSON tab displays the original unedited OCR text from Azure
+                const rawData = getRawOcrTextDisplay(data.invoice);
+                document.getElementById('rawJsonContent').textContent =
+                    rawData ? JSON.stringify(rawData, null, 2) : '';
+                // Updated JSON tab only displays ValidatedOcrText from database
+                const validatedData = getValidatedOcrTextDisplay(data.invoice);
                 document.getElementById('validatedJsonContent').textContent =
-                    data.invoice.isValidationAccepted ? JSON.stringify(stripBboxFields(data.invoice), null, 2) : '';
+                    validatedData ? JSON.stringify(validatedData, null, 2) : '';
             } 
             else 
             {
                 document.getElementById('invoiceFields').innerHTML =
                     '<p class="text-muted">No invoice data yet. Run OCR to process this file.</p>';
                 renderRunOcrButton(filePath, exceedsLimit);
+                document.getElementById('rawJsonContent').textContent = '';
                 document.getElementById('validatedJsonContent').textContent = '';
                 updateValidationStatusLabel(null);
             }
-            document.getElementById('rawJsonContent').textContent =
-                JSON.stringify(stripBboxFields(data.invoice) ?? null, null, 2);
         }
         catch (err) 
         {
@@ -1071,7 +1081,7 @@
         const hasTaxData = inv.items?.some(item => item.taxRate);
 
         _editedFieldKeys.clear();
-        _savedFieldKeys.clear();
+        // Preserve _savedFieldKeys across invoice reloads, don't clear them
 
         let html = '<table class="table table-sm invoice-field-table"><tbody>';
         for (const f of HEADER_FIELDS) {
@@ -1271,26 +1281,36 @@
 
     // ── Two-way field / bbox highlighting ──────────────────────────────────────
 
-    function selectField(key) {
+    function selectField(key) 
+    {
         _selectedFieldKey = key;
 
         // Update SVG polygon classes across all pages
         if (_currentInvoice) {
-            document.querySelectorAll('.viewer-bbox').forEach(poly => {
+            document.querySelectorAll('.viewer-bbox').forEach(poly => 
+            {
                 const fk = poly.dataset.fieldkey ?? '';
                 poly.classList.remove('bbox-ok', 'bbox-suspect', 'bbox-selected');
-                if (fk === key) {
+                if (fk === key) 
+                {
                     poly.classList.add('bbox-selected');
-                } else if (fk.startsWith('Item_')) {
+                } 
+                else if (fk.startsWith('Item_')) 
+                {
                     const itemIdx = parseInt(fk.split('_')[1]);
                     const keyPfx  = `Item_${itemIdx}_`;
                     const item    = _currentInvoice.items?.[itemIdx];
-                    if (key && key.startsWith(keyPfx)) {
+                    if (key && key.startsWith(keyPfx)) 
+                    {
                         poly.classList.add('bbox-selected');
-                    } else {
+                    } 
+                    else 
+                    {
                         poly.classList.add(item && isItemSuspect(_currentInvoice, item, itemIdx) ? 'bbox-suspect' : 'bbox-ok');
                     }
-                } else {
+                } 
+                else 
+                {
                     poly.classList.add(isSuspect(_currentInvoice, fk) ? 'bbox-suspect' : 'bbox-ok');
                 }
             });
@@ -1314,7 +1334,8 @@
         });
     }
 
-    function renderBboxOverlay() {
+    function renderBboxOverlay() 
+    {
         document.querySelectorAll('.viewer-bbox-overlay').forEach(s => s.remove());
         if (!_currentInvoice) return;
         document.querySelectorAll('.viewer-img-wrap[data-page]').forEach(wrap => {
@@ -1331,58 +1352,66 @@
         if(!_ocrLoaded)
             return;
 
-        const inv = _currentInvoice;
-        const pw  = inv.originalPageWidth;
-        const ph  = inv.originalPageHeight;
-        if (!pw || !ph) return;
+        const invoice = _currentInvoice;
+        const pageWidth  = invoice.originalPageWidth;
+        const pageHeight = invoice.originalPageHeight;
+        if (!pageWidth || !pageHeight) return;
 
-        const bboxes = inv.fieldBoundingBoxes ?? {};
-        const items  = inv.items ?? [];
-        const ns     = 'http://www.w3.org/2000/svg';
-        const svg    = document.createElementNS(ns, 'svg');
-        svg.setAttribute('viewBox', `0 0 ${pw} ${ph}`);
+        const bboxes = invoice.fieldBoundingBoxes ?? {};
+        const lineItems  = invoice.items ?? [];
+        const nameSpace     = 'http://www.w3.org/2000/svg';
+        const svg    = document.createElementNS(nameSpace, 'svg');
+        svg.setAttribute('viewBox', `0 0 ${pageWidth} ${pageHeight}`);
         svg.classList.add('viewer-bbox-overlay');
 
         let hasAny = false;
 
-        for (const [key, boxList] of Object.entries(bboxes)) {
-            for (const box of boxList) {
+        for (const [key, boxList] of Object.entries(bboxes)) 
+        {
+            for (const box of boxList) 
+            {
                 if ((box.pageNumber ?? 1) !== pageNum) continue;
-                const pts = box.points;
-                if (!pts || pts.length < 4) continue;
+                const points = box.points;
+                if (!points || points.length < 4) continue;
                 hasAny = true;
-                const poly = document.createElementNS(ns, 'polygon');
-                poly.setAttribute('points', formatBboxPoints(pts));
+                const poly = document.createElementNS(nameSpace, 'polygon');
+                poly.setAttribute('points', formatBboxPoints(points));
                 poly.dataset.fieldkey    = key;
                 poly.style.pointerEvents = 'all';
                 poly.style.cursor        = 'pointer';
                 poly.classList.add('viewer-bbox');
+                // In validation panel: selected > saved/approved/edited > suspect > ok
                 poly.classList.add(_selectedFieldKey === key ? 'bbox-selected'
-                                 : isSuspect(inv, key)       ? 'bbox-suspect'
+                                 : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isValidationAccepted ? 'bbox-saved'
+                                 : isSuspect(invoice, key)       ? 'bbox-suspect'
                                  :                             'bbox-ok');
                 poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
                 svg.appendChild(poly);
             }
         }
 
-        for (let i = 0; i < items.length; i++) {
-            const item   = items[i];
+        for (let i = 0; i < lineItems.length; i++) 
+        {
+            const item   = lineItems[i];
             const key    = `Item_${i}_Desc`;
             const prefix = `Item_${i}_`;
-            for (const box of (item.boundingBoxes ?? [])) {
+            for (const box of (item.boundingBoxes ?? [])) 
+            {
                 if ((box.pageNumber ?? 1) !== pageNum) continue;
                 const pts = box.points;
                 if (!pts || pts.length < 4) continue;
                 hasAny = true;
-                const poly = document.createElementNS(ns, 'polygon');
+                const poly = document.createElementNS(nameSpace, 'polygon');
                 poly.setAttribute('points', formatBboxPoints(pts));
                 poly.dataset.fieldkey    = key;
                 poly.style.pointerEvents = 'all';
                 poly.style.cursor        = 'pointer';
                 poly.classList.add('viewer-bbox');
+                // In validation panel: selected > saved/approved/edited > suspect > ok
                 poly.classList.add((_selectedFieldKey && _selectedFieldKey.startsWith(prefix)) ? 'bbox-selected'
-                                 : isItemSuspect(inv, item, i)                                     ? 'bbox-suspect'
-                                 :                                                                'bbox-ok');
+                                 : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isValidationAccepted ? 'bbox-saved'
+                                 : isItemSuspect(invoice, item, i)                                 ? 'bbox-suspect'
+                                 :                                                              'bbox-ok');
                 poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
                 svg.appendChild(poly);
             }
@@ -1391,7 +1420,8 @@
         if (hasAny) wrap.appendChild(svg);
     }
 
-    function scrollBboxIntoView() {
+    function scrollBboxIntoView() 
+    {
         const polygon  = document.querySelector('.viewer-bbox.bbox-selected');
         const scroller = document.getElementById('viewerScroll');
         if (!polygon || !scroller) return;
@@ -1402,7 +1432,8 @@
         scroller.scrollTo({ top: targetTop, left: targetLeft, behavior: 'smooth' });
     }
 
-    function formatBboxPoints(pts) {
+    function formatBboxPoints(pts) 
+    {
         const pairs = [];
         for (let j = 0; j + 1 < pts.length; j += 2) pairs.push(`${pts[j]},${pts[j + 1]}`);
         return pairs.join(' ');
@@ -1410,18 +1441,21 @@
 
     // Mirrors LineItemValidationService — computes math pass/fail from raw invoice values.
     // Returns a dict keyed the same way as the old server-side MathConfirmed.
-    function computeMathConfirmed(inv) {
+    function computeMathConfirmed(invoice) 
+    {
         const TOL = 0.02;
         const mc = {};
 
         // Line items: qty × unitPrice (± tax) ≈ amount
-        const items = inv.items ?? [];
+        const items = invoice.items ?? [];
         for (let i = 0; i < items.length; i++) {
             const it = items[i];
-            if (it.quantity != null && it.unitPrice != null && it.amount != null) {
+            if (it.quantity != null && it.unitPrice != null && it.amount != null) 
+            {
                 let expected = it.quantity * it.unitPrice;
                 const tr = it.taxRate;
-                if (tr && tr.includes('%')) {
+                if (tr && tr.includes('%')) 
+                {
                     const pct = parseFloat(tr.replace('%', ''));
                     if (!isNaN(pct)) {
                         const tax = expected * (pct / 100);
@@ -1434,22 +1468,22 @@
 
         // Subtotal: sum of line item amounts ≈ subtotal
         const lineAmounts = items.filter(it => it.amount != null).map(it => it.amount);
-        if (lineAmounts.length > 0 && inv.subtotal != null) {
+        if (lineAmounts.length > 0 && invoice.subtotal != null) {
             const sum = lineAmounts.reduce((a, b) => a + b, 0);
-            mc['Subtotal'] = Math.abs(sum - inv.subtotal) <= TOL;
+            mc['Subtotal'] = Math.abs(sum - invoice.subtotal) <= TOL;
         }
 
         // Total: subtotal + totalTax − discount ≈ total
-        if (inv.total != null) {
+        if (invoice.total != null) {
             let expected = 0;
-            if (inv.subtotal != null) {
-                expected += inv.subtotal;
+            if (invoice.subtotal != null) {
+                expected += invoice.subtotal;
             } else if (lineAmounts.length > 0) {
                 expected += lineAmounts.reduce((a, b) => a + b, 0);
             }
-            if (inv.totalTax  != null) expected += inv.totalTax;
-            if (inv.discount  != null) expected -= inv.discount;
-            mc['Total'] = Math.abs(expected - inv.total) <= TOL;
+            if (invoice.totalTax  != null) expected += invoice.totalTax;
+            if (invoice.discount  != null) expected -= invoice.discount;
+            mc['Total'] = Math.abs(expected - invoice.total) <= TOL;
         }
 
         return mc;
@@ -1574,11 +1608,13 @@
                 for (const fieldKey of _editedFieldKeys) {
                     _savedFieldKeys.add(fieldKey);
                 }
-                // Apply saved styling to all saved fields
+                // Apply saved styling to all saved fields (in the table)
                 refreshSavedFieldStyling();
+                // Also redraw the bbox overlay to show green borders
+                renderBboxOverlay();
                 showToast('Invoice saved.');
-                document.getElementById('validatedJsonContent').textContent =
-                    JSON.stringify(stripBboxFields(_currentInvoice), null, 2);
+               // Reload invoice to display updated ValidatedOcrText from database
+               await selectFile(_currentFilePath, false);
                 await refreshFileList();
             } else {
                 showToast(result.error ?? 'Save failed.', 'error');
@@ -1607,15 +1643,13 @@
                         if (fieldKey) _savedFieldKeys.add(fieldKey);
                     });
                 }
-                // Apply saved styling to all fields
+                // Apply saved styling to all fields (in the table)
                 refreshSavedFieldStyling();
+                // Also redraw the bbox overlay to show green borders
+                renderBboxOverlay();
                 showToast('Validation accepted.');
-                if (_currentInvoice) {
-                    _currentInvoice.isValidationAccepted = true;
-                    updateValidationStatusLabel(_currentInvoice);
-                    document.getElementById('validatedJsonContent').textContent =
-                        JSON.stringify(stripBboxFields(_currentInvoice), null, 2);
-                }
+                // Reload invoice to display updated ValidatedOcrText from database
+                await selectFile(_currentFilePath, false);
                 await refreshFileList();
                 await updateExportButtonState();
             } else {
@@ -1952,6 +1986,80 @@
         connection.start()
             .then(() => connection.invoke('JoinOrgGroup', _orgId))
             .catch(err => console.warn('[OCR SignalR] Connection failed:', err));
+    }
+
+    // ── Recursively strip bounding box fields from any JSON structure ──
+    // Removes all bbox-related fields for cleaner display without modifying original data.
+    function stripAllBboxFields(obj) {
+        if (obj === null || obj === undefined) return obj;
+        if (typeof obj !== 'object') return obj;
+
+        if (Array.isArray(obj)) {
+            return obj.map(item => stripAllBboxFields(item));
+        }
+
+        const result = {};
+        for (const [key, value] of Object.entries(obj)) {
+            // Skip bbox-related fields
+            if (key.toLowerCase().includes('boundingbox') || 
+                key.toLowerCase().includes('bbox') ||
+                key === 'boundingBoxes' ||
+                key === 'fieldBoundingBoxes' ||
+                key === 'originalPageWidth' ||
+                key === 'originalPageHeight' ||
+                key === 'pageCount') {
+                continue;
+            }
+            
+            // Recursively process nested objects and arrays
+            result[key] = stripAllBboxFields(value);
+        }
+        return result;
+    }
+
+    // ── Extract original OCR text from the invoice ──────────────────
+    // Returns the original OCR text that came from Azure with bounding boxes stripped for readability.
+    // The actual data is not modified - only the display is cleaned up.
+    function getRawOcrTextDisplay(inv) {
+        if (!inv || !inv.ocrText) return null;
+        
+        try {
+            // OcrText is the raw JSON string from Azure
+            const parsed = JSON.parse(inv.ocrText);
+            
+            // Strip all bounding box fields for readability in the display only
+            return stripAllBboxFields(parsed);
+        } catch (err) {
+            console.warn('Failed to parse OcrText:', err);
+        }
+        
+        return null;
+    }
+
+    // ── Extract ValidatedOcrText from database field ──────────────
+    // Returns the stripped invoice data stored in the database's ValidatedOcrText field.
+    // Returns null if ValidatedOcrText is not set or cannot be parsed.
+    function getValidatedOcrTextDisplay(inv) {
+        if (!inv || !inv.validatedOcrText || inv.validatedOcrText.trim() === '') return null;
+        
+        try {
+            // ValidatedOcrText is stored as JSON string containing a List<InvoiceDto>
+            const parsed = JSON.parse(inv.validatedOcrText);
+            
+            // If it's an array, get the first element (there should only be one)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed[0];
+            }
+            
+            // If it's a single object, return it
+            if (typeof parsed === 'object' && parsed !== null) {
+                return parsed;
+            }
+        } catch (err) {
+            console.warn('Failed to parse ValidatedOcrText:', err);
+        }
+        
+        return null;
     }
 
     // ── Strip bbox-only fields for JSON display / export ────────

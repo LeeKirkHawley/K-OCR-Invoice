@@ -91,5 +91,12 @@ namespace K_OCRLib.Models
         
         /// <summary>Raw OCR text (JSON string) from the original OCR process.</summary>
         public string? OcrText { get; set; }
+
+       /// <summary>
+       /// Validated/edited OCR text (JSON string) as stored in the database.
+       /// Only populated when the invoice has been saved or accepted.
+       /// Used for the Updated JSON tab display.
+       /// </summary>
+       public string? ValidatedOcrText { get; set; }
     }
 }
