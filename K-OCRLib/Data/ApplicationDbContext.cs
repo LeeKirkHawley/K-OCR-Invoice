@@ -44,5 +44,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .Property(m => m.Role)
             .IsRequired()
             .HasMaxLength(64);
+
     }
 }

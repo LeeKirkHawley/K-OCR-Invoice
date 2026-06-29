@@ -334,6 +334,55 @@
     const _guestMaxPagesPerInvoice = @Model.GuestMaxPagesPerInvoice;
     const _minConfidenceThreshold = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
 
+    async function selectFile(filePath, exceedsLimit)
+    {
+        // Clear saved fields if loading a different invoice
+        if (filePath !== _currentFilePath) 
+        {
+            _savedFieldKeys.clear();
+        }
+        _currentFilePath  = filePath;
+        _selectedFieldKey = null;
+        updateViewerCurrencyLabel(null);
+        loadDocumentPages(filePath);
+
+        try
+        {
+            const result = await fetch('/home/getinvoice?filePath=' + encodeURIComponent(filePath));
+            const data = await result.json();
+            _ocrLoaded = data?.invoice != null;
+            if (data.success && data.invoice)
+            {
+                _currentInvoice = data.invoice;
+                attachValidation(_currentInvoice);
+                renderInvoiceFields(data.invoice);
+                updateValidationStatusLabel(data.invoice);
+                updateViewerCurrencyLabel(data.invoice);
+                // Raw JSON tab displays the original unedited OCR text from Azure
+                const rawData = getRawOcrTextDisplay(data.invoice);
+                document.getElementById('rawJsonContent').textContent =
+                rawData ? JSON.stringify(rawData, null, 2) : '';
+
+                // Updated JSON tab only displays ValidatedOcrText from database
+                //const validatedData = getValidatedOcrTextDisplay(data.invoice);
+                //document.getElementById('validatedJsonContent').textContent =
+                //    validatedData ? JSON.stringify(validatedData, null, 2) : '';
+            }
+            else
+            {
+                document.getElementById('invoiceFields').innerHTML =
+                '<p class="text-muted">No invoice data yet. Run OCR to process this file.</p>';
+                renderRunOcrButton(filePath, exceedsLimit);
+                document.getElementById('rawJsonContent').textContent = '';
+                document.getElementById('validatedJsonContent').textContent = '';
+                updateValidationStatusLabel(null);
+            }
+        }
+        catch (err)
+        {
+            showToast('Failed to load invoice: ' + err.message, 'error');
+        }
+    }
 
     function normalizeFilePathKey(filePath) {
         return String(filePath ?? '').replace(/\//g, '\\').toLowerCase();
@@ -810,52 +859,6 @@
         updateViewerCurrencyLabel(null);
     }
 
-    async function selectFile(filePath, exceedsLimit) 
-{
-        // Clear saved fields if loading a different invoice
-        if (filePath !== _currentFilePath) {
-            _savedFieldKeys.clear();
-        }
-        _currentFilePath  = filePath;
-        _selectedFieldKey = null;
-        updateViewerCurrencyLabel(null);
-        loadDocumentPages(filePath);
-        try 
-        {
-            const result = await fetch('/home/getinvoice?filePath=' + encodeURIComponent(filePath));
-            const data = await result.json();
-            _ocrLoaded = data?.invoice != null;
-            if (data.success && data.invoice) 
-            {
-                _currentInvoice = data.invoice;
-                attachValidation(_currentInvoice);
-                renderInvoiceFields(data.invoice);
-                updateValidationStatusLabel(data.invoice);
-                updateViewerCurrencyLabel(data.invoice);
-                // Raw JSON tab displays the original unedited OCR text from Azure
-                const rawData = getRawOcrTextDisplay(data.invoice);
-                document.getElementById('rawJsonContent').textContent =
-                    rawData ? JSON.stringify(rawData, null, 2) : '';
-                // Updated JSON tab only displays ValidatedOcrText from database
-                const validatedData = getValidatedOcrTextDisplay(data.invoice);
-                document.getElementById('validatedJsonContent').textContent =
-                    validatedData ? JSON.stringify(validatedData, null, 2) : '';
-            } 
-            else 
-            {
-                document.getElementById('invoiceFields').innerHTML =
-                    '<p class="text-muted">No invoice data yet. Run OCR to process this file.</p>';
-                renderRunOcrButton(filePath, exceedsLimit);
-                document.getElementById('rawJsonContent').textContent = '';
-                document.getElementById('validatedJsonContent').textContent = '';
-                updateValidationStatusLabel(null);
-            }
-        }
-        catch (err) 
-        {
-            showToast('Failed to load invoice: ' + err.message, 'error');
-        }
-    }
 
     async function loadDocumentPages(filePath) 
     {
@@ -924,6 +927,219 @@
             toolbar.style.display = 'none';
         }
     }
+
+    function renderInvoiceFields(inv) 
+    {
+        const container = document.getElementById('invoiceFields');
+        const hasTaxData = inv.items?.some(item => item.taxRate);
+
+        // should look like this: '[["vendorName", "Acme"], ["total", "123.45"]]'
+        const invoiceEdits = parseEditsMap(inv.invoiceEdits);
+
+        _editedFieldKeys.clear();
+        // Preserve _savedFieldKeys across invoice reloads, don't clear them
+
+        let html = '<table class="table table-sm invoice-field-table"><tbody>';
+
+        for (const f of HEADER_FIELDS) 
+        {
+            const raw     = inv[f.prop];
+            const isNum   = f.prop === 'subtotal' || f.prop === 'totalTax' || f.prop === 'discount'  || f.prop === 'total';
+            let value   = isNum ? fmtMoney(raw) : (raw ?? '');
+            const suspect = isSuspect(inv, f.key);
+            const tipData = buildFieldTooltip(inv, f.key, value);
+
+
+            // look for the field in invoiceEdits by prop name (camelCase key) - if found, replace the value
+            const editedValue = invoiceEdits.get(f.prop);
+            if (editedValue !== undefined) {
+                value = editedValue;
+            }
+
+            html += `<tr class="inv-field-row${suspect ? ' inv-suspect-row' : ''}" data-fieldkey="${f.key}" data-vtip="${escapeHtml(tipData.value)}" data-vtip-errors="${escapeHtml(tipData.errors.join('\n'))}">
+                <td>${escapeHtml(f.label)}</td>
+                <td><input class="form-control form-control-sm inv-field${suspect ? ' inv-suspect-input' : ''}"
+                data-field="${f.prop}"
+                data-fieldkey="${f.key}"
+                value="${escapeHtml(String(value))}" /></td>
+                </tr>`;
+        }
+
+        html += '</tbody></table>';
+
+        if (inv.items?.length) 
+        {
+            html += '<h6 class="mt-2">Line Items</h6>';
+            html += '<div class="table-responsive li-table-wrap"><table class="table table-sm table-bordered li-table" id="liTable">';
+            html += '<colgroup>'
+            + '<col class="li-col" id="liColDesc" style="width:40%">'
+            + '<col class="li-col" id="liColQty"  style="width:10%">'
+            + '<col class="li-col" id="liColUp"   style="width:25%">'
+            + (hasTaxData ?'<col class="li-col" id="liColTaxRate"  style="width:5%">' : '')
+            + '<col class="li-col" id="liColAmt"  style="width:20%">'
+            + '</colgroup>';
+            html += '<thead><tr>'
+            + '<th class="li-th">Description<span class="li-col-drag" data-col="0"></span></th>'
+            + '<th class="li-th">Qty<span class="li-col-drag" data-col="1"></span></th>'
+            + '<th class="li-th">Unit Price<span class="li-col-drag" data-col="2"></span></th>'
+            + (hasTaxData ? '<th class="li-th">Tax<span class="li-col-drag" data-col="1"></span></th>' : '')
+            + '<th class="li-th">Total</th>'
+            + '</tr></thead><tbody>';
+
+            for (let i = 0; i < inv.items.length; i++) 
+            {
+                const item = inv.items[i];
+                const fk   = `Item_${i}_Desc`;
+
+
+                // suspect fields identified before edits are substituted
+                const dSusp = isItemFieldSuspect(inv, item, 'Description', i);
+                const qSusp = isItemFieldSuspect(inv, item, 'Quantity',    i);
+                const uSusp = isItemFieldSuspect(inv, item, 'UnitPrice',   i);
+                const tSusp = isItemFieldSuspect(inv, item, 'TaxRate',     i);
+                const aSusp = isItemFieldSuspect(inv, item, 'Amount',      i);
+                const dTip = buildItemFieldTooltip(inv, item, 'Description', i, item.description);
+                const qTip = buildItemFieldTooltip(inv, item, 'Quantity',    i, item.quantity);
+                const uTip = buildItemFieldTooltip(inv, item, 'UnitPrice',   i, item.unitPrice);
+                const tTip = buildItemFieldTooltip(inv, item, 'TaxRate',     i, item.taxRate);
+                const aTip = buildItemFieldTooltip(inv, item, 'Amount',      i, item.amount);
+
+
+                const edits = parseEditsMap(item.itemEdits);
+                const description = edits.get('description') ?? item.description;
+                const quantity = edits.get('quantity') ?? item.quantity;
+                const unitPriceValue = edits.get('unitPrice') ?? item.unitPrice;
+                const taxRate = edits.get('taxRate') ?? item.taxRate;
+                const amountValue = edits.get('amount') ?? item.amount;
+
+                const vtip = t => `data-vtip="${escapeHtml(t.value)}" data-vtip-errors="${escapeHtml(t.errors.join('\n'))}"`;
+                const sc = f => f ? ' inv-suspect-input' : '';
+                const unitPrice = fmtMoney(unitPriceValue);
+                const amount    = fmtMoney(amountValue);
+                html += `<tr class="inv-field-row${(dSusp || qSusp || uSusp || aSusp) ? ' inv-suspect-row' : ''}" data-fieldkey="${fk}">
+                <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(description ?? '')}" /></td>
+                <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${quantity ?? ''}" /></td>
+                <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${escapeHtml(unitPrice)}" /></td>
+                ${hasTaxData ? `<td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(tTip)} data-item-idx="${i}" data-field="taxRate" data-fieldkey="${fk}" value="${escapeHtml(taxRate)}" /></td>` : ''}
+                <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="amount"      data-fieldkey="${fk}" value="${escapeHtml(amount)}" /></td>
+                </tr>`;
+            }
+            
+            html += '</tbody></table></div>';
+        }
+
+        html += `<div class="mt-3">
+        <label class="form-label form-label-sm mb-1" for="notesField">Notes</label>
+        <textarea id="notesField" class="form-control form-control-sm" rows="3"
+        style="resize:vertical;overflow-y:auto"
+        tabindex="-1">${escapeHtml(inv.notes ?? '')}</textarea>
+        </div>`;
+
+        html += `<div class="d-flex gap-2 mt-2 flex-wrap">
+        <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1" onclick="saveInvoice()">Save</button>
+        <button id="acceptBtn" class="btn btn-sm btn-success"           tabindex="-1" onclick="acceptValidation()">Accept</button>
+        </div>`;
+
+        container.innerHTML = html;
+
+        const notesEl = container.querySelector('#notesField');
+        if (notesEl) 
+        {
+            notesEl.addEventListener('input', () => 
+            {
+                if (_currentInvoice) _currentInvoice.notes = notesEl.value;
+            });
+        }
+
+        initLiColResize();
+
+        const allInputs = Array.from(container.querySelectorAll('.inv-field'));
+        allInputs.forEach((input, idx) => 
+        {
+            input.addEventListener('change', () => 
+            {
+                const itemIdx = input.dataset.itemIdx;
+                const field   = input.dataset.field;
+                const fieldKey = input.dataset.fieldkey;
+
+                if (itemIdx !== undefined) 
+                {
+                    const i = parseInt(itemIdx);
+                    if (_currentInvoice?.items?.[i] != null) 
+                    {
+                        const value = ITEM_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
+                        input.value = value;
+                        _currentInvoice.items[i][field] = value;
+                        if (!(_currentInvoice.items[i].itemEdits instanceof Map))
+                            _currentInvoice.items[i].itemEdits = parseEditsMap(_currentInvoice.items[i].itemEdits);
+                        _currentInvoice.items[i].itemEdits.set(field, value);
+                        
+                        // Track if field is edited (changed from original)
+                        if (isFieldEdited(fieldKey, value)) 
+                        {
+                            _editedFieldKeys.add(fieldKey);
+                        } 
+                        else 
+                        {
+                            _editedFieldKeys.delete(fieldKey);
+                        }
+                    }
+                } 
+                else 
+                {
+                    const value = HEADER_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
+                    input.value = value;
+                    //applyFieldEdit(field, value);
+
+                    if (!(_currentInvoice.invoiceEdits instanceof Map))
+                        _currentInvoice.invoiceEdits = parseEditsMap(_currentInvoice.invoiceEdits);
+                    _currentInvoice.invoiceEdits.set(field, value);
+
+                    // Track if field is edited (changed from original)
+                    if (isFieldEdited(fieldKey, value)) 
+                    {
+                        _editedFieldKeys.add(fieldKey);
+                    } 
+                    else 
+                    {
+                    _editedFieldKeys.delete(fieldKey);
+                    }
+                }
+            });
+            input.addEventListener('focus', () => selectField(input.dataset.fieldkey));
+            input.addEventListener('keydown', e => {
+                if (e.key !== 'Tab') return;
+                if (!e.shiftKey && idx === allInputs.length - 1) 
+                {
+                    e.preventDefault();
+                    allInputs[0].focus();
+                } 
+                else if (e.shiftKey && idx === 0) 
+                {
+                    e.preventDefault();
+                    allInputs[allInputs.length - 1].focus();
+                }
+            });
+        });
+    
+        container.querySelectorAll('.inv-field-row').forEach(row => {
+            row.addEventListener('click', () => selectField(row.dataset.fieldkey));
+        });
+
+        renderBboxOverlay();
+
+        // Auto-select first field
+        const firstInput = container.querySelector('.inv-field');
+        if (firstInput) 
+        {
+            firstInput.focus();
+        } 
+        else 
+        {
+        selectField(HEADER_FIELDS[0].key);
+        }
+    }
+
 
     function renderRunOcrButton(filePath, exceedsLimit) 
     {
@@ -1074,168 +1290,6 @@
         if (!stripped) return '';
         const n = Number(stripped.replace(/,/g, ''));
         return Number.isFinite(n) ? n.toFixed(2) : stripped;
-    }
-
-    function renderInvoiceFields(inv) {
-        const container = document.getElementById('invoiceFields');
-        const hasTaxData = inv.items?.some(item => item.taxRate);
-
-        _editedFieldKeys.clear();
-        // Preserve _savedFieldKeys across invoice reloads, don't clear them
-
-        let html = '<table class="table table-sm invoice-field-table"><tbody>';
-        for (const f of HEADER_FIELDS) {
-            const raw     = inv[f.prop];
-            const isNum   = f.prop === 'subtotal' || f.prop === 'totalTax' ||
-                            f.prop === 'discount'  || f.prop === 'total';
-            const value   = isNum ? fmtMoney(raw) : (raw ?? '');
-            const suspect = isSuspect(inv, f.key);
-            const tipData = buildFieldTooltip(inv, f.key, value);
-            html += `<tr class="inv-field-row${suspect ? ' inv-suspect-row' : ''}" data-fieldkey="${f.key}" data-vtip="${escapeHtml(tipData.value)}" data-vtip-errors="${escapeHtml(tipData.errors.join('\n'))}">
-                         <td>${escapeHtml(f.label)}</td>
-                         <td><input class="form-control form-control-sm inv-field${suspect ? ' inv-suspect-input' : ''}"
-                                    data-field="${f.prop}"
-                                    data-fieldkey="${f.key}"
-                                    value="${escapeHtml(String(value))}" /></td>
-                     </tr>`;
-        }
-        html += '</tbody></table>';
-
-        if (inv.items?.length) {
-            html += '<h6 class="mt-2">Line Items</h6>';
-            html += '<div class="table-responsive li-table-wrap"><table class="table table-sm table-bordered li-table" id="liTable">';
-            html += '<colgroup>'
-                  + '<col class="li-col" id="liColDesc" style="width:40%">'
-                  + '<col class="li-col" id="liColQty"  style="width:10%">'
-                  + '<col class="li-col" id="liColUp"   style="width:25%">'
-                  + (hasTaxData ?'<col class="li-col" id="liColTaxRate"  style="width:5%">' : '')
-                  + '<col class="li-col" id="liColAmt"  style="width:20%">'
-                  + '</colgroup>';
-            html += '<thead><tr>'
-                  + '<th class="li-th">Description<span class="li-col-drag" data-col="0"></span></th>'
-                  + '<th class="li-th">Qty<span class="li-col-drag" data-col="1"></span></th>'
-                  + '<th class="li-th">Unit Price<span class="li-col-drag" data-col="2"></span></th>'
-                  + (hasTaxData ? '<th class="li-th">Tax<span class="li-col-drag" data-col="1"></span></th>' : '')
-                  + '<th class="li-th">Total</th>'
-                  + '</tr></thead><tbody>';
-            for (let i = 0; i < inv.items.length; i++) {
-                const item = inv.items[i];
-                const fk   = `Item_${i}_Desc`;
-
-                const dSusp = isItemFieldSuspect(inv, item, 'Description', i);
-                const qSusp = isItemFieldSuspect(inv, item, 'Quantity',    i);
-                const uSusp = isItemFieldSuspect(inv, item, 'UnitPrice',   i);
-                const tSusp = isItemFieldSuspect(inv, item, 'TaxRate',     i);
-                const aSusp = isItemFieldSuspect(inv, item, 'Amount',      i);
-
-                const dTip = buildItemFieldTooltip(inv, item, 'Description', i, item.description);
-                const qTip = buildItemFieldTooltip(inv, item, 'Quantity',    i, item.quantity);
-                const uTip = buildItemFieldTooltip(inv, item, 'UnitPrice',   i, item.unitPrice);
-                const tTip = buildItemFieldTooltip(inv, item, 'TaxRate',     i, item.taxRate);
-                const aTip = buildItemFieldTooltip(inv, item, 'Amount',      i, item.amount);
-
-                const vtip = t => `data-vtip="${escapeHtml(t.value)}" data-vtip-errors="${escapeHtml(t.errors.join('\n'))}"`;
-                const sc = f => f ? ' inv-suspect-input' : '';
-                const unitPrice = fmtMoney(item.unitPrice);
-                const amount    = fmtMoney(item.amount);
-                html += `<tr class="inv-field-row${(dSusp || qSusp || uSusp || aSusp) ? ' inv-suspect-row' : ''}" data-fieldkey="${fk}">
-                             <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fk}" value="${escapeHtml(item.description ?? '')}" /></td>
-                             <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fk}" value="${item.quantity ?? ''}" /></td>
-                             <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fk}" value="${escapeHtml(unitPrice)}" /></td>
-                             ${hasTaxData ? `<td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(tTip)} data-item-idx="${i}" data-field="taxRate" data-fieldkey="${fk}" value="${escapeHtml(item.taxRate)}" /></td>` : ''}
-                             <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="amount"      data-fieldkey="${fk}" value="${escapeHtml(amount)}" /></td>
-                         </tr>`;
-            }
-            html += '</tbody></table></div>';
-        }
-
-        html += `<div class="mt-3">
-            <label class="form-label form-label-sm mb-1" for="notesField">Notes</label>
-            <textarea id="notesField" class="form-control form-control-sm" rows="3"
-                      style="resize:vertical;overflow-y:auto"
-                      tabindex="-1">${escapeHtml(inv.notes ?? '')}</textarea>
-        </div>`;
-
-        html += `<div class="d-flex gap-2 mt-2 flex-wrap">
-            <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1" onclick="saveInvoice()">Save</button>
-            <button id="acceptBtn" class="btn btn-sm btn-success"           tabindex="-1" onclick="acceptValidation()">Accept</button>
-        </div>`;
-
-        container.innerHTML = html;
-
-        const notesEl = container.querySelector('#notesField');
-        if (notesEl) {
-            notesEl.addEventListener('input', () => {
-                if (_currentInvoice) _currentInvoice.notes = notesEl.value;
-            });
-        }
-
-        initLiColResize();
-
-        const allInputs = Array.from(container.querySelectorAll('.inv-field'));
-        allInputs.forEach((input, idx) => {
-            input.addEventListener('change', () => {
-                const itemIdx = input.dataset.itemIdx;
-                const field   = input.dataset.field;
-                const fieldKey = input.dataset.fieldkey;
-                
-                if (itemIdx !== undefined) {
-                    const i = parseInt(itemIdx);
-                    if (_currentInvoice?.items?.[i] != null) {
-                        const value = ITEM_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
-                        input.value = value;
-                        _currentInvoice.items[i][field] = value;
-                        
-                        // Track if field is edited (changed from original)
-                        if (isFieldEdited(fieldKey, value)) {
-                            _editedFieldKeys.add(fieldKey);
-                        } else {
-                            _editedFieldKeys.delete(fieldKey);
-                        }
-                    }
-                } else {
-                    const value = HEADER_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
-                    input.value = value;
-                    applyFieldEdit(field, value);
-                    
-                    // Track if field is edited (changed from original)
-                    if (isFieldEdited(fieldKey, value)) {
-                        _editedFieldKeys.add(fieldKey);
-                    } else {
-                        _editedFieldKeys.delete(fieldKey);
-                    }
-                }
-            });
-            input.addEventListener('focus', () => selectField(input.dataset.fieldkey));
-            input.addEventListener('keydown', e => {
-                if (e.key !== 'Tab') return;
-                if (!e.shiftKey && idx === allInputs.length - 1) {
-                    e.preventDefault();
-                    allInputs[0].focus();
-                } else if (e.shiftKey && idx === 0) {
-                    e.preventDefault();
-                    allInputs[allInputs.length - 1].focus();
-                }
-            });
-        });
-        container.querySelectorAll('.inv-field-row').forEach(row => {
-            row.addEventListener('click', () => selectField(row.dataset.fieldkey));
-        });
-
-        renderBboxOverlay();
-
-        // Auto-select first field
-        const firstInput = container.querySelector('.inv-field');
-        if (firstInput) {
-            firstInput.focus();
-        } else {
-            selectField(HEADER_FIELDS[0].key);
-        }
-    }
-
-    function applyFieldEdit(prop, value) {
-        if (!_currentInvoice) return;
-        _currentInvoice[prop] = value;
     }
 
     function showUploadOverlay() {
@@ -1596,10 +1650,21 @@
             .map(([k, v]) => `${k}: ${v.join(', ')}`)
             .join(' · ');
     }
+
     async function saveInvoice() {
         if (!_currentFilePath || !_currentInvoice) return;
         const btn = document.getElementById('saveBtn');
         setButtonLoading(btn, true);
+
+        // Serialize Maps → JSON strings for the API call
+        const savedInvoiceEdits = _currentInvoice.invoiceEdits;
+        _currentInvoice.invoiceEdits = toJsonString(_currentInvoice.invoiceEdits);
+
+        const savedItemEdits = (_currentInvoice.items ?? []).map(item => item.itemEdits);
+        for (const item of (_currentInvoice.items ?? [])) {
+            item.itemEdits = toJsonString(item.itemEdits);
+        }
+
         try {
             const result = await postJson('/home/saveinvoice',
                 { filePath: _currentFilePath, invoice: _currentInvoice });
@@ -1617,12 +1682,66 @@
                await selectFile(_currentFilePath, false);
                 await refreshFileList();
             } else {
+                // Restore Maps so further edits still work
+                _currentInvoice.invoiceEdits = savedInvoiceEdits;
+                (_currentInvoice.items ?? []).forEach((item, i) => { item.itemEdits = savedItemEdits[i]; });
                 showToast(result.error ?? 'Save failed.', 'error');
             }
         } catch (err) {
+            // Restore Maps so further edits still work
+            _currentInvoice.invoiceEdits = savedInvoiceEdits;
+            (_currentInvoice.items ?? []).forEach((item, i) => { item.itemEdits = savedItemEdits[i]; });
             showToast('Save error: ' + err.message, 'error');
         } finally {
             setButtonLoading(btn, false);
+        }
+    }
+
+    // Convert Map/object/array to JSON string (for sending to API)
+    function toJsonString(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+
+        // If it's already a string, return it
+        if (typeof value === 'string') {
+            return value;
+        }
+
+        // Map → array-of-pairs, which round-trips cleanly with new Map(JSON.parse(...))
+        if (value instanceof Map) {
+            return JSON.stringify([...value]);
+        }
+
+        // Normal case
+        return JSON.stringify(value);
+    }
+
+    // Parse a JSON string (array-of-pairs) back into a Map
+    function parseEditsMap(str) {
+        if (!str) return new Map();
+        try {
+            return new Map(JSON.parse(str));
+        } catch {
+            return new Map();
+        }
+    }
+
+    // Parse JSON string back to object (when loading from API)
+    function parseJson(value, defaultValue = {}) 
+    {
+        if (!value) return defaultValue;
+    
+        if (typeof value === 'object') return value;
+
+        try 
+        {
+            return JSON.parse(value);
+        } 
+        catch (e) 
+        {
+            console.error("Invalid JSON:", value);
+            return defaultValue;
         }
     }
 
@@ -2039,28 +2158,28 @@
     // ── Extract ValidatedOcrText from database field ──────────────
     // Returns the stripped invoice data stored in the database's ValidatedOcrText field.
     // Returns null if ValidatedOcrText is not set or cannot be parsed.
-    function getValidatedOcrTextDisplay(inv) {
-        if (!inv || !inv.validatedOcrText || inv.validatedOcrText.trim() === '') return null;
+    // function getValidatedOcrTextDisplay(inv) {
+    //     if (!inv || !inv.validatedOcrText || inv.validatedOcrText.trim() === '') return null;
         
-        try {
-            // ValidatedOcrText is stored as JSON string containing a List<InvoiceDto>
-            const parsed = JSON.parse(inv.validatedOcrText);
+    //     try {
+    //         // ValidatedOcrText is stored as JSON string containing a List<InvoiceDto>
+    //         const parsed = JSON.parse(inv.validatedOcrText);
             
-            // If it's an array, get the first element (there should only be one)
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed[0];
-            }
+    //         // If it's an array, get the first element (there should only be one)
+    //         if (Array.isArray(parsed) && parsed.length > 0) {
+    //             return parsed[0];
+    //         }
             
-            // If it's a single object, return it
-            if (typeof parsed === 'object' && parsed !== null) {
-                return parsed;
-            }
-        } catch (err) {
-            console.warn('Failed to parse ValidatedOcrText:', err);
-        }
+    //         // If it's a single object, return it
+    //         if (typeof parsed === 'object' && parsed !== null) {
+    //             return parsed;
+    //         }
+    //     } catch (err) {
+    //         console.warn('Failed to parse ValidatedOcrText:', err);
+    //     }
         
-        return null;
-    }
+    //     return null;
+    // }
 
     // ── Strip bbox-only fields for JSON display / export ────────
     // Keeps _currentInvoice intact so 2-way highlighting still works.
@@ -2413,6 +2532,21 @@
             readEntries = await new Promise(resolve => directoryReader.readEntries(resolve));
         }
         return entries;
+    }
+
+    function safeParseJson(jsonString) 
+    {
+        if (!jsonString) return [];           // or null, depending on your needs
+        
+        try 
+        {
+            return JSON.parse(jsonString);
+        } 
+        catch (e) 
+        {
+            console.error("Failed to parse JSON:", jsonString);
+            return [];
+        }
     }
 </script>
 }

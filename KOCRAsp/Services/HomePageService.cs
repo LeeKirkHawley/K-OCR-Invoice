@@ -169,7 +169,7 @@ public sealed class HomePageService : IHomePageService
         var invoice = await _ocrSvc.LoadInvoiceAsync(filePath)
             ?? throw new InvalidOperationException("No processed invoice for this file.");
 
-        invoice.IsValidationAccepted = true;
+        invoice.IsInvoiceAccepted = true;
         await _ocrSvc.SaveInvoiceAsync(filePath, invoice);
         await _invoiceActionSvc.LogAsync(InvoiceActionTypes.Validated, Path.GetFileName(filePath), batchName, orgUser);
         await _orgLogSvc.LogBatchValidatedAsync(organizationName, batchName, orgUser, Path.GetFileName(filePath));
@@ -188,29 +188,29 @@ public sealed class HomePageService : IHomePageService
             IsProcessed = true
         };
 
-        if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
-        {
-            entry.HasOcrResult = true;
-            InvoiceDto? dto = null;
-            try
-            {
-                dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
-            }
-            catch
-            {
-                dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
-            }
+        //if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
+        //{
+        //    entry.HasOcrResult = true;
+        //    InvoiceDto? dto = null;
+        //    try
+        //    {
+        //        dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
+        //    }
+        //    catch
+        //    {
+        //        dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
+        //    }
 
-            if (dto != null)
-            {
-                entry.IsSavedOrAccepted = dto.IsValidationAccepted;
-                if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
-                {
-                    entry.HasSuspectFields = dto.TesseractConfirmed.Values.Any(v => !v);
-                    entry.IsValidated = !entry.HasSuspectFields;
-                }
-            }
-        }
+        //    if (dto != null)
+        //    {
+        //        entry.IsSavedOrAccepted = dto.IsValidationAccepted;
+        //        if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
+        //        {
+        //            entry.HasSuspectFields = dto.TesseractConfirmed.Values.Any(v => !v);
+        //            entry.IsValidated = !entry.HasSuspectFields;
+        //        }
+        //    }
+        //}
 
         return entry;
     }
@@ -351,29 +351,29 @@ public sealed class HomePageService : IHomePageService
             {
                 entry.IsProcessed = true;
                 entry.TotalPages = invoice.TotalPages;
-                if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
-                {
-                    entry.HasOcrResult = true;
-                    InvoiceDto? dto = null;
-                    try
-                    {
-                        dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
-                    }
-                    catch
-                    {
-                        dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
-                    }
+                //if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
+                //{
+                //    entry.HasOcrResult = true;
+                //    InvoiceDto? dto = null;
+                //    try
+                //    {
+                //        dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
+                //    }
+                //    catch
+                //    {
+                //        dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
+                //    }
 
-                    if (dto != null)
-                    {
-                        entry.IsSavedOrAccepted = dto.IsValidationAccepted;
-                        if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
-                        {
-                            entry.HasSuspectFields = dto.TesseractConfirmed.Values.Any(v => !v);
-                            entry.IsValidated = !entry.HasSuspectFields;
-                        }
-                    }
-                }
+                //    if (dto != null)
+                //    {
+                //        entry.IsSavedOrAccepted = dto.IsValidationAccepted;
+                //        if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
+                //        {
+                //            entry.HasSuspectFields = dto.TesseractConfirmed.Values.Any(v => !v);
+                //            entry.IsValidated = !entry.HasSuspectFields;
+                //        }
+                //    }
+                //}
             }
 
             entry.ExceedsPageLimit = entry.TotalPages > maxPageCount;

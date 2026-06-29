@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -54,12 +55,25 @@ namespace K_OCRLib.Models
 
         // OCR data (formerly in OCRFile)
         public string? OcrText { get; set; }
-        public string? ValidatedOcrText { get; set; }
         public string? TesseractOcrText { get; set; }
         public int TotalPages { get; set; } = 1;
         public string? MergedJsonData { get; set; }
         public bool IsFullyProcessed { get; set; } = false;
-        public bool IsValidationAccepted { get; set; } = false;
+        public bool IsInvoiceAccepted { get; set; } = false;
+        //public string? InvoiceEdits { get; set; }
+        //public string? ItemEdits { get; set; }
+
+        // These go to the database as strings
+        public string? InvoiceEdits { get; set; }
+        
+        //[NotMapped]
+        //public JRaw? InvoiceEditsAsJRaw 
+        //{
+        //    get => string.IsNullOrEmpty(InvoiceEdits) ? null : new JRaw(InvoiceEdits);
+        //    set => InvoiceEdits = value?.ToString();
+        //}
+
+
 
         public string? Notes { get; set; }
 
@@ -73,5 +87,6 @@ namespace K_OCRLib.Models
         public virtual Batch? Batch { get; set; }
         public virtual ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();
         public virtual ICollection<DocumentField> DocumentFields { get; set; } = new List<DocumentField>();
+
     }
 }

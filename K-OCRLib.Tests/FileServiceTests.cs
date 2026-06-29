@@ -53,7 +53,7 @@ public class FileServiceTests
                 Notes = "note",
                 VendorCountry = "US",
                 CurrencyCode = "USD",
-                IsValidationAccepted = true
+                IsInvoiceAccepted = true
             });
 
             await using var verify = new KOCRDbContext(new DbContextOptionsBuilder<KOCRDbContext>().UseSqlite($"Data Source={dbPath}").Options);
@@ -61,8 +61,8 @@ public class FileServiceTests
 
             Assert.NotNull(row);
             Assert.Equal("Acme", row!.VendorName);
-            Assert.True(row.IsValidationAccepted);
-            Assert.NotNull(row.ValidatedOcrText);
+            Assert.True(row.IsInvoiceAccepted);
+            //Assert.NotNull(row.ValidatedOcrText);
             Assert.NotNull(row.ProcessedAtUtc);
         }
         finally

@@ -55,7 +55,7 @@ public sealed class SuperAdminDataService : ISuperAdminDataService
                 foreach (var b in batches)
                 {
                     var fileCount      = await db.Invoices.CountAsync(i => i.BatchId == b.BatchId);
-                    var validatedCount = await db.Invoices.CountAsync(i => i.BatchId == b.BatchId && i.IsValidationAccepted);
+                    var validatedCount = await db.Invoices.CountAsync(i => i.BatchId == b.BatchId && i.IsInvoiceAccepted);
 
                     results.Add(new BatchDetail
                     {

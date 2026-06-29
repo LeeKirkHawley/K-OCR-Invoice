@@ -160,7 +160,7 @@ namespace K_OCRLib.Services
                     ProcessedAtUtc       = i.ProcessedAtUtc,
                     TotalPages           = i.TotalPages,
                     IsFullyProcessed     = i.IsFullyProcessed,
-                    IsValidationAccepted = i.IsValidationAccepted,
+                    IsInvoiceAccepted = i.IsInvoiceAccepted,
                 })
                 .OrderBy(i => i.FilePath)
                 .ToListAsync();

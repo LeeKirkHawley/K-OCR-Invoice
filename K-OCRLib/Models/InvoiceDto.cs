@@ -1,3 +1,5 @@
+using Newtonsoft.Json.Linq;
+
 namespace K_OCRLib.Models
 {
     public sealed class BoundingBoxDto
@@ -31,6 +33,8 @@ namespace K_OCRLib.Models
         /// Fields absent from this dictionary were not checked (Azure returned no value).
         /// </summary>
         public Dictionary<string, bool> TesseractConfirmed { get; set; } = new();
+
+        public string? ItemEdits { get; set; }
     }
 
     public sealed class InvoiceDto
@@ -78,7 +82,9 @@ namespace K_OCRLib.Models
         /// Indicates whether the user has manually accepted this invoice's validation.
         /// When true, validation checks will be skipped and no validation indicators will be shown.
         /// </summary>
-        public bool IsValidationAccepted { get; set; }
+        public bool IsInvoiceAccepted { get; set; }
+
+        public string? InvoiceEdits { get; set; }
 
         /// <summary>Free-text notes entered by the user for this invoice.</summary>
         public string? Notes { get; set; }
@@ -92,11 +98,5 @@ namespace K_OCRLib.Models
         /// <summary>Raw OCR text (JSON string) from the original OCR process.</summary>
         public string? OcrText { get; set; }
 
-       /// <summary>
-       /// Validated/edited OCR text (JSON string) as stored in the database.
-       /// Only populated when the invoice has been saved or accepted.
-       /// Used for the Updated JSON tab display.
-       /// </summary>
-       public string? ValidatedOcrText { get; set; }
     }
 }

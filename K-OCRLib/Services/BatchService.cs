@@ -91,7 +91,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         if (batch is null) return null;
 
         var fileCount      = await Db.Invoices.CountAsync(i => i.BatchId == batchId);
-        var validatedCount = await Db.Invoices.CountAsync(i => i.BatchId == batchId && i.IsValidationAccepted);
+        var validatedCount = await Db.Invoices.CountAsync(i => i.BatchId == batchId && i.IsInvoiceAccepted);
 
         return new BatchDetail
         {

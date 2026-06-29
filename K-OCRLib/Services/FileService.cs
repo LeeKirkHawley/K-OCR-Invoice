@@ -36,65 +36,65 @@ namespace K_OCRLib.Services
                 }
 
                 // If ValidatedOcrText exists (user has edited/approved), use it but preserve bboxes from original
-                if (context != null && !string.IsNullOrEmpty(invoice.ValidatedOcrText))
-                {
-                    try
-                    {
-                        var validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText);
-                        if (validatedInvoices != null && context.Layout != null && validatedInvoices.Count > 0 && context.Layout.Count > 0)
-                        {
-                            // Copy bboxes from original to validated invoice using JSON manipulation
-                            var validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(validatedInvoices);
-                            var validatedJArray = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JArray>(validatedJson);
+                //if (context != null && !string.IsNullOrEmpty(invoice.ValidatedOcrText))
+                //{
+                //    try
+                //    {
+                //        var validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText);
+                //        if (validatedInvoices != null && context.Layout != null && validatedInvoices.Count > 0 && context.Layout.Count > 0)
+                //        {
+                //            // Copy bboxes from original to validated invoice using JSON manipulation
+                //            var validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(validatedInvoices);
+                //            var validatedJArray = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JArray>(validatedJson);
                             
-                            var originalJson = Newtonsoft.Json.JsonConvert.SerializeObject(context.Layout);
-                            var originalJArray = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JArray>(originalJson);
+                //            var originalJson = Newtonsoft.Json.JsonConvert.SerializeObject(context.Layout);
+                //            var originalJArray = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JArray>(originalJson);
                             
-                            if (validatedJArray != null && originalJArray != null)
-                            {
-                                for (int i = 0; i < validatedJArray.Count && i < originalJArray.Count; i++)
-                                {
-                                    var validatedObj = validatedJArray[i] as Newtonsoft.Json.Linq.JObject;
-                                    var originalObj = originalJArray[i] as Newtonsoft.Json.Linq.JObject;
+                //            if (validatedJArray != null && originalJArray != null)
+                //            {
+                //                for (int i = 0; i < validatedJArray.Count && i < originalJArray.Count; i++)
+                //                {
+                //                    var validatedObj = validatedJArray[i] as Newtonsoft.Json.Linq.JObject;
+                //                    var originalObj = originalJArray[i] as Newtonsoft.Json.Linq.JObject;
                                     
-                                    if (validatedObj != null && originalObj != null)
-                                    {
-                                        // Copy bbox fields from original
-                                        validatedObj["fieldBoundingBoxes"] = originalObj["fieldBoundingBoxes"];
-                                        validatedObj["originalPageWidth"] = originalObj["originalPageWidth"];
-                                        validatedObj["originalPageHeight"] = originalObj["originalPageHeight"];
-                                        validatedObj["pageCount"] = originalObj["pageCount"];
+                //                    if (validatedObj != null && originalObj != null)
+                //                    {
+                //                        // Copy bbox fields from original
+                //                        validatedObj["fieldBoundingBoxes"] = originalObj["fieldBoundingBoxes"];
+                //                        validatedObj["originalPageWidth"] = originalObj["originalPageWidth"];
+                //                        validatedObj["originalPageHeight"] = originalObj["originalPageHeight"];
+                //                        validatedObj["pageCount"] = originalObj["pageCount"];
                                         
-                                        // Copy item bboxes
-                                        var validatedItems = validatedObj["items"] as Newtonsoft.Json.Linq.JArray;
-                                        var originalItems = originalObj["items"] as Newtonsoft.Json.Linq.JArray;
-                                        if (validatedItems != null && originalItems != null)
-                                        {
-                                            for (int j = 0; j < validatedItems.Count && j < originalItems.Count; j++)
-                                            {
-                                                var vItem = validatedItems[j] as Newtonsoft.Json.Linq.JObject;
-                                                var oItem = originalItems[j] as Newtonsoft.Json.Linq.JObject;
-                                                if (vItem != null && oItem != null)
-                                                {
-                                                    vItem["boundingBoxes"] = oItem["boundingBoxes"];
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                //                        // Copy item bboxes
+                //                        var validatedItems = validatedObj["items"] as Newtonsoft.Json.Linq.JArray;
+                //                        var originalItems = originalObj["items"] as Newtonsoft.Json.Linq.JArray;
+                //                        if (validatedItems != null && originalItems != null)
+                //                        {
+                //                            for (int j = 0; j < validatedItems.Count && j < originalItems.Count; j++)
+                //                            {
+                //                                var vItem = validatedItems[j] as Newtonsoft.Json.Linq.JObject;
+                //                                var oItem = originalItems[j] as Newtonsoft.Json.Linq.JObject;
+                //                                if (vItem != null && oItem != null)
+                //                                {
+                //                                    vItem["boundingBoxes"] = oItem["boundingBoxes"];
+                //                                }
+                //                            }
+                //                        }
+                //                    }
+                //                }
+                //            }
                             
-                            // Deserialize back to InvoiceDto with bboxes preserved
-                            validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<InvoiceDto>>(validatedJArray.ToString());
-                            if (validatedInvoices != null)
-                                context.Layout = validatedInvoices;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "[Database] Failed to deserialize/merge ValidatedOcrText for {FileName}.", Path.GetFileName(imagePath));
-                    }
-                }
+                //            // Deserialize back to InvoiceDto with bboxes preserved
+                //            validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<InvoiceDto>>(validatedJArray.ToString());
+                //            if (validatedInvoices != null)
+                //                context.Layout = validatedInvoices;
+                //        }
+                //    }
+                //    catch (Exception ex)
+                //    {
+                //        _logger.LogError(ex, "[Database] Failed to deserialize/merge ValidatedOcrText for {FileName}.", Path.GetFileName(imagePath));
+                //    }
+                //}
 
                 if (context != null
                     && string.IsNullOrWhiteSpace(context.TesseractOcrText)
@@ -110,10 +110,27 @@ namespace K_OCRLib.Services
                     {
                         if (!string.IsNullOrEmpty(invoice.OcrText))
                             invoiceDto.OcrText = invoice.OcrText;
-                        
-                        // Attach the ValidatedOcrText JSON string for the Updated JSON tab
-                        if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
-                            invoiceDto.ValidatedOcrText = invoice.ValidatedOcrText;
+
+                        if (!string.IsNullOrEmpty(invoice.InvoiceEdits))
+                            invoiceDto.InvoiceEdits = invoice.InvoiceEdits;
+
+                        // Overlay DB InvoiceItem rows onto context items so editable fields
+                        // and ItemEdits come from the database, not the OcrText blob.
+                        if (invoice.Items.Count > 0 && invoiceDto.Items.Count > 0)
+                        {
+                            var dbItems = invoice.Items.ToList();
+                            for (int i = 0; i < invoiceDto.Items.Count && i < dbItems.Count; i++)
+                            {
+                                var dbItem  = dbItems[i];
+                                var dtoItem = invoiceDto.Items[i];
+                                dtoItem.Description = dbItem.Description;
+                                dtoItem.Quantity    = dbItem.Quantity;
+                                dtoItem.UnitPrice   = dbItem.UnitPrice;
+                                dtoItem.Amount      = dbItem.LineTotal;
+                                dtoItem.TaxRate     = dbItem.TaxRate ?? dtoItem.TaxRate;
+                                dtoItem.ItemEdits   = dbItem.ItemEdits;
+                            }
+                        }
                     }
                 }
 
@@ -147,6 +164,12 @@ namespace K_OCRLib.Services
                 // Do NOT populate ValidatedOcrText here - it should only be set when user saves or accepts
                 existing.IsFullyProcessed = isFullyProcessed;
                 existing.ProcessedAtUtc = isFullyProcessed ? DateTime.UtcNow : existing.ProcessedAtUtc;
+
+                // Persist line items from OCR results so all data lives in the database
+                var ocrItems = context.Layout?.FirstOrDefault()?.Items;
+                if (ocrItems != null)
+                    SyncItemsFromDto(existing, ocrItems, preserveEdits: false);
+
                 await _databaseService.SaveInvoiceAsync(existing);
                 _logger.LogDebug("[Database] Updated OCR data for: {FileName}.", Path.GetFileName(imagePath));
             }
@@ -158,27 +181,6 @@ namespace K_OCRLib.Services
         
         public async Task SaveValidatedLayoutAsync(string imagePath, InvoiceDto invoice)
         {
-            // Save the full invoice (including bounding boxes) to ValidatedOcrText.
-            // The bboxes are needed for the validation panel display.
-            // Stripping happens only in the frontend for the Updated JSON tab display.
-            
-            // Serialize as a single-element list to remain consistent with LoadContextAsync
-            // which deserialises ValidatedOcrText as List<InvoiceDto>.
-            string validatedJson = ""; 
-
-            try
-            {
-                if (invoice != null)
-                {
-                    validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(
-                        new List<InvoiceDto> { invoice }, Newtonsoft.Json.Formatting.Indented);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to serialize validated json for {FileName}.", Path.GetFileName(imagePath));
-            }
-
             var existing = await _databaseService.GetInvoiceByFilePathAsync(imagePath);
             if (existing != null)
             {
@@ -197,11 +199,17 @@ namespace K_OCRLib.Services
                 existing.VendorCountry        = invoice.VendorCountry;
                 existing.CurrencyCode         = invoice.CurrencyCode;
 
+                // Update InvoiceEdits from DTO
+                existing.InvoiceEdits = invoice.InvoiceEdits;
+
+                // Upsert InvoiceItems from DTO (preserving user edits)
+                if (invoice.Items != null)
+                    SyncItemsFromDto(existing, invoice.Items, preserveEdits: true);
+
                 // Preserve the caller's validation state — AcceptValidation sets
                 // IsValidationAccepted = true on the DTO before calling here;
                 // a plain Save leaves it unchanged.
-                existing.ValidatedOcrText     = validatedJson;
-                existing.IsValidationAccepted = invoice.IsValidationAccepted;
+                existing.IsInvoiceAccepted = invoice.IsInvoiceAccepted;
                 existing.ProcessedAtUtc       = DateTime.UtcNow;
 
                 await _databaseService.SaveInvoiceAsync(existing);
@@ -211,6 +219,58 @@ namespace K_OCRLib.Services
                 _logger.LogWarning("[Database] No invoice record found for {FileName} — skipping validated layout save.", Path.GetFileName(imagePath));
             }
         }
+
+        /// <summary>
+        /// Syncs the <see cref="InvoiceItem"/> rows on <paramref name="existing"/> to match
+        /// <paramref name="dtoItems"/> by index.  Extra DB rows beyond the DTO count are removed;
+        /// new DTO items beyond the DB count are added.
+        /// </summary>
+        /// <param name="preserveEdits">
+        /// When <c>true</c> (user save), the <c>ItemEdits</c> string from the DTO is written to the entity.
+        /// When <c>false</c> (OCR save), <c>ItemEdits</c> on existing rows is left unchanged so user edits
+        /// are not overwritten if OCR re-runs.
+        /// </param>
+        private static void SyncItemsFromDto(Invoice existing, IList<InvoiceItemDto> dtoItems, bool preserveEdits)
+        {
+            var existingList = existing.Items.ToList();
+
+            for (int i = 0; i < dtoItems.Count; i++)
+            {
+                var dto = dtoItems[i];
+
+                if (i < existingList.Count)
+                {
+                    // Update existing row
+                    var entity = existingList[i];
+                    entity.Description = dto.Description;
+                    entity.Quantity    = dto.Quantity;
+                    entity.UnitPrice   = dto.UnitPrice;
+                    entity.LineTotal   = dto.Amount;
+                    entity.TaxRate     = dto.TaxRate;
+                    if (preserveEdits)
+                        entity.ItemEdits = dto.ItemEdits;
+                }
+                else
+                {
+                    // Add new row
+                    existing.Items.Add(new InvoiceItem
+                    {
+                        InvoiceId   = existing.Id,
+                        Description = dto.Description,
+                        Quantity    = dto.Quantity,
+                        UnitPrice   = dto.UnitPrice,
+                        LineTotal   = dto.Amount,
+                        TaxRate     = dto.TaxRate,
+                        ItemEdits   = preserveEdits ? dto.ItemEdits : null,
+                    });
+                }
+            }
+
+            // Remove DB rows that no longer exist in the DTO
+            for (int i = existingList.Count - 1; i >= dtoItems.Count; i--)
+                existing.Items.Remove(existingList[i]);
+        }
+
 
         public IEnumerable<string> LoadFiles(string directory, string[]? extensions = null)
         {

@@ -1,5 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using K_OCRLib.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Newtonsoft.Json.Linq;
 
 namespace K_OCRLib.Data
 {
@@ -80,6 +82,7 @@ namespace K_OCRLib.Data
 
             modelBuilder.Entity<OcrJobEntity>()
                 .HasIndex(j => j.QueuedAtUtc);
+
         }
     }
 }
