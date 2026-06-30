@@ -1422,7 +1422,8 @@
         });
     }
 
-    function renderBboxOverlayForPage(pageNum, wrap) {
+    function renderBboxOverlayForPage(pageNum, wrap) 
+    {
         if (!wrap) wrap = document.querySelector(`.viewer-img-wrap[data-page="${pageNum}"]`);
         if (!wrap || !_currentInvoice) return;
 
@@ -1459,12 +1460,17 @@
                 poly.style.pointerEvents = 'all';
                 poly.style.cursor        = 'pointer';
                 poly.classList.add('viewer-bbox');
+
+        // this block adds the colored border to the polygon based on its state (selected, saved, suspect, ok)
                 // In validation panel: selected > saved/approved/edited > suspect > ok
-                poly.classList.add(_selectedFieldKey === key ? 'bbox-selected'
-                                 : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isInvoiceAccepted ? 'bbox-saved'
-                                 : isSuspect(invoice, key)       ? 'bbox-suspect'
-                                 :                             'bbox-ok');
+                // poly.classList.add(_selectedFieldKey === key ? 'bbox-selected'
+                //                  : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isInvoiceAccepted ? 'bbox-saved'
+                //                  : isSuspect(invoice, key)       ? 'bbox-suspect'
+                //                  :                             'bbox-ok');
+
+         // this line adds the colored border to the one selected field.
                 poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
+
                 svg.appendChild(poly);
             }
         }
@@ -1486,12 +1492,17 @@
                 poly.style.pointerEvents = 'all';
                 poly.style.cursor        = 'pointer';
                 poly.classList.add('viewer-bbox');
+
+        // this block adds the colored border to the polygon based on its state (selected, saved, suspect, ok)
                 // In validation panel: selected > saved/approved/edited > suspect > ok
-                poly.classList.add((_selectedFieldKey && _selectedFieldKey.startsWith(prefix)) ? 'bbox-selected'
-                                 : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isInvoiceAccepted ? 'bbox-saved'
-                                 : isItemSuspect(invoice, item, i)                                 ? 'bbox-suspect'
-                                 :                                                              'bbox-ok');
+                // poly.classList.add((_selectedFieldKey && _selectedFieldKey.startsWith(prefix)) ? 'bbox-selected'
+                //                  : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isInvoiceAccepted ? 'bbox-saved'
+                //                  : isItemSuspect(invoice, item, i)                                 ? 'bbox-suspect'
+                //                  :                                                              'bbox-ok');
+
+        // this line adds the colored border to the one selected field.
                 poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
+
                 svg.appendChild(poly);
             }
         }
