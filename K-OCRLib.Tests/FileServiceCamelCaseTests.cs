@@ -64,7 +64,7 @@ public class FileServiceCamelCaseTests
                   "tesseractConfirmed": {},
                   "confidenceConfirmed": {},
                   "mathConfirmed": {},
-                  "isValidationAccepted": false,
+                  //"isValidationAccepted": false,
                   "notes": null,
                   "vendorCountry": null,
                   "currencyCode": "USD"

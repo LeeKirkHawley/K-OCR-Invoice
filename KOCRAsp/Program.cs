@@ -330,6 +330,9 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/error/{0}");
 app.UseHttpsRedirection();
+
+// This is a custom middleware in ASP.NET Core that enforces URL canonicalization (also known as URL normalization).
+// It runs on every incoming request and redirects non-canonical URLs to their canonical form using a permanent (301) redirect.
 app.Use(async (context, next) =>
 {
     var requestPath = context.Request.Path.Value ?? string.Empty;

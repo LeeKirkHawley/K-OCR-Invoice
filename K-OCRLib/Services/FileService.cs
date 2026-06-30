@@ -28,6 +28,12 @@ namespace K_OCRLib.Services
                     try
                     {
                         context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(invoice.OcrText);
+
+                        // looks like invoice.OcrText may not have the updated IsInvoiceAccepted value, so we need to set it from the database entity
+                        //if(context?.Layout?.Count() > 0)
+                        //{
+                        //    context.Layout[0].IsInvoiceAccepted = invoice.IsInvoiceAccepted;
+                        //}
                     }
                     catch (Exception ex)
                     {
@@ -113,6 +119,8 @@ namespace K_OCRLib.Services
 
                         if (!string.IsNullOrEmpty(invoice.InvoiceEdits))
                             invoiceDto.InvoiceEdits = invoice.InvoiceEdits;
+
+                        invoiceDto.IsInvoiceAccepted = invoice.IsInvoiceAccepted;
 
                         // Overlay DB InvoiceItem rows onto context items so editable fields
                         // and ItemEdits come from the database, not the OcrText blob.

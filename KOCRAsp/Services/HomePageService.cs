@@ -183,34 +183,12 @@ public sealed class HomePageService : IHomePageService
 
         var entry = new FileListEntry
         {
-            FilePath = invoice.FilePath ?? string.Empty,
-            FileName = Path.GetFileName(invoice.FilePath ?? string.Empty),
-            IsProcessed = true
+            FilePath        = invoice.FilePath ?? string.Empty,
+            FileName        = Path.GetFileName(invoice.FilePath ?? string.Empty),
+            IsProcessed     = true,
+            HasOcrResult    = invoice.IsFullyProcessed,
+            IsSavedOrAccepted = invoice.IsInvoiceAccepted,
         };
-
-        //if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
-        //{
-        //    entry.HasOcrResult = true;
-        //    InvoiceDto? dto = null;
-        //    try
-        //    {
-        //        dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
-        //    }
-        //    catch
-        //    {
-        //        dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
-        //    }
-
-        //    if (dto != null)
-        //    {
-        //        entry.IsSavedOrAccepted = dto.IsValidationAccepted;
-        //        if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
-        //        {
-        //            entry.HasSuspectFields = dto.TesseractConfirmed.Values.Any(v => !v);
-        //            entry.IsValidated = !entry.HasSuspectFields;
-        //        }
-        //    }
-        //}
 
         return entry;
     }
@@ -349,31 +327,10 @@ public sealed class HomePageService : IHomePageService
             var invoice = await _dbSvc.GetInvoiceByFilePathAsync(fp);
             if (invoice != null)
             {
-                entry.IsProcessed = true;
-                entry.TotalPages = invoice.TotalPages;
-                //if (!string.IsNullOrEmpty(invoice.ValidatedOcrText))
-                //{
-                //    entry.HasOcrResult = true;
-                //    InvoiceDto? dto = null;
-                //    try
-                //    {
-                //        dto = JsonConvert.DeserializeObject<InvoiceDto>(invoice.ValidatedOcrText);
-                //    }
-                //    catch
-                //    {
-                //        dto = JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText)?.FirstOrDefault();
-                //    }
-
-                //    if (dto != null)
-                //    {
-                //        entry.IsSavedOrAccepted = dto.IsValidationAccepted;
-                //        if (!entry.IsSavedOrAccepted && dto.TesseractConfirmed?.Count > 0)
-                //        {
-                //            entry.HasSuspectFields = dto.TesseractConfirmed.Values.Any(v => !v);
-                //            entry.IsValidated = !entry.HasSuspectFields;
-                //        }
-                //    }
-                //}
+                entry.IsProcessed       = true;
+                entry.TotalPages        = invoice.TotalPages;
+                entry.HasOcrResult      = invoice.IsFullyProcessed;
+                entry.IsSavedOrAccepted = invoice.IsInvoiceAccepted;
             }
 
             entry.ExceedsPageLimit = entry.TotalPages > maxPageCount;

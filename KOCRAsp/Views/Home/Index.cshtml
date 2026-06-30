@@ -363,10 +363,11 @@
                 document.getElementById('rawJsonContent').textContent =
                 rawData ? JSON.stringify(rawData, null, 2) : '';
 
-                // Updated JSON tab only displays ValidatedOcrText from database
-                //const validatedData = getValidatedOcrTextDisplay(data.invoice);
-                //document.getElementById('validatedJsonContent').textContent =
-                //    validatedData ? JSON.stringify(validatedData, null, 2) : '';
+                // Updated JSON tab shows the export-ready invoice (edits applied) only
+                // when the invoice has been edited or accepted
+                const updatedData = buildUpdatedInvoiceDisplay(data.invoice);
+                document.getElementById('validatedJsonContent').textContent =
+                    updatedData ? JSON.stringify(updatedData, null, 2) : '';
             }
             else
             {
@@ -1128,6 +1129,30 @@
 
         renderBboxOverlay();
 
+        // Restore blue outlines for previously edited/saved fields.
+        // Populate _savedFieldKeys from persisted invoiceEdits so a reload
+        // shows blue borders without requiring a new save in this session.
+        for (const [k] of invoiceEdits) {
+            const f = HEADER_FIELDS.find(hf => hf.prop === k);
+            if (f) _savedFieldKeys.add(f.key);
+        }
+        // For item edits, mark the item's field keys as saved
+        (inv.items ?? []).forEach((item, i) => {
+            for (const [k] of parseEditsMap(item.itemEdits)) {
+                _savedFieldKeys.add(`Item_${i}_${k.charAt(0).toUpperCase() + k.slice(1)}`);
+            }
+        });
+        // If the invoice is accepted, every field gets the blue outline
+        if (inv.isInvoiceAccepted) {
+            for (const f of HEADER_FIELDS) _savedFieldKeys.add(f.key);
+            (inv.items ?? []).forEach((_, i) => {
+                ['Description','Quantity','UnitPrice','TaxRate','Amount'].forEach(field => {
+                    _savedFieldKeys.add(`Item_${i}_${field}`);
+                });
+            });
+        }
+        refreshSavedFieldStyling();
+
         // Auto-select first field
         const firstInput = container.querySelector('.inv-field');
         if (firstInput) 
@@ -1308,7 +1333,7 @@
             el.className = 'validation-status-label';
             return;
         }
-        if (inv.isValidationAccepted) {
+        if (inv.isInvoiceAccepted) {
             el.textContent = 'Validated';
             el.className = 'validation-status-label is-validated';
         } else {
@@ -1436,7 +1461,7 @@
                 poly.classList.add('viewer-bbox');
                 // In validation panel: selected > saved/approved/edited > suspect > ok
                 poly.classList.add(_selectedFieldKey === key ? 'bbox-selected'
-                                 : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isValidationAccepted ? 'bbox-saved'
+                                 : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isInvoiceAccepted ? 'bbox-saved'
                                  : isSuspect(invoice, key)       ? 'bbox-suspect'
                                  :                             'bbox-ok');
                 poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
@@ -1463,7 +1488,7 @@
                 poly.classList.add('viewer-bbox');
                 // In validation panel: selected > saved/approved/edited > suspect > ok
                 poly.classList.add((_selectedFieldKey && _selectedFieldKey.startsWith(prefix)) ? 'bbox-selected'
-                                 : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isValidationAccepted ? 'bbox-saved'
+                                 : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isInvoiceAccepted ? 'bbox-saved'
                                  : isItemSuspect(invoice, item, i)                                 ? 'bbox-suspect'
                                  :                                                              'bbox-ok');
                 poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
@@ -1550,7 +1575,7 @@
     }
 
     function isSuspect(inv, key) {
-        if (inv.isValidationAccepted) return false;
+        if (inv.isInvoiceAccepted) return false;
         const tc = inv.tesseractConfirmed;
         const mc = inv._mathConfirmed ?? {};
         const fc = inv.fieldConfidences;
@@ -1583,7 +1608,7 @@
         return { value: valueStr, errors };
     }
     function isItemSuspect(inv, item, idx) {
-        if (inv.isValidationAccepted) return false;
+        if (inv.isInvoiceAccepted) return false;
         const tc = item.tesseractConfirmed ?? {};
         const fc = item.fieldConfidences ?? {};
         const mc = inv._mathConfirmed ?? {};
@@ -1593,7 +1618,7 @@
     }
 
     function isItemFieldSuspect(inv, item, fieldKey, idx) {
-        if (inv.isValidationAccepted) return false;
+        if (inv.isInvoiceAccepted) return false;
         const tc = item.tesseractConfirmed ?? {};
         const fc = item.fieldConfidences ?? {};
         const mc = inv._mathConfirmed ?? {};
@@ -1606,7 +1631,7 @@
     }
 
     function itemFieldTooltip(inv, item, fieldKey, idx) {
-        if (inv.isValidationAccepted) return '';
+        if (inv.isInvoiceAccepted) return '';
         const reasons = [];
         const tc = item.tesseractConfirmed ?? {};
         const fc = item.fieldConfidences ?? {};
@@ -1622,7 +1647,7 @@
     // Tooltip showing the field value on line 1, then one error per line.
     function buildItemFieldTooltip(inv, item, fieldKey, idx, value) {
         const errors = [];
-        if (!inv.isValidationAccepted) {
+        if (!inv.isInvoiceAccepted) {
             const tc = item.tesseractConfirmed ?? {};
             const fc = item.fieldConfidences ?? {};
             const mc = inv._mathConfirmed ?? {};
@@ -1637,7 +1662,7 @@
     }
 
     function itemTooltip(inv, item, idx) {
-        if (inv.isValidationAccepted) return '';
+        if (inv.isInvoiceAccepted) return '';
         const fieldReasons = {};
         const add = (field, reason) => { (fieldReasons[field] ??= []).push(reason); };
         const tc = item.tesseractConfirmed ?? {};
@@ -2190,6 +2215,44 @@
             ...rest,
             items: (items ?? []).map(({ boundingBoxes, ...itemRest }) => itemRest)
         };
+    }
+
+    // ── Build the export-ready invoice for the Updated JSON tab ──
+    // Returns an object with edits overlaid on base fields, internal-only fields
+    // stripped, and bbox data removed.  Returns null if the invoice has no edits
+    // and has not been accepted (tab should be empty in that case).
+    function buildUpdatedInvoiceDisplay(inv) {
+        if (!inv) return null;
+
+        const headerEdits = parseEditsMap(inv.invoiceEdits);
+        const hasHeaderEdits = headerEdits.size > 0;
+        const hasItemEdits = (inv.items ?? []).some(item => parseEditsMap(item.itemEdits).size > 0);
+
+        if (!inv.isInvoiceAccepted && !hasHeaderEdits && !hasItemEdits) return null;
+
+        // Destructure out internal / bbox fields from the header
+        const {
+            fieldBoundingBoxes, originalPageWidth, originalPageHeight, pageCount,
+            ocrText, invoiceEdits, fieldConfidences, tesseractConfirmed,
+            items,
+            ...headerFields
+        } = inv;
+
+        // Overlay header edits
+        for (const [k, v] of headerEdits) {
+            headerFields[k] = v;
+        }
+
+        // Build effective items with item edits applied, stripping internal fields
+        const effectiveItems = (items ?? []).map(item => {
+            const { boundingBoxes, fieldConfidences: _fc, tesseractConfirmed: _tc, itemEdits, ...itemFields } = item;
+            for (const [k, v] of parseEditsMap(itemEdits)) {
+                itemFields[k] = v;
+            }
+            return itemFields;
+        });
+
+        return { ...headerFields, items: effectiveItems };
     }
 
      // Check if a field value differs from the raw OCR text stored in the invoice
