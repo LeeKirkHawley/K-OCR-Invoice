@@ -298,41 +298,45 @@
 
 
 @section Scripts {
+<script src="~/js/variables.js"></script>
 <script src="~/lib/signalr/signalr.min.js"></script>
 <script>
-    let _currentFilePath  = null;
-    let _currentInvoice   = null;
-    let _selectedFieldKey = null;
-    let _currentPage      = @Model.CurrentPage;
-    let _pageSize         = @Model.PageSize;
-    let _refreshAbort     = null;
-    let _contextMenuFilePath = null;
-    let _pendingMoveFilePath = null;
-    let _ocrLoaded = false;
+     var _currentPage = @Model.CurrentPage;
+     var _pageSize    = @Model.PageSize;
 
-    const _queuedFilePathKeys = new Set();
-    const _editedFieldKeys = new Set();
-    const _savedFieldKeys = new Set();
+    var _orgId                   = '@Html.Raw(Model.OrgId)';
+    var _currentBatchId          = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
+    var _maxPagesPerInvoice      = @Model.MaxPagesPerInvoice;
+    var _isBetaTestOrganization  = @(Model.IsBetaTestOrganization.ToString().ToLowerInvariant());
+    var _isOrgAdmin              = @(Model.IsOrgAdmin.ToString().ToLowerInvariant());
+    var _showBetaWelcomeDialog   = @(Model.ShowBetaWelcomeDialog.ToString().ToLowerInvariant());
+    var _betaLimitExceeded       = @(Model.BetaOcrLimitExceeded.ToString().ToLowerInvariant());
+    var _betaUsedPages           = @Model.BetaUsedOcrPages;
+    var _betaMaxPages            = @Model.BetaMaxOcrPages;
+    var _betaPagesRemaining      = @Model.BetaRemainingOcrPages;
+    var _betaExceededDialogShown = _betaLimitExceeded;
 
-    const _orgId             = '@Html.Raw(Model.OrgId)';
-    const _currentBatchId    = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
-    const _maxPagesPerInvoice = @Model.MaxPagesPerInvoice;
-    const _isBetaTestOrganization = @(Model.IsBetaTestOrganization.ToString().ToLowerInvariant());
-    const _isOrgAdmin = @(Model.IsOrgAdmin.ToString().ToLowerInvariant());
-    const _showBetaWelcomeDialog = @(Model.ShowBetaWelcomeDialog.ToString().ToLowerInvariant());
-    let _betaLimitExceeded = @(Model.BetaOcrLimitExceeded.ToString().ToLowerInvariant());
-    let _betaUsedPages = @Model.BetaUsedOcrPages;
-    let _betaMaxPages = @Model.BetaMaxOcrPages;
-    let _betaPagesRemaining = @Model.BetaRemainingOcrPages;
-    let _betaExceededDialogShown = _betaLimitExceeded;
+    var _isGuestOrganization       = @(Model.IsGuestOrganization.ToString().ToLowerInvariant());
+    var _showGuestWelcomeDialog    = @(Model.ShowGuestWelcomeDialog.ToString().ToLowerInvariant());
+    var _guestMaxBatches           = @Model.GuestMaxBatches;
+    var _guestActiveBatchCount     = @Model.GuestActiveBatchCount;
+    var _guestMaxInvoicesPerBatch  = @Model.GuestMaxInvoicesPerBatch;
+    var _guestMaxPagesPerInvoice   = @Model.GuestMaxPagesPerInvoice;
+    var _minConfidenceThreshold    = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
 
-    const _isGuestOrganization = @(Model.IsGuestOrganization.ToString().ToLowerInvariant());
-    const _showGuestWelcomeDialog = @(Model.ShowGuestWelcomeDialog.ToString().ToLowerInvariant());
-    const _guestMaxBatches = @Model.GuestMaxBatches;
-    const _guestActiveBatchCount = @Model.GuestActiveBatchCount;
-    const _guestMaxInvoicesPerBatch = @Model.GuestMaxInvoicesPerBatch;
-    const _guestMaxPagesPerInvoice = @Model.GuestMaxPagesPerInvoice;
-    const _minConfidenceThreshold = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+    // ── File list click handlers (assigned early so onclick attributes work even if later init crashes) ──
+    window.handleFileListItemClick = function (item, event) 
+    {
+        if (event && typeof event.button === 'number' && event.button !== 0) return;
+        activateFileListItem(item);
+    };
+
+    window.handleFileListItemKeydown = function (event, item) 
+    {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        activateFileListItem(item);
+    };
 
     async function selectFile(filePath, exceedsLimit)
     {
@@ -817,19 +821,6 @@
         const exceedsLimit = item.dataset.exceedsLimit === 'true';
         selectFile(item.dataset.filepath, exceedsLimit);
     }
-
-    window.handleFileListItemClick = function (item, event) 
-    {
-        if (event && typeof event.button === 'number' && event.button !== 0) return;
-        activateFileListItem(item);
-    };
-
-    window.handleFileListItemKeydown = function (event, item) 
-    {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        activateFileListItem(item);
-    };
 
     function handleFileListItemContextMenu(event, item) 
     {

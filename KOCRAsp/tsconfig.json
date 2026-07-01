@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./wwwroot/js", // ← Compiled JS goes here
+    "sourceMap": true
+  },
+  "include": [ "Views/**/*.ts" ],
+  "exclude": [ "node_modules", "wwwroot" ]
+}
+
+
+//{
+//  "compilerOptions": {
+//    "noImplicitAny": false,
+//    "noEmitOnError": true,
+//    "removeComments": false,
+//    "sourceMap": true,
+//    "target": "es5"
+//  },
+//  "exclude": [
+//    "node_modules",
+//    "wwwroot"
+//  ]
+//}
