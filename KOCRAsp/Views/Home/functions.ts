@@ -60,3 +60,39 @@ var getAllFileEntries = async function(dataTransferItemList: any): Promise<any[]
     return fileEntries;
 };
 
+var renderDialogFileList = function(fileListEl: HTMLElement, uploadBtn: HTMLButtonElement, selectedFiles: any[]): void 
+{
+    fileListEl.innerHTML = '';
+
+    if (selectedFiles.length === 0) 
+    {
+        uploadBtn.disabled = true;
+        return;
+    }
+
+    uploadBtn.disabled = false;
+
+    selectedFiles.forEach((file: any, index: number) => 
+    {
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:#f8f9fa; border-radius:6px;';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = file.relativePath || file.name;
+        nameSpan.style.cssText = 'flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '×';
+        removeBtn.style.cssText = 'background:none; border:none; color:#dc3545; font-size:1.2rem; cursor:pointer; padding:0 8px;';
+        removeBtn.onclick = () => 
+        {
+            selectedFiles.splice(index, 1);
+            renderDialogFileList(fileListEl, uploadBtn, selectedFiles);
+        };
+
+        div.appendChild(nameSpan);
+        div.appendChild(removeBtn);
+        fileListEl.appendChild(div);
+    });
+};
+

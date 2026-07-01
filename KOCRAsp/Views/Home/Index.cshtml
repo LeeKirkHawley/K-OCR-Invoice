@@ -2391,7 +2391,7 @@
         {
             selectedFiles.push(...e.dataTransfer.files);
         }
-        renderDialogFileList();
+        renderDialogFileList(fileListEl, uploadBtn, selectedFiles);
     });
 
     // Browse button(s)
@@ -2401,7 +2401,7 @@
             if (f.webkitRelativePath) f.relativePath = f.webkitRelativePath;
             selectedFiles.push(f);
         }
-        renderDialogFileList();
+        renderDialogFileList(fileListEl, uploadBtn, selectedFiles);
         fileInput.value = '';
     });
 
@@ -2411,7 +2411,7 @@
                 if (f.webkitRelativePath) f.relativePath = f.webkitRelativePath;
                 selectedFiles.push(f);
             }
-            renderDialogFileList();
+            renderDialogFileList(fileListEl, uploadBtn, selectedFiles);
             folderInput.value = '';
         });
     }
@@ -2480,7 +2480,7 @@
 
                 // Reset and close dialog
                 selectedFiles = [];
-                renderDialogFileList();
+                renderDialogFileList(fileListEl, uploadBtn, selectedFiles);
                 closeDialog();
             } else {
                 if (result.betaLimitExceeded) {
@@ -2506,48 +2506,12 @@
     function resetState() 
     {
         selectedFiles = [];
-        renderDialogFileList();
+        renderDialogFileList(fileListEl, uploadBtn, selectedFiles);
         dropZone.style.borderColor = '#ccc';
         dropZone.style.backgroundColor = '';
     }
 
-    function renderDialogFileList() 
-    {
-        fileListEl.innerHTML = '';
-
-        if (selectedFiles.length === 0) 
-        {
-            uploadBtn.disabled = true;
-            return;
-        }
-
-        uploadBtn.disabled = false;
-
-        selectedFiles.forEach((file, index) => 
-        {
-            const div = document.createElement('div');
-            div.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:#f8f9fa; border-radius:6px;';
-
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = file.relativePath || file.name;
-            nameSpan.style.cssText = 'flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-
-            const removeBtn = document.createElement('button');
-            removeBtn.textContent = '×';
-            removeBtn.style.cssText = 'background:none; border:none; color:#dc3545; font-size:1.2rem; cursor:pointer; padding:0 8px;';
-            removeBtn.onclick = () => 
-            {
-                selectedFiles.splice(index, 1);
-                renderDialogFileList();
-            };
-
-            div.appendChild(nameSpan);
-            div.appendChild(removeBtn);
-            fileListEl.appendChild(div);
-        });
-    }
-
-    // ===== File upload helper functions moved to functions.js =====
+    // ===== File upload helper functions moved to functions.ts =====
 
 </script>
 }
