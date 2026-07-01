@@ -2352,13 +2352,13 @@
     });
 
     // Close handlers
-    closeBtn.addEventListener('click', closeDialog);
-    cancelBtn.addEventListener('click', closeDialog);
+    closeBtn.addEventListener('click', () => closeDialog(dialog));
+    cancelBtn.addEventListener('click', () => closeDialog(dialog));
 
     dialog.addEventListener('close', () => 
     {
         // Reset when dialog is closed
-        resetState();
+        resetState(dropZone, fileListEl, uploadBtn, selectedFiles);
     });
 
     // Drag & Drop handlers
@@ -2417,101 +2417,7 @@
     }
 
     // Upload button
-    uploadBtn.addEventListener('click', async () => 
-    {
-        if (selectedFiles.length === 0) return;
-
-        if (_isBetaTestOrganization && _betaLimitExceeded) {
-            showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
-            return;
-        }
-
-        uploadBtn.disabled = true;
-        uploadBtn.textContent = 'Uploading...';
-
-        const formData = new FormData();
-        selectedFiles.forEach(file => {
-            // Use relativePath if available (from folder drag)
-            const filename = file.relativePath || file.name;
-            formData.append('files', file, filename);
-            formData.append('clientPaths', filename);
-        });
-
-        showUploadOverlay();
-        try {
-            const result = await postForm('/home/uploadfiles', formData);
-            setBetaLimitStateFromServer(result);
-            if (result.success) {
-                showToast(`Uploaded ${result.filesUploaded} file(s).`);
-                if (result.filesSkippedByLimit > 0) {
-                    if (_isGuestOrganization) {
-                        showGuestOcrLimitModal(
-                            `${result.filesSkippedByLimit} file(s) were not uploaded: the batch has reached its limit of ${_guestMaxInvoicesPerBatch} files. ` +
-                            `Create a new batch to upload more (up to ${_guestMaxBatches} batches allowed).`,
-                            'Guest Batch Limit Reached'
-                        );
-                    } else {
-                        showToast(`${result.filesSkippedByLimit} file(s) were not uploaded: batch invoice limit reached.`, 'warning');
-                    }
-                }
-
-                // Refresh UI to reflect uploaded files — go to first page so new uploads are visible
-                await refreshFileList(1);
-                await refreshBatchDropdown();
-                await updateExportButtonState();
-
-                // If server returned uploaded file names, select the first one in the file list
-                try {
-                    const uploadedNames = result.uploadedFileNames || [];
-                    if (uploadedNames.length > 0) {
-                        const target = uploadedNames[0];
-                        const items = document.querySelectorAll('.file-list-item');
-                        for (const item of items) {
-                            const nameSpan = item.querySelector('.text-truncate');
-                            if (nameSpan && nameSpan.textContent && nameSpan.textContent.trim() === target) {
-                                item.click();
-                                break;
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Auto-select uploaded file failed:', e);
-                }
-
-                // Reset and close dialog
-                selectedFiles = [];
-                renderDialogFileList(fileListEl, uploadBtn, selectedFiles);
-                closeDialog();
-            } else {
-                if (result.betaLimitExceeded) {
-                    showBetaDialog(result.error ?? `This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
-                }
-                showToast(result.error ?? 'Upload failed.', 'error');
-            }
-        } catch (err) {
-            showToast('Upload error: ' + err.message, 'error');
-            console.error(err);
-        } finally {
-            hideUploadOverlay();
-            uploadBtn.disabled = false;
-            uploadBtn.textContent = 'Upload';
-        }
-    });
-
-    function closeDialog() 
-    {
-        dialog.close();
-    }
-
-    function resetState() 
-    {
-        selectedFiles = [];
-        renderDialogFileList(fileListEl, uploadBtn, selectedFiles);
-        dropZone.style.borderColor = '#ccc';
-        dropZone.style.backgroundColor = '';
-    }
-
-    // ===== File upload helper functions moved to functions.ts =====
+    uploadBtn.addEventListener('click', () => handleUploadClick(dialog, uploadBtn, fileListEl, selectedFiles));
 
 </script>
 }
