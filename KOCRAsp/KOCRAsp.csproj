@@ -35,10 +35,6 @@
     </None>
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Views\Home\Scripts\" />
-  </ItemGroup>
-
     <!--<ItemGroup>
         <Content Include="Documents\Manual-MkDocs\site\**\*">
             <Link>wwwroot\manual\%(RecursiveDir)%(Filename)%(Extension)</Link>
