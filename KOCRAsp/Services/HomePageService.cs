@@ -88,20 +88,25 @@ public sealed class HomePageService : IHomePageService
     public async Task<(List<FileListEntry> Items, int Total, int Page, int TotalPages)> BuildPagedFileListAsync(
         BatchSummary batch, int page, int pageSize, bool isGuestOrganization)
     {
-        var maxPageCount = _configSvc.GetMaxPagesPerInvoice(isGuestOrganization);
-        var invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
+        int maxPageCount = _configSvc.GetMaxPagesPerInvoice(isGuestOrganization);
+        string invoicesFolder = Path.Combine(batch.FolderPath, "Invoices");
         if (!Directory.Exists(invoicesFolder))
             return (new List<FileListEntry>(), 0, 1, 0);
 
-        var allFilePaths = _fileSvc.LoadFiles(invoicesFolder, InvoiceExtensions).ToList();
-        var total = allFilePaths.Count;
+        List<Invoice> invoices = await _dbSvc.GetInvoicesByBatchAsync(batch.BatchId);
+        List<string> allFilePaths = invoices
+            .Where(i => !string.IsNullOrWhiteSpace(i.FilePath))
+            .Select(i => i.FilePath!)
+            .ToList();
+
+        int total = allFilePaths.Count;
 
         pageSize = Math.Clamp(pageSize, 1, 100);
         int totalPages = total == 0 ? 0 : (int)Math.Ceiling((double)total / pageSize);
         page = Math.Clamp(page, 1, Math.Max(1, totalPages));
 
-        var pagePaths = allFilePaths.Skip((page - 1) * pageSize).Take(pageSize);
-        var items = await BuildFileListForPathsAsync(pagePaths, maxPageCount);
+        IEnumerable<string> pagePaths = allFilePaths.Skip((page - 1) * pageSize).Take(pageSize);
+        List<FileListEntry> items = await BuildFileListForPathsAsync(pagePaths, maxPageCount);
         return (items, total, page, totalPages);
     }
 

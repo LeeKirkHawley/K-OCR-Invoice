@@ -1816,8 +1816,28 @@
         window.location.href = '/home/exportdocx?filePath=' + encodeURIComponent(_currentFilePath);
     }
 
-    async function _savePickerDownload(url, suggestedName, mimeType, extensions) {
-        const response = await fetch(url, {
+    // Two-phase export:
+    //   1. Ask the user where to save FIRST. If they cancel, we never touch
+    //      the server and nothing about the batch changes.
+    //   2. Ask the server to build the export bytes.
+    //   3. Write those bytes to the chosen location. Only once that write
+    //      has actually succeeded do we tell the server to confirm the
+    //      export (which is what marks the batch for deletion).
+    async function _exportAndSave(exportUrl, suggestedName, mimeType, extensions) {
+        let handle = null;
+        if (window.showSaveFilePicker) {
+            try {
+                handle = await window.showSaveFilePicker({
+                    suggestedName,
+                    types: [{ description: mimeType, accept: { [mimeType]: extensions } }]
+                });
+            } catch (err) {
+                if (err.name === 'AbortError') return { saved: false }; // user cancelled
+                throw err;
+            }
+        }
+
+        const response = await fetch(exportUrl, {
             method: 'POST',
             headers: { 'RequestVerificationToken': _antiforgeryToken },
             credentials: 'include'
@@ -1827,31 +1847,34 @@
             throw new Error(msg || response.statusText);
         }
         const blob = await response.blob();
-        if (window.showSaveFilePicker) {
-            try {
-                const handle = await window.showSaveFilePicker({
-                    suggestedName,
-                    types: [{ description: mimeType, accept: { [mimeType]: extensions } }]
-                });
-                const writable = await handle.createWritable();
-                await writable.write(blob);
-                await writable.close();
-                return;
-            } catch (err) {
-                if (err.name === 'AbortError') return; // user cancelled
-                // fall through to standard download
-            }
+
+        if (handle) {
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+        } else {
+            // Browser doesn't support the File System Access API; fall back
+            // to a normal browser download (goes to the Downloads folder).
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = suggestedName;
+            a.click();
+            URL.revokeObjectURL(a.href);
         }
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = suggestedName;
-        a.click();
-        URL.revokeObjectURL(a.href);
+
+        // The file is now confirmed written to disk — safe to mark the batch
+        // for deletion.
+        const result = await postForm('/home/confirmbatchexported', new FormData());
+        if (!result.success)
+            throw new Error(result.error ?? 'Failed to confirm export.');
+
+        return { saved: true };
     }
 
     window.exportBatchJson = async function () {
         try {
-            await _savePickerDownload('/home/exportbatchjson', 'batch.json', 'application/json', ['.json']);
+            const result = await _exportAndSave('/home/exportbatchjson', 'batch.json', 'application/json', ['.json']);
+            if (!result.saved) return; // user cancelled the save dialog
             showToast('Exported to JSON.');
             location.reload();
         } catch (err) {
@@ -1861,12 +1884,13 @@
 
     window.exportBatchExcel = async function () {
         try {
-            await _savePickerDownload(
+            const result = await _exportAndSave(
                 '/home/exportbatchexcel',
                 'batch.xlsx',
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 ['.xlsx']
             );
+            if (!result.saved) return; // user cancelled the save dialog
             showToast('Exported to Excel.');
             location.reload();
         } catch (err) {

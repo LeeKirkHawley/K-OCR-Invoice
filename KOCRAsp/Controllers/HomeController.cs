@@ -654,14 +654,10 @@ public class HomeController : Controller
         var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         await _homeExportSvc.LogBatchExportAsync(batch, invoices, orgUser);
 
-        await _homeExportSvc.TrySoftDeleteBatchAfterExportAsync(
-            batch,
-            User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
-            User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty,
-            User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
-            orgUser);
-        HttpContext.Session.Remove("CurrentBatchId");
-
+        // Soft-deleting the batch happens only after the browser confirms the
+        // exported file was actually written to disk (see ConfirmBatchExported).
+        // Don't clear the session or mark the batch for deletion here — the
+        // client may still cancel the save dialog or fail to write the file.
         return File(bytes, "application/json", $"{name}.json");
     }
 
@@ -682,6 +678,31 @@ public class HomeController : Controller
         var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         await _homeExportSvc.LogBatchExportAsync(batch, invoices, orgUser);
 
+        // Soft-deleting the batch happens only after the browser confirms the
+        // exported file was actually written to disk (see ConfirmBatchExported).
+        // Don't clear the session or mark the batch for deletion here — the
+        // client may still cancel the save dialog or fail to write the file.
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"{name}.xlsx");
+    }
+
+    // Called by the front end only after it has confirmed that the exported
+    // file (JSON or Excel) was successfully written to the user-chosen
+    // location on disk. This is what actually marks the batch for deletion,
+    // so a cancelled save dialog or a failed write never deletes a batch.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmBatchExported()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Forbid();
+
+        var batch = await GetCurrentBatchAsync();
+        if (batch == null) return BadRequest("No batch selected.");
+
+        var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+
         await _homeExportSvc.TrySoftDeleteBatchAfterExportAsync(
             batch,
             User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
@@ -690,8 +711,6 @@ public class HomeController : Controller
             orgUser);
         HttpContext.Session.Remove("CurrentBatchId");
 
-        return File(bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"{name}.xlsx");
+        return Json(new { success = true });
     }
 }

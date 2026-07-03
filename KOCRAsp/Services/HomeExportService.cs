@@ -66,9 +66,9 @@ public sealed class HomeExportService : IHomeExportService
         }
     }
 
-    public string BuildBatchJson(IReadOnlyList<(string FileName, InvoiceDto Invoice)> invoices)
+    public string BuildBatchJson(IReadOnlyList<(string FileName, InvoiceDto Invoice)> invoice)
     {
-        var payload = invoices
+        var payload = invoice
             .Select(t => new { fileName = t.FileName, invoice = StripBboxFields(t.Invoice) })
             .ToList();
         return JsonConvert.SerializeObject(payload, Formatting.Indented);
@@ -176,13 +176,20 @@ public sealed class HomeExportService : IHomeExportService
     {
         var jObj = JObject.FromObject(invoice);
         jObj.Remove("FieldBoundingBoxes");
+        jObj.Remove("FieldConfidences");
+        jObj.Remove("TesseractConfirmed");
         jObj.Remove("OriginalPageWidth");
         jObj.Remove("OriginalPageHeight");
         jObj.Remove("PageCount");
         if (jObj["Items"] is JArray items)
         {
             foreach (var item in items.OfType<JObject>())
+            {
                 item.Remove("BoundingBoxes");
+                item.Remove("FieldConfidences");
+                item.Remove("ConfidenceConfirmed");
+                item.Remove("TesseractConfirmed");
+            }
         }
         return jObj;
     }
