@@ -45,8 +45,8 @@ public class BatchController : Controller
     [HttpGet]
     public async Task<IActionResult> Index()
     {
-        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
-        var batches = (await _batchSvc.GetBatchesForOrgAsync(orgId)).ToList();
+        string orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        List<BatchSummary> batches = (await _batchSvc.GetBatchesForOrgAsync(orgId)).ToList();
         return View(batches);
     }
 
@@ -60,7 +60,7 @@ public class BatchController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var request = new CreateBatchRequest
+        CreateBatchRequest request = new CreateBatchRequest
         {
             Name = name,
             CreatedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
@@ -70,7 +70,7 @@ public class BatchController : Controller
 
         try
         {
-            var result = await _batchSvc.CreateBatchAsync(request);
+            CreateBatchResult result = await _batchSvc.CreateBatchAsync(request);
             if (!result.Success)
                 TempData["Error"] = result.ErrorMessage ?? "Failed to create batch.";
             else
@@ -99,8 +99,8 @@ public class BatchController : Controller
     [HttpGet]
     public async Task<IActionResult> GetNextBatchNumber()
     {
-        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
-        var next = await _batchSvc.GetNextBatchNumberAsync(orgId);
+        string orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        int next = await _batchSvc.GetNextBatchNumberAsync(orgId);
         return Json(new { nextBatchNumber = next });
     }
 
@@ -111,7 +111,7 @@ public class BatchController : Controller
         if (string.IsNullOrWhiteSpace(name))
             return Json(new { success = false, error = "Batch name is required." });
 
-        var request = new CreateBatchRequest
+        CreateBatchRequest request = new CreateBatchRequest
         {
             Name = name,
             CreatedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
@@ -121,7 +121,7 @@ public class BatchController : Controller
 
         try
         {
-            var result = await _batchSvc.CreateBatchAsync(request);
+            CreateBatchResult result = await _batchSvc.CreateBatchAsync(request);
             if (!result.Success)
                 return Json(new { success = false, error = result.ErrorMessage ?? "Failed to create batch." });
 
@@ -147,11 +147,11 @@ public class BatchController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int batchId)
     {
-        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        string orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        string userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         try
         {
-            var batchName = await _batchSvc.DeleteBatchAsync(batchId, userId);
+            string batchName = await _batchSvc.DeleteBatchAsync(batchId, userId);
             _batchNotifier.Notify(orgId);
             await _batchActionSvc.LogAsync(
                 BatchActionTypes.Deleted, batchName,
@@ -182,10 +182,10 @@ public class BatchController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Lock(int batchId)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        string userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         try
         {
-            var result = await _batchSvc.TryAcquireBatchLockAsync(batchId, userId);
+            AcquireLockResult result = await _batchSvc.TryAcquireBatchLockAsync(batchId, userId);
             return Json(new { success = result.Success, error = result.ErrorMessage });
         }
         catch (Exception ex)
@@ -199,7 +199,7 @@ public class BatchController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Unlock(int batchId)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        string userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         try
         {
             await _batchSvc.ReleaseBatchLockAsync(batchId, userId);

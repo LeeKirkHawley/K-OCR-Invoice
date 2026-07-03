@@ -22,7 +22,7 @@ var readFileEntry = async function(entry: any): Promise<any> {
 var readAllDirectoryEntries = async function(directoryReader: any): Promise<any[]> 
 {
     const entries: any[] = [];
-    let readEntries = await new Promise<any[]>(resolve => directoryReader.readEntries(resolve));
+    let readEntries: any[] = await new Promise<any[]>(resolve => directoryReader.readEntries(resolve));
     while (readEntries.length > 0) 
     {
         entries.push(...readEntries);
@@ -39,7 +39,8 @@ var getAllFileEntries = async function(dataTransferItemList: any): Promise<any[]
     for (let i = 0; i < dataTransferItemList.length; i++) 
     {
         const entry = dataTransferItemList[i].webkitGetAsEntry();
-        if (entry) queue.push(entry);
+        if (entry)
+            queue.push(entry);
     }
 
     while (queue.length > 0) 
@@ -47,7 +48,7 @@ var getAllFileEntries = async function(dataTransferItemList: any): Promise<any[]
         const entry = queue.shift();
         if (entry.isFile) 
         {
-            const file = await readFileEntry(entry);
+            const file: any = await readFileEntry(entry);
             fileEntries.push(file);
         } 
         else if (entry.isDirectory) 

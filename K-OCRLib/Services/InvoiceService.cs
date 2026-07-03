@@ -5,7 +5,6 @@ using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
-using System.IO;
 using System.Text.Json;
 
 namespace K_OCRLib.Services
@@ -25,6 +24,9 @@ namespace K_OCRLib.Services
 
         private static void EnsureMappingsLoaded()
         {
+            // mappings at Azure
+            // https://github.com/Azure-Samples/document-intelligence-code-samples/blob/main/schema/2024-11-30-ga/invoice.md
+
             if (_mappingsLoaded) return;
             lock (_mappingsLock)
             {
@@ -59,11 +61,11 @@ namespace K_OCRLib.Services
                 // entirely new keys are added as-is.
                 try
                 {
-                    var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Configuration", "FieldMappings.json");
+                    string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Configuration", "FieldMappings.json");
                     if (File.Exists(configPath))
                     {
-                        var json = File.ReadAllText(configPath);
-                        var root = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string[]>>>(json);
+                        string json = File.ReadAllText(configPath);
+                        Dictionary<string, Dictionary<string, string[]>>? root = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string[]>>>(json);
                         if (root != null)
                         {
                             if (root.TryGetValue("DocumentFields", out var docFields))
@@ -87,12 +89,12 @@ namespace K_OCRLib.Services
         // or adds the key wholesale if it doesn't exist yet. Case-insensitive deduplication.
         private static void MergeInto(Dictionary<string, string[]> target, Dictionary<string, string[]> source)
         {
-            foreach (var (key, values) in source)
+            foreach ((string? key, string[]? values) in source)
             {
-                if (target.TryGetValue(key, out var existing))
+                if (target.TryGetValue(key, out string[]? existing))
                 {
-                    var merged = existing.ToList();
-                    foreach (var v in values)
+                    List<string> merged = existing.ToList();
+                    foreach (string v in values)
                         if (!merged.Any(e => string.Equals(e, v, StringComparison.OrdinalIgnoreCase)))
                             merged.Add(v);
                     target[key] = merged.ToArray();
@@ -118,9 +120,10 @@ namespace K_OCRLib.Services
         // name, checking both exact match and configured synonyms (case-insensitive).
         private static string? TryGetItemFieldKey(IReadOnlyDictionary<string, Azure.AI.DocumentIntelligence.DocumentField> dict, string standardName)
         {
-            if (dict.ContainsKey(standardName)) return standardName;
+            if (dict.ContainsKey(standardName)) 
+                return standardName;
 
-            if (ItemFieldSynonyms.TryGetValue(standardName, out var synonyms))
+            if (ItemFieldSynonyms.TryGetValue(standardName, out string[]? synonyms))
             {
                 return dict.Keys.FirstOrDefault(k =>
                     synonyms.Any(s => string.Equals(k, s, StringComparison.OrdinalIgnoreCase)));
@@ -140,10 +143,10 @@ namespace K_OCRLib.Services
             List<(string text, List<float> polygon, int pageNumber)> allWords)
         {
             // Total-related keywords to search for
-            var totalKeywords = new[] { "total", "amount", "due", "balance", "payable", "owing" };
-            
+            string[] totalKeywords = new[] { "total", "amount", "due", "balance", "payable", "owing" };
+
             // Find all words that might be Total labels
-            var labelIndices = new List<int>();
+            List<int> labelIndices = new List<int>();
             for (int i = 0; i < allWords.Count; i++)
             {
                 var wordLower = allWords[i].text.ToLowerInvariant().Trim();
@@ -157,11 +160,11 @@ namespace K_OCRLib.Services
             }
             
             // For each potential Total label, search for the nearest currency value to the right
-            foreach (var labelIdx in labelIndices)
+            foreach (int labelIdx in labelIndices)
             {
-                var label = allWords[labelIdx];
-                var labelY = GetCenterY(label.polygon);
-                var labelX = GetRightX(label.polygon);
+                (string text, List<float> polygon, int pageNumber) label = allWords[labelIdx];
+                float labelY = GetCenterY(label.polygon);
+                float labelX = GetRightX(label.polygon);
                 
                 // Search for currency values within reasonable distance
                 // Horizontal: up to 500 pixels to the right
@@ -174,20 +177,21 @@ namespace K_OCRLib.Services
                 for (int i = 0; i < allWords.Count; i++)
                 {
                     if (i == labelIdx) continue;
-                    
-                    var word = allWords[i];
-                    var wordY = GetCenterY(word.polygon);
-                    var wordX = GetLeftX(word.polygon);
+
+                    (string text, List<float> polygon, int pageNumber) word = allWords[i];
+                    float wordY = GetCenterY(word.polygon);
+                    float wordX = GetLeftX(word.polygon);
                     
                     // Check if word is on same horizontal line (within tolerance)
                     if (Math.Abs(wordY - labelY) > 50) continue;
-                    
+
                     // Check if word is to the right of label
-                    var horizontalDist = wordX - labelX;
-                    if (horizontalDist < 0 || horizontalDist > 500) continue;
-                    
+                    float horizontalDist = wordX - labelX;
+                    if (horizontalDist < 0 || horizontalDist > 500) 
+                        continue;
+
                     // Try to parse as currency, including negative amounts such as refunds.
-                    var parsedCurrency = CurrencyAmountParser.Parse(word.text);
+                    decimal? parsedCurrency = CurrencyAmountParser.Parse(word.text);
                     decimal value;
                     if (parsedCurrency.HasValue)
                     {
@@ -195,13 +199,13 @@ namespace K_OCRLib.Services
                     }
                     else
                     {
-                        var cleaned = word.text.Replace("$", "").Replace(",", "").Replace(" ", "").Trim();
+                        string cleaned = word.text.Replace("$", "").Replace(",", "").Replace(" ", "").Trim();
                         if (!decimal.TryParse(cleaned, out value))
                             continue;
                     }
 
                     // Prefer the closest value
-                    var distance = Math.Sqrt(horizontalDist * horizontalDist + Math.Pow(wordY - labelY, 2));
+                    double distance = Math.Sqrt(horizontalDist * horizontalDist + Math.Pow(wordY - labelY, 2));
                     if (distance < bestDistance)
                     {
                         bestDistance = distance;
@@ -214,7 +218,7 @@ namespace K_OCRLib.Services
                 // If we found a value for this label, return it
                 if (bestValue.HasValue && bestPolygon != null && bestPageNumber.HasValue)
                 {
-                    var boxes = new List<BoundingBoxDto>
+                    List<BoundingBoxDto> boxes = new List<BoundingBoxDto>
                     {
                         new BoundingBoxDto
                         {
@@ -237,13 +241,15 @@ namespace K_OCRLib.Services
         
         private static float GetLeftX(List<float> polygon)
         {
-            if (polygon.Count < 2) return 0;
+            if (polygon.Count < 2) 
+                return 0;
             return Math.Min(Math.Min(polygon[0], polygon[2]), Math.Min(polygon[4], polygon[6]));
         }
         
         private static float GetRightX(List<float> polygon)
         {
-            if (polygon.Count < 2) return 0;
+            if (polygon.Count < 2) 
+                return 0;
             return Math.Max(Math.Max(polygon[0], polygon[2]), Math.Max(polygon[4], polygon[6]));
         }
 
@@ -252,7 +258,7 @@ namespace K_OCRLib.Services
             string endpoint = "https://parsedocimage.cognitiveservices.azure.com/";
             string key = "8DfAO78fFo48z5mMerbuJ6dLGvUFLS7CcF9qUvsrCVfWPGGno5O6JQQJ99CAACrJL3JXJ3w3AAALACOGJQx4";
 
-            var clientOptions = new DocumentIntelligenceClientOptions
+            DocumentIntelligenceClientOptions clientOptions = new DocumentIntelligenceClientOptions
             {
                 Retry =
                 {
@@ -260,12 +266,12 @@ namespace K_OCRLib.Services
                     NetworkTimeout = TimeSpan.FromSeconds(90)
                 }
             };
-            var documentIntelligenceClient = new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(key), clientOptions);
+            DocumentIntelligenceClient documentIntelligenceClient = new DocumentIntelligenceClient(new Uri(endpoint), new AzureKeyCredential(key), clientOptions);
 
-            using var stream = File.OpenRead(imagePath);
-            var options = new AnalyzeDocumentOptions("prebuilt-invoice", BinaryData.FromStream(stream));
+            using FileStream stream = File.OpenRead(imagePath);
+            AnalyzeDocumentOptions options = new AnalyzeDocumentOptions("prebuilt-invoice", BinaryData.FromStream(stream));
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+            using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
 
             Azure.Operation<AnalyzeResult>? operation = null;
             try
@@ -302,8 +308,8 @@ namespace K_OCRLib.Services
         {
             return result.Documents.Select(doc =>
             {
-                var fieldBoundingBoxes   = new Dictionary<string, List<BoundingBoxDto>>();
-                var fieldConfidences     = new Dictionary<string, double>();
+                Dictionary<string, List<BoundingBoxDto>> fieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>();
+                Dictionary<string, double> fieldConfidences = new Dictionary<string, double>();
                 string? detectedCurrencyCode = null;
                 
                 // Get page dimensions from the first page (Azure provides dimensions in inches)
@@ -311,9 +317,11 @@ namespace K_OCRLib.Services
                 double pageHeight = 11.0;
                 if (result.Pages != null && result.Pages.Count > 0)
                 {
-                    var firstPage = result.Pages[0];
-                    if (firstPage.Width.HasValue) pageWidth = firstPage.Width.Value;
-                    if (firstPage.Height.HasValue) pageHeight = firstPage.Height.Value;
+                    DocumentPage firstPage = result.Pages[0];
+                    if (firstPage.Width.HasValue) 
+                        pageWidth = firstPage.Width.Value;
+                    if (firstPage.Height.HasValue) 
+                        pageHeight = firstPage.Height.Value;
                 }
                 
                 // Extract all words with their positions for fallback total search
@@ -348,7 +356,7 @@ namespace K_OCRLib.Services
                         foreach (var synonym in synonyms)
                         {
                             // Try exact match (case-insensitive)
-                            var matchingKey = doc.Fields.Keys.FirstOrDefault(k => 
+                            string? matchingKey = doc.Fields.Keys.FirstOrDefault(k => 
                                 string.Equals(k, synonym, StringComparison.OrdinalIgnoreCase));
                             
                             if (matchingKey != null)
@@ -362,11 +370,11 @@ namespace K_OCRLib.Services
                 // Helper to extract bounding boxes from a field
                 List<BoundingBoxDto> GetBoundingBoxes(string fieldName)
                 {
-                    var boxes = new List<BoundingBoxDto>();
-                    if (doc.Fields.TryGetValue(fieldName, out var field) && 
+                    List<BoundingBoxDto> boxes = new List<BoundingBoxDto>();
+                    if (doc.Fields.TryGetValue(fieldName, out Azure.AI.DocumentIntelligence.DocumentField? field) && 
                         field.BoundingRegions != null)
                     {
-                        foreach (var region in field.BoundingRegions)
+                        foreach (BoundingRegion region in field.BoundingRegions)
                         {
                             if (region.Polygon != null && region.Polygon.Count > 0)
                             {
@@ -383,11 +391,11 @@ namespace K_OCRLib.Services
                 
                 string GetString(string name)
                 {
-                    var actualFieldName = TryGetFieldName(name);
+                    string? actualFieldName = TryGetFieldName(name);
                     if (actualFieldName != null && doc.Fields.TryGetValue(actualFieldName, out var f))
                     {
                         // Store bounding boxes for this field using the standard name
-                        var boxes = GetBoundingBoxes(actualFieldName);
+                        List<BoundingBoxDto> boxes = GetBoundingBoxes(actualFieldName);
                         if (boxes.Count > 0)
                             fieldBoundingBoxes[name] = boxes;
 
@@ -403,11 +411,12 @@ namespace K_OCRLib.Services
 
                 decimal? GetDecimal(string name)
                 {
-                    var actualFieldName = TryGetFieldName(name);
+                    string? actualFieldName = TryGetFieldName(name);
+
                     if (actualFieldName != null && doc.Fields.TryGetValue(actualFieldName, out var field))
                     {
                         // Store bounding boxes for this field using the standard name
-                        var boxes = GetBoundingBoxes(actualFieldName);
+                        List<BoundingBoxDto> boxes = GetBoundingBoxes(actualFieldName);
                         if (boxes.Count > 0)
                             fieldBoundingBoxes[name] = boxes;
 
@@ -423,14 +432,14 @@ namespace K_OCRLib.Services
                         if (field.ValueInt64 is long l) return l;
 
                         // Last-resort: parse raw OCR content if it looks like a money string.
-                        var parsed = CurrencyAmountParser.Parse(field.Content);
+                        decimal? parsed = CurrencyAmountParser.Parse(field.Content);
                         if (parsed.HasValue) return parsed;
                     }
                     
                     // Fallback for Total field if not found by Azure
                     if (name == "Total" && allWords.Count > 0)
                     {
-                        var (totalValue, totalBoxes) = FindTotalInRawOcr(allWords);
+                        (decimal? totalValue, List<BoundingBoxDto>? totalBoxes) = FindTotalInRawOcr(allWords);
                         if (totalValue.HasValue)
                         {
                             if (totalBoxes.Count > 0)
@@ -442,22 +451,23 @@ namespace K_OCRLib.Services
                     return null;
                 }
 
-                var items = new List<InvoiceItemDto>();
+                List<InvoiceItemDto> items = new List<InvoiceItemDto>();
+
                 if (doc.Fields.TryGetValue("Items", out var itemsField) &&
                     itemsField.FieldType == DocumentFieldType.List)
                 {
-                    foreach (var item in itemsField.ValueList)
+                    foreach (Azure.AI.DocumentIntelligence.DocumentField? item in itemsField.ValueList)
                     {
-                        var dict = item.ValueDictionary;
+                        DocumentFieldDictionary dict = item.ValueDictionary;
 
                         // Capture sub-field confidence scores for line items
-                        var itemFieldConfidences = new Dictionary<string, double>();
+                        Dictionary<string, double> itemFieldConfidences = new Dictionary<string, double>();
 
                         // Use ItemFieldSynonyms so raw label names (e.g. "Gross worth") can be
                         // mapped to standard field names via ItemFieldSynonyms.json — no hard-coded
                         // label names in C#.
                         Azure.AI.DocumentIntelligence.DocumentField? vDesc = null;
-                        var descKey = TryGetItemFieldKey(dict, "Description");
+                        string? descKey = TryGetItemFieldKey(dict, "Description");
                         string desc = string.Empty;
                         if (descKey != null && dict.TryGetValue(descKey, out vDesc))
                             desc = vDesc?.ValueString ?? vDesc?.Content ?? string.Empty;
@@ -465,7 +475,7 @@ namespace K_OCRLib.Services
                             itemFieldConfidences[nameof(InvoiceItemDto.Description)] = vDesc.Confidence.Value;
 
                         decimal? qty = null;
-                        var qtyKey = TryGetItemFieldKey(dict, "Quantity");
+                        string? qtyKey = TryGetItemFieldKey(dict, "Quantity");
                         if (qtyKey != null && dict.TryGetValue(qtyKey, out var vQty))
                         {
                             if (vQty.ValueDouble is double qd) qty = (decimal)qd;
@@ -475,7 +485,7 @@ namespace K_OCRLib.Services
                         }
 
                         decimal? unitPrice = null;
-                        var unitKey = TryGetItemFieldKey(dict, "UnitPrice");
+                        string? unitKey = TryGetItemFieldKey(dict, "UnitPrice");
                         if (unitKey != null && dict.TryGetValue(unitKey, out var vUnit))
                         {
                             if (vUnit.ValueCurrency?.Amount is double ud) unitPrice = (decimal)ud;
@@ -486,18 +496,21 @@ namespace K_OCRLib.Services
                         }
 
                         decimal? lineTotal = null;
-                        var amtKey = TryGetItemFieldKey(dict, "Amount");
+                        string? amtKey = TryGetItemFieldKey(dict, "Amount");
                         if (amtKey != null && dict.TryGetValue(amtKey, out var vAmt))
                         {
-                            if (vAmt.ValueCurrency?.Amount is double ld) lineTotal = (decimal)ld;
-                            else if (vAmt.ValueDouble is double nd2) lineTotal = (decimal)nd2;
-                            else if (vAmt.ValueInt64 is long nl2) lineTotal = nl2;
+                            if (vAmt.ValueCurrency?.Amount is double ld) 
+                                lineTotal = (decimal)ld;
+                            else if (vAmt.ValueDouble is double nd2) 
+                                lineTotal = (decimal)nd2;
+                            else if (vAmt.ValueInt64 is long nl2) 
+                                lineTotal = nl2;
                             if (vAmt.Confidence.HasValue)
                                 itemFieldConfidences[nameof(InvoiceItemDto.Amount)] = vAmt.Confidence.Value;
                         }
 
                         string? lineTax = null;
-                        var taxKey = TryGetItemFieldKey(dict, "TaxRate");
+                        string? taxKey = TryGetItemFieldKey(dict, "TaxRate");
                         if (taxKey != null && dict.TryGetValue(taxKey, out var vTax))
                         {
                             //if (vTax.ValueCurrency?.Amount is double ld) lineTax = (decimal)ld;
@@ -509,10 +522,10 @@ namespace K_OCRLib.Services
                         }
 
                         // Get bounding boxes for the entire line item
-                        var itemBoxes = new List<BoundingBoxDto>();
+                        List<BoundingBoxDto> itemBoxes = new List<BoundingBoxDto>();
                         if (item.BoundingRegions != null)
                         {
-                            foreach (var region in item.BoundingRegions)
+                            foreach (BoundingRegion region in item.BoundingRegions)
                             {
                                 if (region.Polygon != null && region.Polygon.Count > 0)
                                 {
@@ -564,18 +577,18 @@ namespace K_OCRLib.Services
             IEnumerable<string> imagePaths,
             IProgress<(int completed, int total, string currentFile)>? progress = null)
         {
-            var results = new Dictionary<string, List<InvoiceDto>>();
-            var imagePathsList = imagePaths.ToList();
-            var total = imagePathsList.Count;
-            var completed = 0;
+            Dictionary<string, List<InvoiceDto>> results = new Dictionary<string, List<InvoiceDto>>();
+            List<string> imagePathsList = imagePaths.ToList();
+            int total = imagePathsList.Count;
+            int completed = 0;
 
             // Process files with concurrency control
-            var tasks = imagePathsList.Select(async imagePath =>
+            IEnumerable<Task> tasks = imagePathsList.Select(async imagePath =>
             {
                 await _semaphore.WaitAsync();
                 try
                 {
-                    var invoices = await RunAzureInvoiceParse(imagePath);
+                    List<InvoiceDto> invoices = await RunAzureInvoiceParse(imagePath);
                     
                     lock (results)
                     {
@@ -593,5 +606,6 @@ namespace K_OCRLib.Services
 
             await Task.WhenAll(tasks);
             return results;
-        }    }
+        }    
+    }
 }
