@@ -82,6 +82,7 @@ public class SuperAdminServiceTests
                 new PathService(configuration),
                 Mock.Of<IOrgConfigService>(),
                 null,
+                null,
                 Mock.Of<ILogger<SuperAdminService>>());
 
             // Phase 1: expired guest org gets marked for deletion; regular org is untouched.
@@ -213,6 +214,7 @@ public class SuperAdminServiceTests
                     configuration,
                     pathService,
                     Mock.Of<IOrgConfigService>(),
+                    null,
                     null,
                     Mock.Of<ILogger<SuperAdminService>>());
 

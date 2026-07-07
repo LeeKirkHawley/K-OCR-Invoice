@@ -1,6 +1,7 @@
 using K_OCRLib.Configuration;
 using K_OCRLib.Data;
 using K_OCRLib.Identity;
+using K_OCRLib.Models.Api.OrganizationAdmin;
 using K_OCRLib.Models.Api.SuperAdmin;
 using K_OCRLib.Security;
 using K_OCRLib.Services.Interfaces;
@@ -24,6 +25,7 @@ public class SuperAdminService : ISuperAdminService
     private readonly IPathService _pathService;
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly IStripeProvisioningService? _stripeProvisioning;
+    private readonly IOrganizationAdminService? _organizationAdminService;
     private readonly ILogger<SuperAdminService> _logger;
 
     public SuperAdminService(
@@ -35,6 +37,7 @@ public class SuperAdminService : ISuperAdminService
         IPathService pathService,
         IOrgConfigService orgConfigSvc,
         IStripeProvisioningService? stripeProvisioning,
+        IOrganizationAdminService? organizationAdminService,
         ILogger<SuperAdminService> logger)
     {
         _dbContext = dbContext;
@@ -45,6 +48,7 @@ public class SuperAdminService : ISuperAdminService
         _pathService = pathService;
         _orgConfigSvc = orgConfigSvc;
         _stripeProvisioning = stripeProvisioning;
+        _organizationAdminService = organizationAdminService;
         _logger = logger;
     }
 
@@ -680,7 +684,7 @@ public class SuperAdminService : ISuperAdminService
 
     public async Task ProvisionStripeAsync(string organizationId, string? priceId = null)
     {
-        var organization = await _dbContext.Organizations
+        Organization organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId)
             ?? throw new KeyNotFoundException("Organization not found.");
 
@@ -704,7 +708,9 @@ public class SuperAdminService : ISuperAdminService
         var customerId = organization.StripeCustomerId;
         if (customerId is null)
         {
-            customerId = await _stripeProvisioning.CreateCustomerAsync(organization.Id, organization.Name);
+            OrganizationUserOverview? admin = await _organizationAdminService?.GetOrganizationAdmin(organization.Id);
+            string adminEmail = admin?.Email ?? throw new InvalidOperationException("Organization admin not found.");
+            customerId = await _stripeProvisioning.CreateCustomerAsync(organization.Id, organization.Name, adminEmail);
             organization.StripeCustomerId = customerId;
             await _dbContext.SaveChangesAsync();
         }

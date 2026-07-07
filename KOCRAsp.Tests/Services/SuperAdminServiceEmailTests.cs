@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Serilog.Core;
 
 namespace KOCRAsp.Tests.Services;
 
@@ -93,6 +94,7 @@ public class SuperAdminServiceEmailTests
             configuration,
             new PathService(configuration),
             Mock.Of<IOrgConfigService>(),
+            null,
             null,
             Mock.Of<ILogger<SuperAdminService>>());
 
@@ -189,6 +191,7 @@ public class SuperAdminServiceEmailTests
             new PathService(configuration),
             Mock.Of<IOrgConfigService>(),
             null,
+            null,
             Mock.Of<ILogger<SuperAdminService>>());
 
         // Act & Assert: Should not throw even if email fails
@@ -277,6 +280,7 @@ public class SuperAdminServiceEmailTests
             configuration,
             new PathService(configuration),
             Mock.Of<IOrgConfigService>(),
+            null,
             null,
             Mock.Of<ILogger<SuperAdminService>>());
 

@@ -24,13 +24,14 @@ public class StripeProvisioningService : IStripeProvisioningService
         Stripe.StripeConfiguration.ApiKey = _secretKey;
     }
 
-    public async Task<string> CreateCustomerAsync(string orgId, string orgName)
+    public async Task<string> CreateCustomerAsync(string orgId, string orgName, string adminEmail)
     {
         EnsureApiKey();
         var service = new Stripe.CustomerService();
         var customer = await service.CreateAsync(new Stripe.CustomerCreateOptions
         {
             Name = orgName,
+            Email = adminEmail,
             Metadata = new Dictionary<string, string> { ["OrgId"] = orgId },
         });
         _logger.LogInformation("Created Stripe customer {CustomerId} for org {OrgId}.", customer.Id, orgId);

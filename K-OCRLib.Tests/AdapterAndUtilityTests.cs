@@ -127,7 +127,7 @@ public class AdapterAndUtilityTests
     {
         var service = new StripeProvisioningService(new ConfigurationBuilder().Build(), Mock.Of<ILogger<StripeProvisioningService>>());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateCustomerAsync("org-1", "Acme"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateCustomerAsync("org-1", "Acme", "user@example.com"));
     }
 
     private static void CreatePng(string path, int width, int height)

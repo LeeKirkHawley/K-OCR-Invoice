@@ -40,6 +40,15 @@ public class OrganizationAdminService : IOrganizationAdminService
     public async Task<OrganizationUserOverview[]> ListUsersAsync(string organizationId)
         => await GetOrgUsersAsync(organizationId);
 
+    public async Task<OrganizationUserOverview?> GetOrganizationAdmin(string organizationId)
+    {
+        OrganizationUserOverview[] users = await GetOrgUsersAsync(organizationId);
+
+        OrganizationUserOverview? admin = users?.Where(u => u.IsOrganizationAdmin == true).FirstOrDefault();
+
+        return admin;
+    }
+
     public async Task<OrganizationUserOverview[]> GetOrgUsersAsync(string organizationId)
     {
         var memberships = await _dbContext.UserOrganizationMemberships

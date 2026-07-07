@@ -235,6 +235,7 @@ public class AdminServiceTests
                 path,
                 Mock.Of<IOrgConfigService>(),
                 null,
+                null,
                 Mock.Of<ILogger<SuperAdminService>>());
 
             var marked = await service.CleanupExpiredGuestAccountsAsync(TimeSpan.FromDays(7));
@@ -297,6 +298,7 @@ public class AdminServiceTests
                 new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["AllowDuplicateEmails"] = "false" }).Build(),
                 path,
                 Mock.Of<IOrgConfigService>(),
+                null,
                 null,
                 Mock.Of<ILogger<SuperAdminService>>());
 

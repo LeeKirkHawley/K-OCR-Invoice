@@ -1593,7 +1593,7 @@
         const tc = inv.tesseractConfirmed;
         const mc = inv._mathConfirmed ?? {};
         const fc = inv.fieldConfidences;
-        if (tc && key in tc && tc[key] === false) reasons.push('Tesseract mismatch');
+        if (tc && key in tc && tc[key] === false) reasons.push('Secondary OCR mismatch');
         if (fc && key in fc && fc[key] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
         if (mc && key in mc && mc[key] === false) reasons.push('Math error');
         return reasons.join(' · ');
@@ -1605,7 +1605,7 @@
         const tc = inv.tesseractConfirmed;
         const mc = inv._mathConfirmed ?? {};
         const fc = inv.fieldConfidences;
-        if (tc && key in tc && tc[key] === false) errors.push('Tesseract mismatch');
+        if (tc && key in tc && tc[key] === false) errors.push('Secondary OCR mismatch');
         if (fc && key in fc && fc[key] < _minConfidenceThreshold) errors.push('Low Azure confidence');
         if (mc && key in mc && mc[key] === false) errors.push('Math error');
         const valueStr = (value !== null && value !== undefined && value !== '') ? String(value) : '—';
@@ -1640,7 +1640,7 @@
         const tc = item.tesseractConfirmed ?? {};
         const fc = item.fieldConfidences ?? {};
         const mc = inv._mathConfirmed ?? {};
-        if (tc[fieldKey] === false) reasons.push('Tesseract mismatch');
+        if (tc[fieldKey] === false) reasons.push('Secondary OCR mismatch');
         if (fieldKey in fc && fc[fieldKey] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
         if (fieldKey === 'Amount') {
             if (mc[`LineItem[${idx}].Amount`] === false) reasons.push('Math error');
@@ -1655,7 +1655,7 @@
             const tc = item.tesseractConfirmed ?? {};
             const fc = item.fieldConfidences ?? {};
             const mc = inv._mathConfirmed ?? {};
-            if (tc[fieldKey] === false) errors.push('Tesseract mismatch');
+        if (tc[fieldKey] === false) errors.push('Secondary OCR mismatch');
             if (fieldKey in fc && fc[fieldKey] < _minConfidenceThreshold) errors.push('Low Azure confidence');
             if (fieldKey === 'Amount') {
                 if (mc[`LineItem[${idx}].Amount`] === false) errors.push('Math error');
@@ -1672,7 +1672,7 @@
         const tc = item.tesseractConfirmed ?? {};
         const fc = item.fieldConfidences ?? {};
         const mc = inv._mathConfirmed ?? {};
-        for (const [k, v] of Object.entries(tc)) if (v === false) add(k, 'Tesseract mismatch');
+        for (const [k, v] of Object.entries(tc)) if (v === false) add(k, 'Secondary OCR mismatch');
         for (const [k, v] of Object.entries(fc)) if (v < _minConfidenceThreshold) add(k, 'Low Azure confidence');
         if (mc[`LineItem[${idx}].Amount`] === false) add('Amount', 'Math error');
         return Object.entries(fieldReasons)
