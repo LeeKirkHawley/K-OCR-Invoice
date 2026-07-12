@@ -303,14 +303,17 @@
 <script src="~/lib/signalr/signalr.min.js"></script>
 <script>
     // @Model values are server-side - can't asssign to them
-     var _currentPage = @Model.CurrentPage;
-     var _pageSize    = @Model.PageSize;
+    var _currentPage = @Model.CurrentPage;
+    var _pageSize    = @Model.PageSize;
+    var _totalFiles = @Model.TotalFiles;
 
     var _orgId                   = '@Html.Raw(Model.OrgId)';
     var _currentBatchId          = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
     var _maxPagesPerInvoice      = @Model.MaxPagesPerInvoice;
     var _isBetaTestOrganization  = @(Model.IsBetaTestOrganization.ToString().ToLowerInvariant());
     var _isOrgAdmin              = @(Model.IsOrgAdmin.ToString().ToLowerInvariant());
+    var _minConfidenceThreshold    = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+
     var _showBetaWelcomeDialog   = @(Model.ShowBetaWelcomeDialog.ToString().ToLowerInvariant());
     var _betaLimitExceeded       = @(Model.BetaOcrLimitExceeded.ToString().ToLowerInvariant());
     var _betaUsedPages           = @Model.BetaUsedOcrPages;
@@ -322,9 +325,10 @@
     var _showGuestWelcomeDialog    = @(Model.ShowGuestWelcomeDialog.ToString().ToLowerInvariant());
     var _guestMaxBatches           = @Model.GuestMaxBatches;
     var _guestActiveBatchCount     = @Model.GuestActiveBatchCount;
+    var _guestRemainingBatches     = @Model.GuestRemainingBatches;
+    var _guestBatchLimitExceeded   = @(Model.GuestBatchLimitExceeded.ToString().ToLowerInvariant());
     var _guestMaxInvoicesPerBatch  = @Model.GuestMaxInvoicesPerBatch;
     var _guestMaxPagesPerInvoice   = @Model.GuestMaxPagesPerInvoice;
-    var _minConfidenceThreshold    = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
 
     // ── File list click handlers (assigned early so onclick attributes work even if later init crashes) ──
     window.handleFileListItemClick = function (item, event) 
@@ -541,7 +545,7 @@
         const message =
             `Welcome! Your guest account allows up to ${_guestMaxBatches} batches, ` +
             `${_guestMaxInvoicesPerBatch} files per batch, and ${_guestMaxPagesPerInvoice} pages per file. ` +
-            `You currently have ${_guestActiveBatchCount} of ${_guestMaxBatches} batches.`;
+            `You currently have ${_guestActiveBatchCount} of ${_guestMaxBatches} batches (${_guestRemainingBatches} remaining).`;
 
         const showWhenReady = () => 
         {
@@ -555,6 +559,27 @@
             document.addEventListener('DOMContentLoaded', showWhenReady, { once: true });
         } else {
             showWhenReady();
+        }
+    }
+
+    function setGuestLimitStateFromServer(data)
+    {
+        if (!_isGuestOrganization) return;
+        if (typeof data.guestActiveBatchCount === 'number') _guestActiveBatchCount = data.guestActiveBatchCount;
+        if (typeof data.guestRemainingBatches === 'number') _guestRemainingBatches = data.guestRemainingBatches;
+        if (typeof data.guestBatchLimitExceeded === 'boolean') _guestBatchLimitExceeded = data.guestBatchLimitExceeded;
+        applyGuestLimitState();
+    }
+
+    function applyGuestLimitState()
+    {
+        if (!_isGuestOrganization || !_guestBatchLimitExceeded) return;
+        for (const id of ['batchOcrBtn', 'runOcrBtn']) 
+        {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            el.disabled = true;
+            el.classList.add('disabled');
         }
     }
 
@@ -2372,7 +2397,7 @@
     // Open the dialog
     openBtn.addEventListener('click', () => 
     {
-        dialog.showModal();
+        dialog.show();
     });
 
     // Close handlers

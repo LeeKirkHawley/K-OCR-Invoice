@@ -51,6 +51,7 @@ public sealed class OrgDbContextFactory : IDbContextFactory<KOCRDbContext>
         if (_settings.EnableDetailedErrors)
             optionsBuilder.EnableDetailedErrors();
 
+        
         var context = new KOCRDbContext(optionsBuilder.Options);
         context.Database.Migrate();
         return context;

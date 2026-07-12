@@ -336,6 +336,8 @@ app.UseHttpsRedirection();
 app.Use(async (context, next) =>
 {
     var requestPath = context.Request.Path.Value ?? string.Empty;
+    var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("UrlCanonicalizer");
+    
     // Bypass canonical-redirect for static manual site so /manual/ can be served by static file middleware.
     if (requestPath.StartsWith("/manual", StringComparison.OrdinalIgnoreCase))
     {
@@ -347,6 +349,7 @@ app.Use(async (context, next) =>
         UrlCanonicalizer.NeedsRedirect(requestPath, out var canonicalPath))
     {
         var location = canonicalPath + context.Request.QueryString;
+        logger.LogDebug("Canonical redirect: {RequestPath} -> {CanonicalPath}", requestPath, location);
         context.Response.Redirect(location, permanent: true);
         return;
     }

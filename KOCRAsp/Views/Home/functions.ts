@@ -128,14 +128,46 @@ declare var _betaMaxPages: number;
 declare var _isGuestOrganization: boolean;
 declare var _guestMaxInvoicesPerBatch: number;
 declare var _guestMaxBatches: number;
+declare var _guestBatchLimitExceeded: boolean;
+declare var _maxPagesPerInvoice: number;
+declare var _totalFiles: number;
+
+function exceedsBatchLimits(fileCount: number): string  // return if match limits exceeded
+{
+    if (_isBetaTestOrganization) {
+        if (_betaLimitExceeded)
+            return "Beta limit exceeded.";
+        if (_betaUsedPages + fileCount > _betaMaxPages)
+            return "Beta limit file count exceeded";
+    }
+    else if (_isGuestOrganization) {
+        const totalCount: number = _totalFiles + fileCount;
+        if (totalCount > _guestMaxInvoicesPerBatch)
+            return "Guest batch limit exceeded.";
+    }
+    else {
+        if ((_totalFiles + fileCount) > _maxPagesPerInvoice)
+            return "File count exceeds maximum pages per invoice.";
+    }
+
+    return "";
+}
 
 var handleUploadClick = async function(dialog: HTMLDialogElement, uploadBtn: HTMLButtonElement, fileListEl: HTMLElement, selectedFiles: any[]): Promise<void>
 {
     if (selectedFiles.length === 0) return;
 
-    if (_isBetaTestOrganization && _betaLimitExceeded) 
-    {
-        showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+    // if (_isBetaTestOrganization && _betaLimitExceeded)
+    // {
+    //     showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
+    //     return;
+    // }
+
+    // needs to show message for both beta and guest orgs
+    const limitsExceeded: string = exceedsBatchLimits(selectedFiles.length);
+    if (limitsExceeded) {
+        //showBetaDialog(`This organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`)
+        showBetaDialog(limitsExceeded);
         return;
     }
 

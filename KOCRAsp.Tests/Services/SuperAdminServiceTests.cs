@@ -89,7 +89,7 @@ public class SuperAdminServiceTests
             var markedAccounts = await service.CleanupExpiredGuestAccountsAsync(TimeSpan.FromMinutes(30));
 
             await using var midContext = new ApplicationDbContext(options);
-            Assert.Equal(1, markedAccounts.Count);
+            Assert.Single(markedAccounts);
             Assert.True(await midContext.Organizations.AnyAsync(o => o.Id == guestOrg.Id));
             Assert.NotNull(await midContext.Organizations
                 .Where(o => o.Id == guestOrg.Id)

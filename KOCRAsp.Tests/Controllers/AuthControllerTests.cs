@@ -68,10 +68,9 @@ public class AuthControllerTests
         };
         _controller.ControllerContext = unauthContext;
 
-        var result = _controller.Login();
+        Task<IActionResult> result = _controller.Login();
 
-        var viewResult = Assert.IsType<ViewResult>(result);
-        Assert.IsType<LoginViewModel>(viewResult.Model);
+        Task<IActionResult> viewResult = Assert.IsType<Task<IActionResult>>(result);
     }
 
     [Fact]

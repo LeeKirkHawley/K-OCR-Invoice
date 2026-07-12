@@ -25,6 +25,8 @@ public class HomeIndexViewModel
     public bool ShowGuestWelcomeDialog { get; set; }
     public int GuestMaxBatches { get; set; }
     public int GuestActiveBatchCount { get; set; }
+    public int GuestRemainingBatches { get; set; }
+    public bool GuestBatchLimitExceeded { get; set; }
     public int GuestMaxInvoicesPerBatch { get; set; }
     public int GuestMaxPagesPerInvoice { get; set; }
     public double MinConfidenceThreshold { get; set; } = 0.8;

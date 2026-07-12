@@ -1,11 +1,13 @@
 using K_OCRLib.Configuration;
 using K_OCRLib.Data;
+using K_OCRLib.Identity;
 using K_OCRLib.Models;
 using K_OCRLib.Security;
 using K_OCRLib.Services;
 using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Models;
 using KOCRAsp.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
@@ -30,8 +32,6 @@ public class HomeController : Controller
     private readonly ILogger<HomeController> _logger;
     private readonly K_OCRLib.Services.IBatchChangeNotifier _batchNotifier;
 
-    //private static readonly string[] InvoiceExtensions =
-    //    [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"];
 
     public HomeController(
         IHomePageService homePageSvc,
@@ -44,7 +44,7 @@ public class HomeController : Controller
         IOrgConfigService orgConfigSvc,
         IOcrQueueRepository ocrQueueRepo,
         ILogger<HomeController> logger,
-        K_OCRLib.Services.IBatchChangeNotifier batchNotifier)
+        IBatchChangeNotifier batchNotifier)
     {
         _homePageSvc = homePageSvc;
         _homeOcrSvc = homeOcrSvc;
@@ -74,39 +74,60 @@ public class HomeController : Controller
             return View("Landing");
         }
 
-        if (User.IsInRole(RoleNames.SuperAdmin))
+        // SuperAdmins don't have an org; skip validation.
+        if (!User.IsInRole(RoleNames.SuperAdmin))
+        {
+            // Validate that the cached org is still valid.
+            // If the org was deleted, sign out and redirect to login.
+            if (!await ValidateOrgAsync())
+            {
+                _logger.LogWarning("Org validation failed; signing out and redirecting to login.");
+                await HttpContext.SignOutAsync();
+
+                // Explicitly clear the auth cookie to ensure immediate sign-out
+                HttpContext.Response.Cookies.Delete(".AspNetCore.Identity.Application");
+
+                return Redirect("/auth/login");
+            }
+        }
+        else
+        {
             return RedirectToAction("Index", "Admin");
+        }
 
-        var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        string orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        string? currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
 
-        var batches = (await _homePageSvc.GetBatchesForOrgAsync(orgId)).ToList();
 
-        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        List<BatchSummary> batches = (await _homePageSvc.GetBatchesForOrgAsync(orgId)).ToList();
+
+        var batchInfo = await GetBatchInfo(orgId, currentBatchIdStr, batches);
+        return batchInfo;
+    }
+
+    private async Task<IActionResult> GetBatchInfo(string orgId, string? currentBatchIdStr, List<BatchSummary> batches)
+    {
         BatchSummary? currentBatch = int.TryParse(currentBatchIdStr, out var currentBatchId)
             ? await _homePageSvc.GetCurrentBatchAsync(orgId, currentBatchId)
             : null;
 
         const int defaultPageSize = 25;
-        var maxPagesPerInvoice = _tenantContext.IsGuestOrganization ? 20 : 20;
-        var files = new List<FileListEntry>();
+        int maxPagesPerInvoice = _tenantContext.IsGuestOrganization ? 20 : 20;
+        List<FileListEntry> files = new List<FileListEntry>();
         int totalFiles = 0, currentPage = 1, totalPages = 0;
         if (currentBatch != null)
             (files, totalFiles, currentPage, totalPages) = await _homePageSvc.BuildPagedFileListAsync(
                 currentBatch, 1, defaultPageSize, _tenantContext.IsGuestOrganization);
 
-        var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
-        var isOrgAdmin = User.IsActiveOrganizationAdmin();
-        var isGuest = _tenantContext.IsGuestOrganization;
+        TrialOrganizationLimitStatus betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
+        bool isOrgAdmin = User.IsActiveOrganizationAdmin();
+        bool isGuest = _tenantContext.IsGuestOrganization;
 
-        var guestMaxBatches = isGuest ? _configSvc.GetGuestMaxBatches() : 0;
-        var guestMaxInvoices = isGuest ? _configSvc.GetMaxInvoicesPerBatch(isGuest: true) : 0;
-        var guestMaxPages = isGuest ? _configSvc.GetMaxPagesPerInvoice(isGuest: true) : 0;
-
-        var orgConfig = _tenantContext.OrganizationName is { } orgName
+        OrgConfig orgConfig = _tenantContext.OrganizationName is { } orgName
             ? await _orgConfigSvc.LoadAsync(orgName)
             : new OrgConfig();
 
-        return View(new HomeIndexViewModel
+        var model = new HomeIndexViewModel
         {
             OrgId = orgId,
             AvailableBatches = batches,
@@ -123,15 +144,19 @@ public class HomeController : Controller
             BetaMaxOcrPages = betaStatus.MaxOcrPages,
             BetaUsedOcrPages = betaStatus.UsedOcrPages,
             BetaRemainingOcrPages = betaStatus.RemainingOcrPages,
-            BetaOcrLimitExceeded = betaStatus.IsLimitExceeded,
-            IsGuestOrganization = isGuest,
-            ShowGuestWelcomeDialog = isGuest && isOrgAdmin,
-            GuestMaxBatches = guestMaxBatches,
-            GuestActiveBatchCount = batches.Count,
-            GuestMaxInvoicesPerBatch = guestMaxInvoices,
-            GuestMaxPagesPerInvoice = guestMaxPages,
+            BetaOcrLimitExceeded = betaStatus.IsOcrLimitExceeded,
+            IsGuestOrganization = betaStatus.IsGuestOrganization,
+            ShowGuestWelcomeDialog = betaStatus.IsGuestOrganization && isOrgAdmin,
+            GuestMaxBatches = betaStatus.MaxBatches,
+            GuestActiveBatchCount = betaStatus.UsedBatches,
+            GuestRemainingBatches = betaStatus.RemainingBatches,
+            GuestBatchLimitExceeded = betaStatus.IsBatchLimitExceeded,
+            GuestMaxInvoicesPerBatch = isGuest ? _configSvc.GetMaxInvoicesPerBatch(isGuest: true) : 0,
+            GuestMaxPagesPerInvoice = isGuest ? _configSvc.GetMaxPagesPerInvoice(isGuest: true) : 0,
             MinConfidenceThreshold = orgConfig.MinConfidenceThreshold,
-        });
+        };
+
+        return View(model);
     }
 
     [HttpPost]
@@ -152,8 +177,8 @@ public class HomeController : Controller
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { success = false, error = "Super-admin does not have org batch access." });
 
-        var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
-        if (betaStatus.IsLimitExceeded)
+        TrialOrganizationLimitStatus betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
+        if (betaStatus.IsOcrLimitExceeded)
         {
             return Json(new
             {
@@ -232,7 +257,7 @@ public class HomeController : Controller
             _tenantContext.StripeCustomerId);
 
         var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
-        if (betaStatus.IsLimitExceeded)
+        if (betaStatus.IsOcrLimitExceeded)
         {
             return Json(new
             {
@@ -255,10 +280,13 @@ public class HomeController : Controller
             pageLimitExceeded = result.PageLimitExceeded,
             error = result.Error,
             invoice = result.Invoice,
-            betaLimitExceeded = updatedBetaStatus.IsLimitExceeded,
+            betaLimitExceeded = updatedBetaStatus.IsOcrLimitExceeded,
             betaPagesRemaining = updatedBetaStatus.RemainingOcrPages,
             betaUsedPages = updatedBetaStatus.UsedOcrPages,
-            betaMaxPages = updatedBetaStatus.MaxOcrPages
+            betaMaxPages = updatedBetaStatus.MaxOcrPages,
+            guestActiveBatchCount = updatedBetaStatus.UsedBatches,
+            guestRemainingBatches = updatedBetaStatus.RemainingBatches,
+            guestBatchLimitExceeded = updatedBetaStatus.IsBatchLimitExceeded
         });
     }
 
@@ -283,13 +311,23 @@ public class HomeController : Controller
             _tenantContext.StripeCustomerId);
 
         var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
-        if (betaStatus.IsLimitExceeded)
+        if (betaStatus.IsOcrLimitExceeded)
         {
             return Json(new
             {
                 success = false,
                 betaLimitExceeded = true,
                 error = $"This beta-test organization has reached its OCR limit ({betaStatus.UsedOcrPages}/{betaStatus.MaxOcrPages} pages)."
+            });
+        }
+
+        if (betaStatus.IsBatchLimitExceeded)
+        {
+            return Json(new
+            {
+                success = false,
+                guestBatchLimitExceeded = true,
+                error = $"This guest organization has reached its batch limit ({betaStatus.UsedBatches}/{betaStatus.MaxBatches} batches)."
             });
         }
 
@@ -327,10 +365,13 @@ public class HomeController : Controller
             success = true,
             total,
             processed,
-            betaLimitExceeded = betaStatus.IsLimitExceeded,
+            betaLimitExceeded = betaStatus.IsOcrLimitExceeded,
             betaPagesRemaining = betaStatus.RemainingOcrPages,
             betaUsedPages = betaStatus.UsedOcrPages,
-            betaMaxPages = betaStatus.MaxOcrPages
+            betaMaxPages = betaStatus.MaxOcrPages,
+            guestActiveBatchCount = betaStatus.UsedBatches,
+            guestRemainingBatches = betaStatus.RemainingBatches,
+            guestBatchLimitExceeded = betaStatus.IsBatchLimitExceeded
         });
     }
 
@@ -712,5 +753,54 @@ public class HomeController : Controller
         HttpContext.Session.Remove("CurrentBatchId");
 
         return Json(new { success = true });
+    }
+
+    /// <summary>
+    /// Validates that the organization from the authentication cookie still exists
+    /// in the database and is active. Returns false if the org has been deleted or deactivated,
+    /// or if validation cannot be performed.
+    /// </summary>
+    private async Task<bool> ValidateOrgAsync()
+    {
+        string? orgId = User.FindFirstValue(AppClaimTypes.OrganizationId);
+
+        // No org claim means validation fails.
+        if (string.IsNullOrWhiteSpace(orgId))
+            return false;
+
+        try
+        {
+            // Try to get ApplicationDbContext from RequestServices
+            if (HttpContext.RequestServices.GetService(typeof(ApplicationDbContext)) is not ApplicationDbContext appDbContext)
+            {
+                // If DbContext not available, fail closed
+                _logger.LogWarning("ApplicationDbContext not available in RequestServices; cannot validate org {OrgId}", orgId);
+                return false;
+            }
+
+            Organization? org = await appDbContext.Organizations.FindAsync(orgId);
+            
+            if (org == null)
+            {
+                _logger.LogWarning("Organization {OrgId} not found; forcing sign-out.", orgId);
+                return false;
+            }
+
+            if (!org.IsActive)
+            {
+                _logger.LogWarning("Organization {OrgId} is inactive; forcing sign-out.", orgId);
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error validating organization {OrgId}; forcing sign-out.",
+                orgId);
+            return false;
+        }
     }
 }

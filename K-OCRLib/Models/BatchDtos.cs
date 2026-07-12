@@ -80,6 +80,12 @@ public sealed record FileUpload(string FileName, string ClientPath, Stream Conte
 /// <summary>Result of a batch OCR trigger.</summary>
 public class TriggerOcrResult
 {
+    /// <summary>True when the operation succeeded.</summary>
+    public bool Success { get; init; } = true;
+    
+    /// <summary>Error message if the operation failed.</summary>
+    public string? ErrorMessage { get; init; }
+
     /// <summary>True when every file in the batch was already processed and nothing was OCR'd.</summary>
     public bool AllSkipped { get; init; }
 
@@ -87,6 +93,7 @@ public class TriggerOcrResult
     public IReadOnlyList<string> QueuedFilePaths { get; init; } = [];
 
     public static TriggerOcrResult Ok(IReadOnlyList<string>? queuedFilePaths = null) =>
-        new() { QueuedFilePaths = queuedFilePaths ?? [] };
-    public static TriggerOcrResult Skipped() => new() { AllSkipped = true };
+        new() { Success = true, QueuedFilePaths = queuedFilePaths ?? [] };
+    public static TriggerOcrResult Skipped() => new() { Success = true, AllSkipped = true };
+    public static TriggerOcrResult Error(string message) => new() { Success = false, ErrorMessage = message };
 }

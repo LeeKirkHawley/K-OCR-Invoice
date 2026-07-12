@@ -1,4 +1,5 @@
 using K_OCRLib.Data;
+using K_OCRLib.Identity;
 using K_OCRLib.Models;
 using K_OCRLib.Services;
 using K_OCRLib.Services.Interfaces;
@@ -7,7 +8,11 @@ using KOCRAsp.Models;
 using KOCRAsp.Services;
 using KOCRAsp.Tests.Helpers;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using OCRQueue.Abstractions;
@@ -62,7 +67,7 @@ public class HomeControllerTests
             .ReturnsAsync(Array.Empty<OcrJobRecord>());
         _mockTrialLimitSvc
             .Setup(s => s.GetCurrentStatusAsync())
-            .ReturnsAsync(new TrialOrganizationLimitStatus(false, 500, 0));
+            .ReturnsAsync(new TrialOrganizationLimitStatus(false, false, 500, 0, 0, 0));
         _mockOrgConfigSvc
             .Setup(s => s.LoadAsync(OrgName))
             .ReturnsAsync(new K_OCRLib.Configuration.OrgConfig { MinConfidenceThreshold = 0.8 });
@@ -129,22 +134,42 @@ public class HomeControllerTests
     [Fact]
     public async Task Index_ReturnsViewWithModel()
     {
-        var batches = new[]
-        {
-            new BatchSummary { BatchId = 1, Name = "Batch A", OrganizationId = OrgId }
-        };
+        (ApplicationDbContext? db, ServiceProvider? provider, SqliteConnection? connection) = await CreateIdentityHarnessAsync();
+
+        Organization org = new Organization { Id = OrgId, Name = "Acme" };
+        db.Organizations.Add(org);
+        await db.SaveChangesAsync();
+
+        UserManager<ApplicationUser> userManager = provider.GetRequiredService<UserManager<ApplicationUser>>();
+        await provider.GetRequiredService<RoleManager<IdentityRole>>().CreateAsync(new IdentityRole("OrganizationAdmin"));
+
+        BatchSummary[] batches = new[] { new BatchSummary { BatchId = 1, Name = "Batch A", OrganizationId = OrgId } };
         _mockHomePageSvc
             .Setup(s => s.GetBatchesForOrgAsync(OrgId))
             .ReturnsAsync(batches);
 
         SetControllerContext();
+        
+        // Create a request scope and set it on the HttpContext so ValidateOrgAsync can access ApplicationDbContext
+        var scope = provider.CreateAsyncScope();
+        _controller.ControllerContext.HttpContext.RequestServices = scope.ServiceProvider;
 
-        var result = await _controller.Index();
+        try
+        {
+            IActionResult result = await _controller.Index();
 
-        var viewResult = Assert.IsType<ViewResult>(result);
-        var model = Assert.IsType<HomeIndexViewModel>(viewResult.Model);
-        Assert.Single(model.AvailableBatches);
-        Assert.Null(model.CurrentBatch);
+            ViewResult viewResult = Assert.IsType<ViewResult>(result);
+            HomeIndexViewModel model = Assert.IsType<HomeIndexViewModel>(viewResult.Model);
+            Assert.Single(model.AvailableBatches);
+            Assert.Null(model.CurrentBatch);
+        }
+        finally
+        {
+            await scope.DisposeAsync();
+            await connection.CloseAsync();
+            connection.Dispose();
+            provider.Dispose();
+        }
     }
 
     [Fact]
@@ -194,7 +219,7 @@ public class HomeControllerTests
         SetControllerContext();
         _mockTrialLimitSvc
             .Setup(s => s.GetCurrentStatusAsync())
-            .ReturnsAsync(new TrialOrganizationLimitStatus(true, 500, 500));
+            .ReturnsAsync(new TrialOrganizationLimitStatus(true, false, 500, 500, 0, 0));
         _mockTenantContext.Setup(t => t.IsBetaTestOrganization).Returns(true);
 
         var result = await _controller.StartOcr(@"C:\invoices\file.pdf");
@@ -232,4 +257,29 @@ public class HomeControllerTests
             fileResult.ContentType);
         Assert.Equal("file.docx", fileResult.FileDownloadName);
     }
+
+    private static async Task<(ApplicationDbContext db, ServiceProvider provider, SqliteConnection connection)> CreateIdentityHarnessAsync()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddDataProtection();
+        services.AddDbContext<ApplicationDbContext>(o => o.UseSqlite(connection));
+        services.AddIdentityCore<ApplicationUser>()
+            .AddRoles<IdentityRole>()
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddDefaultTokenProviders();
+
+        // Add MVC services needed for View rendering
+        services.AddMvc();
+        services.AddSession();
+
+        var provider = services.BuildServiceProvider();
+        var db = provider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        return (db, provider, connection);
+    }
+
 }

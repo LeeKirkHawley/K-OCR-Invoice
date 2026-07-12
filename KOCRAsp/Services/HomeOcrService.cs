@@ -174,6 +174,9 @@ public sealed class HomeOcrService : IHomeOcrService
             var ocrResult = await _batchSvc.TriggerOcrAsync(
                 batchId, minConfidence, skipFileNames, workflowKey, maxPageCount, maxInvoicesPerBatch);
 
+            if (!ocrResult.Success)
+                return new HomeBatchOcrResult(false, Error: ocrResult.ErrorMessage);
+
             return new HomeBatchOcrResult(
                 true,
                 AllSkipped: ocrResult.AllSkipped,

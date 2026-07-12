@@ -9,6 +9,8 @@ using K_OCRLib.Services.Interfaces;
 using K_OCRLib.Identity;
 using K_OCRLib.Models.Api.SuperAdmin;
 using K_OCRLib.Security;
+using K_OCRLib.Data;
+using K_OCRLib.Services;
 
 namespace KOCRAsp.Controllers;
 
@@ -78,12 +80,50 @@ public class AuthController : Controller
     }
 
     [HttpGet]
-    public IActionResult Login(string? returnUrl = null)
+    public async Task<IActionResult> Login(string? returnUrl = null)
     {
         if (User.Identity?.IsAuthenticated == true)
-            return returnUrl is not null
-                ? Redirect(returnUrl)
-                : RedirectToAction("Index", "Home");
+        {
+            // If user is still authenticated, verify the org is still valid.
+            // If not, sign out first before showing login page.
+            var orgId = User.FindFirstValue(AppClaimTypes.OrganizationId);
+            if (!string.IsNullOrWhiteSpace(orgId))
+            {
+                try
+                {
+                    var appDb = HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+                    var org = await appDb.Organizations.FindAsync(orgId);
+                    if (org == null || !org.IsActive)
+                    {
+                        _logger.LogWarning(
+                            "Org {OrgId} not found/inactive in login check; signing out.",
+                            orgId);
+                        await _signInManager.SignOutAsync();
+                        HttpContext.Response.Cookies.Delete(".AspNetCore.Identity.Application");
+                    }
+                    else
+                    {
+                        // Org is valid, redirect back to home
+                        return returnUrl is not null
+                            ? Redirect(returnUrl)
+                            : RedirectToAction("Index", "Home");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error validating org in login check");
+                    await _signInManager.SignOutAsync();
+                    HttpContext.Response.Cookies.Delete(".AspNetCore.Identity.Application");
+                }
+            }
+            else
+            {
+                // No org claim; super admin or other scenario - redirect to home
+                return returnUrl is not null
+                    ? Redirect(returnUrl)
+                    : RedirectToAction("Index", "Home");
+            }
+        }
 
         ViewData["ReturnUrl"] = returnUrl;
         ViewData["HideNav"] = true;

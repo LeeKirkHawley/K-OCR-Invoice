@@ -146,6 +146,7 @@ public class BatchAndCleanupTests
                 Mock.Of<IReportingService>(),
                 Mock.Of<IStripeUsageService>(),
                 Mock.Of<IOcrEnqueueService>(),
+                Mock.Of<ITrialOrganizationLimitService>(),
                 Mock.Of<ILogger<BatchService>>());
 
             var next = await service.GetNextBatchNumberAsync("org");
@@ -189,6 +190,7 @@ public class BatchAndCleanupTests
                 Mock.Of<IReportingService>(),
                 Mock.Of<IStripeUsageService>(),
                 Mock.Of<IOcrEnqueueService>(),
+                Mock.Of<ITrialOrganizationLimitService>(),
                 Mock.Of<ILogger<BatchService>>());
 
             var name = await service.DeleteBatchAsync(batchId, "u");
