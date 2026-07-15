@@ -378,7 +378,7 @@ public class BatchService : IBatchService, IAsyncDisposable
 
         // Block OCR if guest org exceeds batch limit
         var limitStatus = await _trialLimitSvc.GetCurrentStatusAsync();
-        if (limitStatus.IsGuestOrganization && limitStatus.IsBatchLimitExceeded)
+        if (limitStatus.IsGuestOrganization && limitStatus.IsBatchLimitExceeded())
             return TriggerOcrResult.Error(
                 $"This guest organization has reached its batch limit ({limitStatus.UsedBatches}/{limitStatus.MaxBatches} batches). " +
                 $"Please delete or export an existing batch to create new ones.");

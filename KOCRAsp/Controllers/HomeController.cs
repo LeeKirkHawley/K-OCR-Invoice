@@ -144,13 +144,13 @@ public class HomeController : Controller
             BetaMaxOcrPages = betaStatus.MaxOcrPages,
             BetaUsedOcrPages = betaStatus.UsedOcrPages,
             BetaRemainingOcrPages = betaStatus.RemainingOcrPages,
-            BetaOcrLimitExceeded = betaStatus.IsOcrLimitExceeded,
+            BetaOcrLimitExceeded = betaStatus.IsOcrLimitExceeded(),
             IsGuestOrganization = betaStatus.IsGuestOrganization,
             ShowGuestWelcomeDialog = betaStatus.IsGuestOrganization && isOrgAdmin,
             GuestMaxBatches = betaStatus.MaxBatches,
             GuestActiveBatchCount = betaStatus.UsedBatches,
             GuestRemainingBatches = betaStatus.RemainingBatches,
-            GuestBatchLimitExceeded = betaStatus.IsBatchLimitExceeded,
+            GuestBatchLimitExceeded = betaStatus.IsBatchLimitExceeded(),
             GuestMaxInvoicesPerBatch = isGuest ? _configSvc.GetMaxInvoicesPerBatch(isGuest: true) : 0,
             GuestMaxPagesPerInvoice = isGuest ? _configSvc.GetMaxPagesPerInvoice(isGuest: true) : 0,
             MinConfidenceThreshold = orgConfig.MinConfidenceThreshold,
@@ -177,23 +177,24 @@ public class HomeController : Controller
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Json(new { success = false, error = "Super-admin does not have org batch access." });
 
+        // should be able to get both guest and beta information here
         TrialOrganizationLimitStatus betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
-        if (betaStatus.IsOcrLimitExceeded)
+        if (betaStatus.IsOcrLimitExceeded())
         {
             return Json(new
             {
                 success = false,
                 betaLimitExceeded = true,
-                error = $"This beta-test organization has reached its OCR limit ({betaStatus.UsedOcrPages}/{betaStatus.MaxOcrPages} pages). Uploads and OCR are disabled."
+                error = $"This organization has reached its OCR limit ({betaStatus.UsedOcrPages}/{betaStatus.MaxOcrPages} pages). Uploads and OCR are disabled."
             });
         }
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        var currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
+        string userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        string? currentBatchIdStr = HttpContext.Session.GetString("CurrentBatchId");
         if (!int.TryParse(currentBatchIdStr, out int batchId))
             return Json(new { success = false, error = "No batch selected." });
 
-        var uploads = files
+        List<FileUpload> uploads = files
             .Select((f, index) =>
             {
                 var clientPath = clientPaths?.ElementAtOrDefault(index);
@@ -204,8 +205,9 @@ public class HomeController : Controller
             })
             .ToList();
 
-        var batch = await GetCurrentBatchAsync();
-        var result = await _homePageSvc.UploadFilesAsync(
+        BatchSummary? batch = await GetCurrentBatchAsync();
+
+        UploadResult result = await _homePageSvc.UploadFilesAsync(
             batchId, uploads, userId, _tenantContext.IsGuestOrganization, _tenantContext.OrganizationName ?? string.Empty,
             User.FindFirstValue(ClaimTypes.Email) ?? userId,
             batch?.Name ?? string.Empty);
@@ -257,7 +259,7 @@ public class HomeController : Controller
             _tenantContext.StripeCustomerId);
 
         var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
-        if (betaStatus.IsOcrLimitExceeded)
+        if (betaStatus.IsOcrLimitExceeded())
         {
             return Json(new
             {
@@ -280,13 +282,13 @@ public class HomeController : Controller
             pageLimitExceeded = result.PageLimitExceeded,
             error = result.Error,
             invoice = result.Invoice,
-            betaLimitExceeded = updatedBetaStatus.IsOcrLimitExceeded,
+            betaLimitExceeded = updatedBetaStatus.IsOcrLimitExceeded(),
             betaPagesRemaining = updatedBetaStatus.RemainingOcrPages,
             betaUsedPages = updatedBetaStatus.UsedOcrPages,
             betaMaxPages = updatedBetaStatus.MaxOcrPages,
             guestActiveBatchCount = updatedBetaStatus.UsedBatches,
             guestRemainingBatches = updatedBetaStatus.RemainingBatches,
-            guestBatchLimitExceeded = updatedBetaStatus.IsBatchLimitExceeded
+            guestBatchLimitExceeded = updatedBetaStatus.IsBatchLimitExceeded()
         });
     }
 
@@ -311,7 +313,7 @@ public class HomeController : Controller
             _tenantContext.StripeCustomerId);
 
         var betaStatus = await _trialLimitSvc.GetCurrentStatusAsync();
-        if (betaStatus.IsOcrLimitExceeded)
+        if (betaStatus.IsOcrLimitExceeded())
         {
             return Json(new
             {
@@ -321,7 +323,7 @@ public class HomeController : Controller
             });
         }
 
-        if (betaStatus.IsBatchLimitExceeded)
+        if (betaStatus.IsBatchLimitExceeded())
         {
             return Json(new
             {
@@ -365,13 +367,13 @@ public class HomeController : Controller
             success = true,
             total,
             processed,
-            betaLimitExceeded = betaStatus.IsOcrLimitExceeded,
+            betaLimitExceeded = betaStatus.IsOcrLimitExceeded(),
             betaPagesRemaining = betaStatus.RemainingOcrPages,
             betaUsedPages = betaStatus.UsedOcrPages,
             betaMaxPages = betaStatus.MaxOcrPages,
             guestActiveBatchCount = betaStatus.UsedBatches,
             guestRemainingBatches = betaStatus.RemainingBatches,
-            guestBatchLimitExceeded = betaStatus.IsBatchLimitExceeded
+            guestBatchLimitExceeded = betaStatus.IsBatchLimitExceeded()
         });
     }
 

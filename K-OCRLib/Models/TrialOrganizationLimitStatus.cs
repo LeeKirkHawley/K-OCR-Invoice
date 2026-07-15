@@ -15,10 +15,22 @@ namespace K_OCRLib.Models
         int UsedBatches)
     {
         public int RemainingOcrPages => Math.Max(0, MaxOcrPages - UsedOcrPages);
-        public bool IsOcrLimitExceeded => UsedOcrPages >= MaxOcrPages;
+        public bool IsOcrLimitExceeded()
+        {
+            if (!IsBetaTestOrganization && !IsGuestOrganization)
+                return false;
+            else
+                return UsedOcrPages >= MaxOcrPages;
+        }
 
         public int RemainingBatches => Math.Max(0, MaxBatches - UsedBatches);
-        public bool IsBatchLimitExceeded => UsedBatches >= MaxBatches;
+        public bool IsBatchLimitExceeded()
+        {
+            if (!IsBetaTestOrganization && !IsGuestOrganization)
+                return false;
+            else
+                return UsedBatches >= MaxBatches;
+        }
 
         public bool IsTrialOrganization => IsBetaTestOrganization || IsGuestOrganization;
     }
