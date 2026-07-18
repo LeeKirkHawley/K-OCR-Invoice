@@ -153,7 +153,7 @@ function exceedsBatchLimits(fileCount: number): string  // return if match limit
     return "";
 }
 
-var handleUploadClick = async function(dialog: HTMLDialogElement, uploadBtn: HTMLButtonElement, fileListEl: HTMLElement, selectedFiles: any[]): Promise<void>
+var handleUpload = async function(dialog: HTMLDialogElement, uploadBtn: HTMLButtonElement, fileListEl: HTMLElement, selectedFiles: any[]): Promise<void>
 {
     if (selectedFiles.length === 0) return;
 

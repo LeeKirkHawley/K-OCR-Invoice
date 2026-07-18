@@ -41,7 +41,7 @@
                     @* 📤 Upload Invoices *@
                     @* <input type="file" id="uploadInput" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp" /> *@
                     <!-- ====================== UPLOAD BUTTON ====================== -->
-                    <button id="open-upload-btn" class="btn btn-primary">
+                    <button id="open-upload-btn" disabled class="btn btn-primary">
                         Upload Files / Folders
                     </button>
 
@@ -582,18 +582,6 @@
             el.classList.add('disabled');
         }
     }
-
-    // ── Batch selector ──────────────────────────────────────────
-    document.getElementById('batchSelector').addEventListener('change', function () 
-    {
-        const batchId = this.value;
-        if (!batchId) return;
-        const fd = new FormData();
-        fd.append('batchId', batchId);
-        postForm('/home/selectbatch', fd)
-            .then(() => location.reload())
-            .catch(err => showToast('Failed to switch batch: ' + err.message, 'error'));
-    });
 
     // ── File upload (legacy single-file input handler if present) ─────────────────────────────────────────────
     const _legacyUploadInput = document.getElementById('uploadInput');
@@ -2097,8 +2085,12 @@
             const batches = await resp.json();
             const selector = document.getElementById('batchSelector');
             const currentValue = selector.value;
-            
-            let html = '<option value="">— Select Batch —</option>';
+             
+            // Only show "Select Batch" placeholder if no batch is currently selected
+            let html = '';
+            if (!currentValue) {
+                html = '<option value="">— Select Batch —</option>';
+            }
             for (const batch of batches) {
                 const selected = batch.batchId == currentValue ? ' selected' : '';
                 html += `<option value="${batch.batchId}"${selected}>${escapeHtml(batch.name)}</option>`;
@@ -2371,6 +2363,39 @@
     });
     renderPagination(@Model.TotalFiles, @Model.CurrentPage, @Model.PageSize, @Model.TotalPages);
     updateExportButtonState();
+     
+    // Enable upload button only when a batch is selected
+    function updateUploadButtonState() {
+        const openUploadBtn = document.getElementById('open-upload-btn');
+        if (openUploadBtn) {
+            openUploadBtn.disabled = !_currentBatchId;
+        }
+    }
+     
+    // Update batch selector to enable upload button on change
+    const batchSelectorEl = document.getElementById('batchSelector');
+    if (batchSelectorEl) {
+        batchSelectorEl.addEventListener('change', function () {
+            const batchId = this.value;
+            if (!batchId) return;
+            const fd = new FormData();
+            fd.append('batchId', batchId);
+            postForm('/home/selectbatch', fd)
+                .then(() => location.reload())
+                .catch(err => showToast('Failed to switch batch: ' + err.message, 'error'));
+        });
+    }
+     
+    updateUploadButtonState();
+     
+    // Remove the placeholder "Select Batch" option if a batch is selected
+    if (_currentBatchId) {
+        const placeholderOption = document.querySelector('#batchSelector option[value=""]');
+        if (placeholderOption) {
+            placeholderOption.remove();
+        }
+    }
+     
     initKocrSplitters();
     initKocrZoom();
     initVtip();
@@ -2466,7 +2491,12 @@
     }
 
     // Upload button
-    uploadBtn.addEventListener('click', () => handleUploadClick(dialog, uploadBtn, fileListEl, selectedFiles));
+    //uploadBtn.addEventListener('click', () => handleUploadClick(dialog, uploadBtn, fileListEl, selectedFiles));
+
+    document.getElementById('upload-btn').addEventListener('click', async () => {
+            await handleUpload(dialog, uploadBtn, fileListEl, selectedFiles);
+    });
+
 
 </script>
 }

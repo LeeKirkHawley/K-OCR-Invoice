@@ -52,4 +52,9 @@
         </Content>
     </ItemGroup>-->
 
+  <!-- Auto-compile TypeScript before build -->
+  <Target Name="TypeScriptCompile" BeforeTargets="Build">
+    <Exec Command="npx tsc -p tsconfig.json" WorkingDirectory="$(ProjectDir)" />
+  </Target>
+
 </Project>
