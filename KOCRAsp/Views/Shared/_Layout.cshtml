@@ -25,6 +25,7 @@
     var canonicalUrl = $"{request.Scheme}://{request.Host}{request.PathBase}{canonicalPath}";
     var activeOrgId = User.FindFirst(AppClaimTypes.OrganizationId)?.Value;
     var activeTenantName = User.FindFirst(AppClaimTypes.TenantName)?.Value;
+    var userRole = User.FindFirst(AppClaimTypes.ActiveOrganizationRole)?.Value;
     var returnUrl = $"{request.PathBase}{request.Path}{request.QueryString}";
     var orgOptions = Array.Empty<(string OrgId, string OrgName)>();
     if (User.Identity?.IsAuthenticated == true)

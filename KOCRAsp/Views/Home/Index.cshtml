@@ -1,4 +1,6 @@
+@using K_OCRLib.Security
 @model KOCRAsp.Models.HomeIndexViewModel
+
 @{
     ViewData["Title"] = "Invoice Processing";
     ViewData["MetaDescription"] = "Process invoices, manage batches, and review OCR results in Hardscrabble Invoice.";
@@ -1043,9 +1045,16 @@
         </div>`;
 
         html += `<div class="d-flex gap-2 mt-2 flex-wrap">
-        <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1" onclick="saveInvoice()">Save</button>
-        <button id="acceptBtn" class="btn btn-sm btn-success"           tabindex="-1" onclick="acceptValidation()">Accept</button>
-        </div>`;
+        <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1" onclick="saveInvoice()">Save</button>`;
+
+        const role = "@User.ActiveOrganizationRole()";
+        console.log(role);
+
+        if (role === "OrganizationAdmin" || role === "OrganizationValidator")
+        {
+            @Html.Raw("html += `<button id=\"acceptBtn\" class=\"btn btn-sm btn-success\" tabindex=\"-1\" onclick=\"acceptValidation()\">Accept</button>`;");
+        };
+        html += `</div>`;
 
         container.innerHTML = html;
 
@@ -1236,6 +1245,9 @@
     }
 
     async function runOcrOnFile(filePath, btn) {
+        // Prevent duplicate calls if button is already loading
+        if (btn && btn.disabled) return;
+        
         if (_isBetaTestOrganization && _betaLimitExceeded) {
             showBetaDialog(`This beta-test organization has reached its OCR limit (${_betaUsedPages}/${_betaMaxPages} pages). Uploads and OCR are disabled.`);
             return;
