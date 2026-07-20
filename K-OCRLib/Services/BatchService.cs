@@ -205,6 +205,24 @@ public class BatchService : IBatchService, IAsyncDisposable
         return batchName;
     }
 
+    public async Task<string> RestoreBatchAsync(int batchId)
+    {
+        var batch = await Db.Batches.FindAsync(batchId)
+                    ?? throw new InvalidOperationException($"Batch {batchId} not found.");
+
+        if (!batch.MarkedForDeletionAtUtc.HasValue)
+            throw new InvalidOperationException("Batch is not marked for deletion.");
+
+        var batchName = batch.Name;
+
+        // Clear the soft delete marker
+        batch.MarkedForDeletionAtUtc = null;
+        Db.Batches.Update(batch);
+        await Db.SaveChangesAsync();
+
+        return batchName;
+    }
+
     /// <summary>
     /// Hard-deletes all batches whose MarkedForDeletionAtUtc has passed the retention window.
     /// Returns count of batches hard-deleted.

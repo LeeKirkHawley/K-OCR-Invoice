@@ -180,6 +180,40 @@ public class BatchController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Restore(int batchId)
+    {
+        string orgId = User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty;
+        try
+        {
+            string batchName = await _batchSvc.RestoreBatchAsync(batchId);
+            _batchNotifier.Notify(orgId);
+            await _batchActionSvc.LogAsync(
+                BatchActionTypes.Created, batchName,
+                User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                User.Identity?.Name ?? string.Empty);
+            await _orgLogSvc.LogBatchRestoredAsync(
+                User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
+                batchName,
+                User.Identity?.Name ?? string.Empty);
+            try
+            {
+                await _batchNotificationSvc.NotifyBatchRestoredAsync(orgId, batchName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send restore notification for batch '{Batch}' in org {OrgId}", batchName, orgId);
+            }
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Restore batch {BatchId} failed", batchId);
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Lock(int batchId)
     {
         string userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;

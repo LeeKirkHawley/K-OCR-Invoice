@@ -238,6 +238,35 @@ public class EmailService : IEmailService
         _logger.LogInformation("Batch hard-delete notification sent to {Email} for batch '{Batch}' in org '{Org}'.", toEmail, batchName, organizationName);
     }
 
+    public async Task SendBatchRestoredNotificationAsync(
+        string toEmail,
+        string toName,
+        string organizationName,
+        string batchName)
+    {
+        var settings = await _configService.LoadSettingsAsync();
+        var email = settings.Email ?? new EmailSettings();
+
+        if (string.IsNullOrWhiteSpace(email.SmtpHost))
+            throw new InvalidOperationException("SMTP host is not configured.");
+
+        var subject = $"K-OCR — Batch '{WebUtility.HtmlEncode(batchName)}' restored";
+        var body = $"""
+            <html><body style="font-family:sans-serif;color:#222">
+              <h2>Batch Restored</h2>
+              <p>Hi {WebUtility.HtmlEncode(toName)},</p>
+              <p>The batch <strong>{WebUtility.HtmlEncode(batchName)}</strong> in your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been restored and is now active again.</p>
+              <p style="color:#666;font-size:0.9em;margin-top:24px">
+                You can now continue working with this batch.
+              </p>
+            </body></html>
+            """;
+
+        var message = BuildMessage(email, toEmail, toName, subject, body);
+        await SendAsync(email, message);
+        _logger.LogInformation("Batch restore notification sent to {Email} for batch '{Batch}' in org '{Org}'.", toEmail, batchName, organizationName);
+    }
+
     // -------------------------------------------------------------------------
 
     private static MimeMessage BuildMessage(

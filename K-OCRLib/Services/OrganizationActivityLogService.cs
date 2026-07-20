@@ -12,6 +12,7 @@ public interface IOrganizationActivityLogService
     Task LogValidatedInvoiceDownloadAsync(string organizationName, string batchName, string orgUser, string fileName);
     Task LogBatchMarkedForDeletionAsync(string organizationName, string batchName, string orgUser);
     Task LogBatchDeletedAsync(string organizationName, string batchName, string orgUser);
+    Task LogBatchRestoredAsync(string organizationName, string batchName, string orgUser);
 }
 
 public sealed class OrganizationActivityLogService : IOrganizationActivityLogService
@@ -50,6 +51,9 @@ public sealed class OrganizationActivityLogService : IOrganizationActivityLogSer
 
     public Task LogBatchDeletedAsync(string organizationName, string batchName, string orgUser) =>
         AppendAsync(organizationName, "BatchDeleted", $"Batch=\"{batchName}\" User=\"{orgUser}\"");
+
+    public Task LogBatchRestoredAsync(string organizationName, string batchName, string orgUser) =>
+        AppendAsync(organizationName, "BatchRestored", $"Batch=\"{batchName}\" User=\"{orgUser}\"");
 
     private async Task AppendAsync(string organizationName, string eventName, string details)
     {

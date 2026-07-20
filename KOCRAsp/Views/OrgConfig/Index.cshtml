@@ -51,6 +51,7 @@
                                     <th>Created By</th>
                                     <th>Created At</th>
                                     <th>Marked for Deletion</th>
+                                    <th class="text-end">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -68,6 +69,22 @@
                                             else
                                             {
                                                 <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            @if (batch.MarkedForDeletionAtUtc.HasValue)
+                                            {
+                                                <button class="btn btn-sm btn-outline-success"
+                                                        onclick="restoreBatch(@batch.BatchId, '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(batch.Name))', this)">
+                                                    Restore
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        onclick="deleteBatch(@batch.BatchId, '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(batch.Name))', this)">
+                                                    Delete
+                                                </button>
                                             }
                                         </td>
                                     </tr>
@@ -383,6 +400,45 @@ else
         const input = document.getElementById('setupLinkInput');
         input.select();
         navigator.clipboard.writeText(input.value).then(() => showToast('Copied!'));
+    }
+
+    async function deleteBatch(batchId, batchName, btn) {
+        if (!confirm(`Mark batch "${batchName}" for deletion?`)) 
+            return;
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson(`/batch/delete?batchId=${batchId}`, {});
+            if (result.success) {
+                showToast(`Batch "${batchName}" deleted.`);
+                // Reload the page to refresh batch list
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast(result.error ?? 'Delete failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function restoreBatch(batchId, batchName, btn) {
+        if (!confirm(`Restore batch "${batchName}"?`)) return;
+        setButtonLoading(btn, true);
+        try {
+            const result = await postJson(`/batch/restore?batchId=${batchId}`, {});
+            if (result.success) {
+                showToast(`Batch "${batchName}" restored.`);
+                // Reload the page to refresh batch list
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast(result.error ?? 'Restore failed.', 'error');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
     }
 </script>
 }

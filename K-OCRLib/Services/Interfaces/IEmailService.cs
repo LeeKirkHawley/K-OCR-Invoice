@@ -57,4 +57,13 @@ public interface IEmailService
         string toName,
         string organizationName,
         string batchName);
+
+    /// <summary>
+    /// Sends a notification to an org admin that a batch has been restored.
+    /// </summary>
+    Task SendBatchRestoredNotificationAsync(
+        string toEmail,
+        string toName,
+        string organizationName,
+        string batchName);
 }

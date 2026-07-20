@@ -111,4 +111,42 @@ public class BatchNotificationService : IBatchNotificationService
             }
         }
     }
+
+    public async Task NotifyBatchRestoredAsync(string orgId, string batchName, CancellationToken ct = default)
+    {
+        var admins = await _appDb.UserOrganizationMemberships
+            .AsNoTracking()
+            .Include(m => m.User)
+            .Where(m => m.OrganizationId == orgId && m.Role == RoleNames.OrganizationAdmin)
+            .Select(m => new { m.User.Email, m.User.FullName })
+            .ToListAsync(ct);
+
+        var org = await _appDb.Organizations
+            .AsNoTracking()
+            .Where(o => o.Id == orgId)
+            .Select(o => o.Name)
+            .FirstOrDefaultAsync(ct);
+
+        var orgName = org ?? orgId;
+
+        foreach (var admin in admins)
+        {
+            if (string.IsNullOrWhiteSpace(admin.Email))
+                continue;
+            try
+            {
+                await _emailService.SendBatchRestoredNotificationAsync(
+                    admin.Email,
+                    admin.FullName ?? admin.Email,
+                    orgName,
+                    batchName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Failed to send batch restore notification to {Email} for batch '{Batch}' in org {OrgId}.",
+                    admin.Email, batchName, orgId);
+            }
+        }
+    }
 }
