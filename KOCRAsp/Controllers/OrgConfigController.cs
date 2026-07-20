@@ -1,5 +1,6 @@
 using K_OCRLib.Configuration;
 using K_OCRLib.Data;
+using K_OCRLib.Models;
 using K_OCRLib.Models.Api.OrganizationAdmin;
 using K_OCRLib.Models.Api.SuperAdmin;
 using K_OCRLib.Security;
@@ -27,18 +28,21 @@ public class OrgConfigController : Controller
     private readonly IOrganizationAdminService _orgAdminSvc;
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<OrgConfigController> _logger;
+    private readonly IBatchService _batchService;
 
     public OrgConfigController(
         ApplicationDbContext dbContext,
         IOrgConfigService orgConfigSvc,
         ISuperAdminService superAdminSvc,
         IOrganizationAdminService orgAdminSvc,
+        IBatchService batchService,
         ILogger<OrgConfigController> logger)
     {
         _orgConfigSvc  = orgConfigSvc;
         _superAdminSvc = superAdminSvc;
         _orgAdminSvc   = orgAdminSvc;
         _dbContext     = dbContext;
+        _batchService  = batchService;
         _logger        = logger;
     }
 
@@ -54,9 +58,12 @@ public class OrgConfigController : Controller
 
         var config = await _orgConfigSvc.LoadAsync(orgName);
 
+        List<BatchSummary> batches = (await _batchService.GetBatchesForOrgAsync(selectedOrgId)).ToList();
+
         ViewBag.AllOrgs       = allOrgs;
         ViewBag.SelectedOrgId = selectedOrgId;
         ViewBag.OrgName       = orgName;
+        ViewBag.OrgBatches    = batches;
 
         return View(config);
     }

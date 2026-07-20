@@ -1,4 +1,6 @@
+@using System.Security.Claims
 @using K_OCRLib.Configuration
+@using K_OCRLib.Models
 @using K_OCRLib.Models.Api.SuperAdmin
 @using K_OCRLib.Security
 @model OrgConfig
@@ -8,6 +10,7 @@
     var allOrgs       = ViewBag.AllOrgs as OrganizationOverview[];
     var selectedOrgId = ViewBag.SelectedOrgId as string;
     var orgName       = ViewBag.OrgName as string;
+    var orgBatches    = ViewBag.OrgBatches as List<BatchSummary>;
 }
 
 <h1 class="h4 mb-4">Organization Configuration</h1>
@@ -29,9 +32,57 @@
 @if (allOrgs is { Length: > 0 })
 {
     <div class="card mb-3">
-        <div class="card-header"><strong>Organization</strong></div>
+        <div class="card-header"><strong>Batches</strong></div>
         <div class="card-body">
+
             @if (User.IsInRole(RoleNames.SuperAdmin))
+            {
+                
+            }
+            else if (User.HasClaim(AppClaimTypes.ActiveOrganizationRole, RoleNames.OrganizationAdmin))
+            {
+                @if (orgBatches?.Count > 0)
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Created By</th>
+                                    <th>Created At</th>
+                                    <th>Marked for Deletion</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var batch in orgBatches)
+                                {
+                                    <tr>
+                                        <td><strong>@batch.Name</strong></td>
+                                        <td>@batch.CreatedByUserId</td>
+                                        <td>@batch.CreatedAtUtc.ToString("g")</td>
+                                        <td>
+                                            @if (batch.MarkedForDeletionAtUtc.HasValue)
+                                            {
+                                                <span class="badge bg-warning">@batch.MarkedForDeletionAtUtc.Value.ToString("g")</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <p class="text-muted">No batches.</p>
+                }
+            }
+
+@*          @if (User.IsInRole(RoleNames.SuperAdmin))
             {
                 <form method="get" asp-action="Index" asp-controller="OrgConfig" class="d-flex align-items-center gap-3">
                     <label class="form-label mb-0 text-nowrap">Select Organization:</label>
@@ -46,7 +97,7 @@
                     </select>
                 </form>
             }
-            else
+            else 
             {
                 <form method="post" asp-action="SwitchOrganization" asp-controller="Auth" class="d-flex align-items-center gap-3">
                     @Html.AntiForgeryToken()
@@ -63,7 +114,7 @@
                     </select>
                 </form>
             }
-        </div>
+ *@        </div>
     </div>
 }
 else
