@@ -1,6 +1,7 @@
 using Docnet.Core;
 using Docnet.Core.Models;
 using K_OCRLib.Data;
+using K_OCRLib.Identity;
 using K_OCRLib.Models;
 using K_OCRLib.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         _ocrLocks = new();
 
     private readonly IDbContextFactory<KOCRDbContext> _dbFactory;
+    private readonly ApplicationDbContext _appDb;
     private readonly IPathService _pathService;
     // TODO: Remove _processingService once the queue path is fully stable (kept to avoid breaking test mocks).
     private readonly IInvoiceProcessingService _processingService;
@@ -34,6 +36,7 @@ public class BatchService : IBatchService, IAsyncDisposable
 
     public BatchService(
         IDbContextFactory<KOCRDbContext> dbFactory,
+        ApplicationDbContext appDb,
         IPathService pathService,
         IInvoiceProcessingService processingService,
         IFileService fileService,
@@ -45,6 +48,7 @@ public class BatchService : IBatchService, IAsyncDisposable
         ILogger<BatchService> logger)
     {
         _dbFactory          = dbFactory;
+        _appDb              = appDb;
         _pathService        = pathService;
         _processingService  = processingService;
         _fileService        = fileService;
@@ -71,8 +75,20 @@ public class BatchService : IBatchService, IAsyncDisposable
 
     public async Task<BatchSummary[]> GetBatchesForOrgAsync(string organizationId)
     {
-        return await Db.Batches
+        var batches = await Db.Batches
+            .AsNoTracking()
             .OrderBy(b => b.BatchNumber)
+            .ToListAsync();
+
+        // Batches and Users live in separate databases, so the user name lookup
+        // is resolved in-memory rather than via a SQL join.
+        var userIds = batches.Select(b => b.CreatedByUserId).Distinct().ToList();
+        var userNamesById = await _appDb.Users
+            .AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.FullName);
+
+        return batches
             .Select(b => new BatchSummary
             {
                 BatchId                = b.BatchId,
@@ -83,9 +99,10 @@ public class BatchService : IBatchService, IAsyncDisposable
                 LockAcquiredAtUtc      = b.LockAcquiredAtUtc,
                 CreatedAtUtc           = b.CreatedAtUtc,
                 CreatedByUserId        = b.CreatedByUserId,
+                CreatedByUserName      = userNamesById.TryGetValue(b.CreatedByUserId, out var name) ? name : null,
                 MarkedForDeletionAtUtc = b.MarkedForDeletionAtUtc,
             })
-            .ToArrayAsync();
+            .ToArray();
     }
 
     public async Task<BatchDetail?> GetBatchDetailAsync(int batchId)

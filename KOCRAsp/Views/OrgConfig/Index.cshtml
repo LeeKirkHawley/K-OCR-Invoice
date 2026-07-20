@@ -59,7 +59,7 @@
                                 {
                                     <tr>
                                         <td><strong>@batch.Name</strong></td>
-                                        <td>@batch.CreatedByUserId</td>
+                                        <td>@(batch.CreatedByUserName ?? batch.CreatedByUserId)</td>
                                         <td>@batch.CreatedAtUtc.ToString("g")</td>
                                         <td>
                                             @if (batch.MarkedForDeletionAtUtc.HasValue)
