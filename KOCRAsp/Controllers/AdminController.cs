@@ -15,6 +15,7 @@ public class AdminController : Controller
 {
     private readonly ISuperAdminService _superAdminSvc;
     private readonly ISuperAdminDataService _dataSvc;
+    private readonly IOrganizationAdminService _orgAdminSvc;
     private readonly IConfiguration _configuration;
     private readonly IOcrJobQueue _ocrJobQueue;
     private readonly IOcrQueueProcessor _ocrQueueProcessor;
@@ -23,6 +24,7 @@ public class AdminController : Controller
     public AdminController(
         ISuperAdminService superAdminSvc,
         ISuperAdminDataService dataSvc,
+        IOrganizationAdminService orgAdminSvc,
         IConfiguration configuration,
         IOcrJobQueue ocrJobQueue,
         IOcrQueueProcessor ocrQueueProcessor,
@@ -30,6 +32,7 @@ public class AdminController : Controller
     {
         _superAdminSvc      = superAdminSvc;
         _dataSvc            = dataSvc;
+        _orgAdminSvc        = orgAdminSvc;
         _configuration      = configuration;
         _ocrJobQueue        = ocrJobQueue;
         _ocrQueueProcessor  = ocrQueueProcessor;
@@ -70,11 +73,13 @@ public class AdminController : Controller
             return NotFound();
 
         var deletedOrgRetentionDays = _configuration.GetValue<int>("DeletedOrgRetentionDays", 14);
+        var users = await _orgAdminSvc.ListUsersAsync(orgId);
 
         var model = new AdminOrganizationDetailsViewModel
         {
             Organization = organization,
-            DeletedOrgRetentionDays = deletedOrgRetentionDays
+            DeletedOrgRetentionDays = deletedOrgRetentionDays,
+            Users = users
         };
 
         return View(model);

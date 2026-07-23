@@ -92,3 +92,49 @@
         </dl>
     </div>
 </div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">Organization Members</h5>
+    </div>
+    <div class="card-body">
+        @if (Model.Users.Length == 0)
+        {
+            <p class="text-muted">No users in this organization.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in Model.Users)
+                        {
+                            <tr>
+                                <td>@(user.FullName ?? "—")</td>
+                                <td>@user.Email</td>
+                                <td>
+                                    <span class="badge @(user.IsOrganizationAdmin ? "bg-primary" : "bg-secondary")">
+                                        @(user.Roles.FirstOrDefault() ?? "Unknown")
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge @(user.IsActive ? "bg-success" : "bg-warning text-dark")">
+                                        @(user.IsActive ? "Active" : "Locked")
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
