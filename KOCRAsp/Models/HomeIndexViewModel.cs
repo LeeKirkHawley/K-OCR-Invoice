@@ -5,6 +5,7 @@ namespace KOCRAsp.Models;
 public class HomeIndexViewModel
 {
     public string OrgId { get; set; } = string.Empty;
+    public string CurrentUserEmail { get; set; } = string.Empty;
     public List<BatchSummary> AvailableBatches { get; set; } = new();
     public BatchSummary? CurrentBatch { get; set; }
     public List<FileListEntry> Files { get; set; } = new();

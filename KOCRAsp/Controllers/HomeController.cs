@@ -130,6 +130,7 @@ public class HomeController : Controller
         var model = new HomeIndexViewModel
         {
             OrgId = orgId,
+            CurrentUserEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown",
             AvailableBatches = batches,
             CurrentBatch = currentBatch,
             Files = files,
@@ -586,8 +587,8 @@ public class HomeController : Controller
         SaveInvoiceRequest? request;
         try
         {
-            using var reader = new StreamReader(Request.Body);
-            var body = await reader.ReadToEndAsync();
+            using StreamReader reader = new StreamReader(Request.Body);
+            string body = await reader.ReadToEndAsync();
             request = JsonConvert.DeserializeObject<SaveInvoiceRequest>(body);
         }
         catch (Exception ex)
@@ -661,6 +662,21 @@ public class HomeController : Controller
         return File(bytes,
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             downloadName);
+    }
+
+    /// <summary>
+    /// Returns the centralized field registry (header and item fields).
+    /// Used by the frontend to identify and handle fields consistently with the backend.
+    /// </summary>
+    [HttpGet]
+    public IActionResult GetFieldRegistry()
+    {
+        return Json(new
+        {
+            headerFields = FieldRegistry.HeaderFields,
+            itemFields = FieldRegistry.ItemFields,
+            moneyPropertyNames = FieldRegistry.MoneyPropertyNames.ToList(),
+        });
     }
 
     [HttpGet]

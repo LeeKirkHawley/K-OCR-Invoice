@@ -3,6 +3,8 @@
 
 var _currentFilePath: string | null = null;
 var _currentInvoice: any = null;
+var _originalInvoiceEditsJson: string = '[]';  // Original edit history JSON (before converting to Map)
+var _originalItemEditsJson: Map<number, string> = new Map();  // Original item edit history JSONs by item index
 var _selectedFieldKey: string | null = null;
 var _refreshAbort: AbortController | null = null;
 var _contextMenuFilePath: string | null = null;
