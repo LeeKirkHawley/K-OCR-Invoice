@@ -30,7 +30,7 @@ public class DatabaseConfigurationTests
         using var scope = provider.CreateScope();
 
         var context = scope.ServiceProvider.GetRequiredService<KOCRDbContext>();
-        var dbService = scope.ServiceProvider.GetRequiredService<DatabaseService>();
+        var dbService = scope.ServiceProvider.GetRequiredService<OrgDatabaseService>();
 
         Assert.NotNull(dbService);
         Assert.Contains("test-config.db", context.Database.GetDbConnection().ConnectionString);
@@ -49,7 +49,7 @@ public class DatabaseConfigurationTests
         using var scope = provider.CreateScope();
 
         var context = scope.ServiceProvider.GetRequiredService<KOCRDbContext>();
-        var dbService = scope.ServiceProvider.GetRequiredService<DatabaseService>();
+        var dbService = scope.ServiceProvider.GetRequiredService<OrgDatabaseService>();
 
         Assert.NotNull(dbService);
         Assert.Contains("test-legacy.db", context.Database.GetDbConnection().ConnectionString);

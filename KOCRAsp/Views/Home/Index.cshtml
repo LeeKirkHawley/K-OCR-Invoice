@@ -412,6 +412,9 @@
             if (data.success && data.invoice)
             {
                 _currentInvoice = data.invoice;
+
+                replayEdits(_currentInvoice);
+
                 // Clear original edit maps before loading new invoice
                 _originalItemEditsJson.clear();
                 attachValidation(_currentInvoice);
@@ -443,6 +446,20 @@
         {
             showToast('Failed to load invoice: ' + err.message, 'error');
         }
+    }
+
+    function replayEdits(invoice){
+        const edits = invoice.invoiceEdits;
+        const editsObj = JSON.parse(invoice.invoiceEdits);
+        editsObj.forEach(item => {
+            invoice[toCamelCase(item.fieldName)] = item.value;
+        });
+    }
+
+    function toCamelCase(str) {
+        return str
+            .toLowerCase()
+            .replace(/[^a-zA-Z0-9]+(.)/g, (match, chr) => chr.toUpperCase());
     }
 
     function normalizeFilePathKey(filePath) {
@@ -945,10 +962,8 @@
                 origValue = getCI(rawData, fieldProp);
                 isMoney = HEADER_MONEY_FIELDS.has(fieldProp);
 
-                // Remove from invoice edits map and sync the invoice model
-                const invoiceEdits = parseEditsMap(_currentInvoice.invoiceEdits);
-                invoiceEdits.delete(fieldProp);
-                _currentInvoice.invoiceEdits = '""' + invoiceEdits + '""';
+                // Remove from editing edits map, update _editingInvoiceEdits (not _currentInvoice.invoiceEdits)
+                _editingInvoiceEdits.delete(fieldProp);
                 _currentInvoice[fieldProp] = origValue;
             }
             
@@ -1162,10 +1177,15 @@
         const container = document.getElementById('invoiceFields');
         const hasTaxData = inv.items?.some(item => item.taxRate);
 
-        // Store the original edit history JSON before converting to Map for in-memory editing
+        // Store the original edit history JSON and initialize editing Maps
         _originalInvoiceEditsJson = inv.invoiceEdits || '[]';
-        // should look like this: '[["vendorName", "Acme"], ["total", "123.45"]]'
-        const invoiceEdits = parseEditsMap(inv.invoiceEdits);
+        _editingInvoiceEdits = parseEditsMap(inv.invoiceEdits);  // Parse to Map for in-memory editing
+        // Keep _currentInvoice.invoiceEdits as JSON string always - do NOT store the Map back
+        
+        _originalItemEditsJson.clear();
+        _editingItemEdits.clear();
+        _changedInvoiceFields.clear();  // Clear tracking of user changes
+        _changedItemFields.clear();     // Clear tracking of user changes to items
 
         _pendingEdits.clear();
         // Preserve _persistedEdits across invoice reloads
@@ -1181,8 +1201,8 @@
             const tipData = buildFieldTooltip(inv, f.key, value);
 
 
-            // look for the field in invoiceEdits by prop name (camelCase key) - if found, replace the value
-            const editedValue = invoiceEdits.get(f.prop);
+            // look for the field in _editingInvoiceEdits by prop name (camelCase key) - if found, replace the value
+            const editedValue = _editingInvoiceEdits.get(f.prop);
             if (editedValue !== undefined) {
                 value = editedValue;
             }
@@ -1243,8 +1263,10 @@
 
 
                 const edits = parseEditsMap(item.itemEdits);
-                // Save the original item edit history JSON before converting to Map
+                // Save the original item edit history JSON and populate editing Map
                 _originalItemEditsJson.set(i, item.itemEdits || '[]');
+                _editingItemEdits.set(i, edits);  // Store the parsing Map for this item
+                // Keep item.itemEdits as JSON string always - do NOT store the Map back
                 const description = edits.get('description') ?? item.description;
                 const quantity = edits.get('quantity') ?? item.quantity;
                 const unitPriceValue = edits.get('unitPrice') ?? item.unitPrice;
@@ -1275,7 +1297,7 @@
         </div>`;
 
         html += `<div class="d-flex gap-2 mt-2 flex-wrap">
-        <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1" onclick="saveInvoice()">Save</button>`;
+        <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1">Save</button>`;
 
         const role = "@User.ActiveOrganizationRole()";
         console.log(role);
@@ -1326,9 +1348,18 @@
                         const value = ITEM_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
                         input.value = value;
                         _currentInvoice.items[i][field] = value;
-                        if (!(_currentInvoice.items[i].itemEdits instanceof Map))
-                            _currentInvoice.items[i].itemEdits = parseEditsMap(_currentInvoice.items[i].itemEdits);
-                        _currentInvoice.items[i].itemEdits.set(field, value);
+                        
+                        // Update the editing Map and track that this field was changed
+                        if (!_editingItemEdits.has(i)) {
+                            _editingItemEdits.set(i, new Map());
+                        }
+                        _editingItemEdits.get(i).set(field, value);
+                        
+                        // Track that user changed this field
+                        if (!_changedItemFields.has(i)) {
+                            _changedItemFields.set(i, new Set());
+                        }
+                        _changedItemFields.get(i).add(field);
                         
                         // Three-state model: track pending edits (unsaved)
                         if (isFieldEdited(fieldKey, value)) 
@@ -1347,11 +1378,10 @@
                 {
                     const value = HEADER_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
                     input.value = value;
-                    //applyFieldEdit(field, value);
 
-                    if (!(_currentInvoice.invoiceEdits instanceof Map))
-                        _currentInvoice.invoiceEdits = parseEditsMap(_currentInvoice.invoiceEdits);
-                    _currentInvoice.invoiceEdits.set(field, value);
+                    // Update the editing Map and track that this field was changed
+                    _editingInvoiceEdits.set(field, value);
+                    _changedInvoiceFields.add(field);  // Track that user changed this field
 
                     // Three-state model: track pending edits (unsaved)
                     if (isFieldEdited(fieldKey, value)) 
@@ -1390,7 +1420,7 @@
 
         // Load persisted edits from database so a reload shows blue borders 
         // without requiring a new save in this session.
-        for (const [k] of invoiceEdits) {
+        for (const [k] of _editingInvoiceEdits) {
             const f = HEADER_FIELDS.find(hf => hf.prop === k);
             if (f) _persistedEdits.add(f.key);
         }
@@ -1993,39 +2023,44 @@
     }
 
     async function saveInvoice() {
-        //debugger;  // Force break when DevTools is open
+        debugger;  // Force break when DevTools is open
         console.log("saveInvoice()");
-        if (!_currentFilePath || !_currentInvoice) return;
+        if (!_currentFilePath || !_currentInvoice) 
+            return;
+        
         const btn = document.getElementById('saveBtn');
         setButtonLoading(btn, true);
 
-        // Store the original edit strings
-        const savedInvoiceEdits = '""' + _currentInvoice.invoiceEdits + '""';
-        //const savedLineItemEdits = (_currentInvoice.items ?? []).map(item => item.itemEdits);
-
-        const savedLineItemEdits = "[]";
+        // Store the original edit strings to restore on failure
+        const savedInvoiceEdits = _currentInvoice.invoiceEdits;
+        const savedItemEdits = (_currentInvoice.items ?? []).map(item => item.itemEdits);
 
         try {
             // Append new edits to the existing edit history (as a JSON array)
-            // IMPORTANT: Pass the original JSON string (from database), not the in-memory Map
-            // _currentInvoice.invoiceEdits = appendPendingEditsToHistory(
-            //   _originalInvoiceEditsJson,
-            //    savedInvoiceEdits
-            //);
+            // Only append fields that the user actually changed (tracked in _changedInvoiceFields)
+            _currentInvoice.invoiceEdits = appendPendingEditsToHistory(
+               _originalInvoiceEditsJson,
+                _editingInvoiceEdits,
+                _changedInvoiceFields,  // Only changed fields
+                _currentInvoice
+            );
 
             // For item edits, do the same
-            // for (let i = 0; i < (_currentInvoice.items ?? []).length; i++) {
-            //    const item = _currentInvoice.items[i];
-            //    // Use the original JSON string saved before converting to Map
-            //    const originalItemJson = _originalItemEditsJson.get(i) || '[]';
-            //    item.itemEdits = appendPendingEditsToHistory(
-            //        originalItemJson,
-            //        item
-            //    );
-            // }
+            for (let i = 0; i < (_currentInvoice.items ?? []).length; i++) {
+               const item = _currentInvoice.items[i];
+               const originalItemJson = _originalItemEditsJson.get(i) || '[]';
+               const editingItemMap = _editingItemEdits.get(i) || new Map();
+               const changedItemFieldSet = _changedItemFields.get(i) || new Set();  // Only changed fields for this item
+               item.itemEdits = appendPendingEditsToHistory(
+                    originalItemJson,
+                    editingItemMap,
+                    changedItemFieldSet,  // Only changed fields
+                    item
+                );
+            }
 
-            const result = await postJson('/home/saveinvoice',
-               { filePath: _currentFilePath, invoice: _currentInvoice });
+            const result = await postJson('/home/saveinvoiceedits',
+               { filePath: _currentFilePath, edits: _currentInvoice.invoiceEdits });
             if (result.success) {
                // Move all pending edits to persisted (three-state model)
                for (const fieldKey of _pendingEdits) {
@@ -2120,79 +2155,81 @@
     }
 
     // Append pending edits to the existing edit history (JSON array)
-    // Only adds edits where the current value differs from the last recorded value
-    // Returns updated JSON array string
-    function appendPendingEditsToHistory(currentHistoryJson, object) {
-        let history = JSON.parse(currentHistoryJson);
-        history.push(object);
+    // Parameters:
+    //   currentHistoryJson: existing history as JSON string (from database)
+    //   editsMap: Map<string, string> with current edited values (camelCase keys for headers, item field names for items)
+    //   changedFields: Set of fields that the user actually changed in this session
+    //   sourceObject: original object (invoice or item) with field properties
+    // Returns: updated JSON array string with new edits appended
+    function appendPendingEditsToHistory(currentHistoryJson, editsMap, changedFields, sourceObject) {
+        // Parse existing history
+        let history = [];
+        if (currentHistoryJson && typeof currentHistoryJson === 'string') {
+            try {
+                const parsed = JSON.parse(currentHistoryJson);
+                if (Array.isArray(parsed)) {
+                    history = parsed;
+                }
+            } catch (e) {
+                console.warn('Failed to parse existing edit history:', e);
+            }
+        }
 
-        // // Parse existing history (array of FieldEdit objects)
-        // let history = [];
-        // if (currentHistoryJson && typeof currentHistoryJson === 'string') {
-        //     try {
-        //         const parsed = JSON.parse(currentHistoryJson);
-        //         if (Array.isArray(parsed)) {
-        //             history = parsed;
-        //         }
-        //     } catch (e) {
-        //         console.warn('Failed to parse existing edit history:', e);
-        //     }
-        // }
-
-        // // Create a map of field names to their current values
-        // // For invoices: prefer values from invoiceEdits Map (user edits), fall back to original properties
-        // // For items: prefer values from itemEdits Map (user edits), fall back to original properties
-        // const currentValues = {};
+        // Determine if this is a header invoice or an item
+        const isItem = sourceObject.description !== undefined && sourceObject.quantity !== undefined && 
+                       sourceObject.unitPrice !== undefined && sourceObject.amount !== undefined;
         
-        // // Determine if this is a header invoice or an item
-        // const isItem = object.description !== undefined && object.quantity !== undefined && 
-        //                object.unitPrice !== undefined && object.amount !== undefined;
-        
-        // if (isItem) {
-        //     // Item fields - read from itemEdits Map if it exists
-        //     const itemEditsMap = object.itemEdits instanceof Map ? object.itemEdits : new Map();
-        //     // Try both camelCase (from UI edits) and PascalCase (from database)
-        //     if (object.description !== undefined) currentValues['Description'] = itemEditsMap.get('description') ?? itemEditsMap.get('Description') ?? object.description;
-        //     if (object.quantity !== undefined) currentValues['Quantity'] = itemEditsMap.get('quantity') ?? itemEditsMap.get('Quantity') ?? object.quantity;
-        //     if (object.unitPrice !== undefined) currentValues['UnitPrice'] = itemEditsMap.get('unitPrice') ?? itemEditsMap.get('UnitPrice') ?? object.unitPrice;
-        //     if (object.taxRate !== undefined) currentValues['TaxRate'] = itemEditsMap.get('taxRate') ?? itemEditsMap.get('TaxRate') ?? object.taxRate;
-        //     if (object.amount !== undefined) currentValues['Amount'] = itemEditsMap.get('amount') ?? itemEditsMap.get('Amount') ?? object.amount;
-        // } else {
-        //     // Header fields - read from invoiceEdits Map if it exists
-        //     const invoiceEditsMap = object.invoiceEdits instanceof Map ? object.invoiceEdits : new Map();
-        //     // Try both camelCase (from UI edits) and PascalCase (from database)
-        //     if (object.vendorName !== undefined) currentValues['VendorName'] = invoiceEditsMap.get('vendorName') ?? invoiceEditsMap.get('VendorName') ?? object.vendorName;
-        //     if (object.customerName !== undefined) currentValues['CustomerName'] = invoiceEditsMap.get('customerName') ?? invoiceEditsMap.get('CustomerName') ?? object.customerName;
-        //     if (object.invoiceId !== undefined) currentValues['InvoiceId'] = invoiceEditsMap.get('invoiceId') ?? invoiceEditsMap.get('InvoiceId') ?? object.invoiceId;
-        //     if (object.invoiceDate !== undefined) currentValues['InvoiceDate'] = invoiceEditsMap.get('invoiceDate') ?? invoiceEditsMap.get('InvoiceDate') ?? object.invoiceDate;
-        //     if (object.dueDate !== undefined) currentValues['DueDate'] = invoiceEditsMap.get('dueDate') ?? invoiceEditsMap.get('DueDate') ?? object.dueDate;
-        //     if (object.purchaseOrder !== undefined) currentValues['PurchaseOrder'] = invoiceEditsMap.get('purchaseOrder') ?? invoiceEditsMap.get('PurchaseOrder') ?? object.purchaseOrder;
-        //     if (object.subtotal !== undefined) currentValues['Subtotal'] = invoiceEditsMap.get('subtotal') ?? invoiceEditsMap.get('Subtotal') ?? object.subtotal;
-        //     if (object.totalTax !== undefined) currentValues['TotalTax'] = invoiceEditsMap.get('totalTax') ?? invoiceEditsMap.get('TotalTax') ?? object.totalTax;
-        //     if (object.discount !== undefined) currentValues['Discount'] = invoiceEditsMap.get('discount') ?? invoiceEditsMap.get('Discount') ?? object.discount;
-        //     if (object.total !== undefined) currentValues['Total'] = invoiceEditsMap.get('total') ?? invoiceEditsMap.get('Total') ?? object.total;
-        // }
+        // Find the last edit for each field in history
+        const lastEditByField = {};
+        for (const edit of history) {
+            lastEditByField[edit.fieldName] = edit.value;
+        }
+        // Only append edits for fields that the user actually changed in this session
+        // Only append edits for fields that the user actually changed in this session
+        for (const fieldKey of changedFields) {
+            // Map camelCase field keys to PascalCase field names for history
+            let fieldName = fieldKey;
+            let currentValue = editsMap.get(fieldKey);
 
-        // // Find the last edit for each field in history
-        // const lastEditByField = {};
-        // for (const edit of history) {
-        //     lastEditByField[edit.fieldName] = edit.value;
-        // }
+            if (currentValue !== undefined) {
+                // Convert camelCase to PascalCase for history (e.g., 'total' -> 'Total', 'vendorName' -> 'VendorName')
+                if (isItem) {
+                    // Item fields
+                    const pascalMap = {
+                        'description': 'Description',
+                        'quantity': 'Quantity',
+                        'unitPrice': 'UnitPrice',
+                        'taxRate': 'TaxRate',
+                        'amount': 'Amount'
+                    };
+                    fieldName = pascalMap[fieldKey] || fieldKey;
+                } else {
+                    // Invoice header fields
+                    const pascalMap = {
+                        'vendorName': 'VendorName',
+                        'customerName': 'CustomerName',
+                        'invoiceId': 'InvoiceId',
+                        'invoiceDate': 'InvoiceDate',
+                        'dueDate': 'DueDate',
+                        'purchaseOrder': 'PurchaseOrder',
+                        'subtotal': 'Subtotal',
+                        'totalTax': 'TotalTax',
+                        'discount': 'Discount',
+                        'total': 'Total'
+                    };
+                    fieldName = pascalMap[fieldKey] || fieldKey;
+                }
 
-        // // Only append edits where the value changed since the last recorded edit
-        // const now = new Date().toISOString();
-        // for (const [fieldName, currentValue] of Object.entries(currentValues)) {
-        //     const lastValue = lastEditByField[fieldName];
-        //     // Only add if it changed from the last edit (or no previous edit exists)
-        //     if (lastValue !== String(currentValue)) {
-        //         history.push({
-        //             fieldName: fieldName,
-        //             value: String(currentValue),
-        //             userName: _currentUserEmail,
-        //             timestampUtc: now
-        //         });
-        //     }
-        // }
+                const lastValue = lastEditByField[fieldName];
+                // Only add if it changed from the last edit (or no previous edit exists)
+                if (lastValue !== String(currentValue)) {
+                    history.push({
+                        fieldName: fieldName,
+                        value: String(currentValue)
+                    });
+                }
+            }
+        }
 
         return JSON.stringify(history);
     }

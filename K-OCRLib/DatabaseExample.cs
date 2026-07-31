@@ -22,7 +22,7 @@ namespace K_OCRLib
             services.AddLogging(configure => configure.AddConsole());
 
             // Add our services
-            services.AddScoped<DatabaseService>();
+            services.AddScoped<OrgDatabaseService>();
 
             var serviceProvider = services.BuildServiceProvider();
 
@@ -30,7 +30,7 @@ namespace K_OCRLib
             using (var scope = serviceProvider.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<KOCRDbContext>();
-                var dbService = scope.ServiceProvider.GetRequiredService<DatabaseService>();
+                var dbService = scope.ServiceProvider.GetRequiredService<OrgDatabaseService>();
 
                 try
                 {

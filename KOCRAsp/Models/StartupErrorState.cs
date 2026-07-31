@@ -1,4 +1,4 @@
-namespace KOCRAsp.Services;
+namespace KOCRAsp.Models;
 
 public class StartupErrorState
 {

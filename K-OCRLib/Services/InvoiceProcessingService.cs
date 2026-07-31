@@ -11,17 +11,20 @@ public class InvoiceProcessingService : IInvoiceProcessingService
 {
     private readonly IFileService _fileService;
     private readonly InvoiceProcessingWorkflow _workflow;
+    private readonly IOrgDatabaseService _databaseService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<InvoiceProcessingService> _logger;
 
     public InvoiceProcessingService(
         IFileService fileService,
         InvoiceProcessingWorkflow workflow,
+        IOrgDatabaseService databaseService,
         IConfiguration configuration,
         ILogger<InvoiceProcessingService> logger)
     {
         _fileService = fileService;
         _workflow = workflow;
+        _databaseService = databaseService;
         _configuration = configuration;
         _logger = logger;
     }
@@ -116,12 +119,20 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     {
         // Updates all scalar fields, IsValidationAccepted, ProcessedAtUtc, and ValidatedOcrText
         // on the Invoice row. OcrText (original OCR output) is never overwritten here.
-        await _fileService.SaveValidatedLayoutAsync(originalFilePath, invoice);
+        await _databaseService.SaveValidatedLayoutAsync(originalFilePath, invoice);
     }
+
+    public async Task SaveInvoiceEdits(string originalFilePath, FieldEditDTO edits)
+    {
+        var existing = await _databaseService.GetInvoiceByFilePathAsync(originalFilePath);
+        //await _fileService.SaveValidatedLayoutAsync(originalFilePath, edits);
+        await _databaseService.SaveInvoiceEdits(edits);
+    }
+
 
     public async Task<InvoiceDto?> LoadInvoiceAsync(string filePath)
     {
-        var context = await _fileService.LoadContextAsync(filePath);
+        var context = await _databaseService.LoadContextAsync(filePath);
         return context?.Layout?.FirstOrDefault();
     }
 }

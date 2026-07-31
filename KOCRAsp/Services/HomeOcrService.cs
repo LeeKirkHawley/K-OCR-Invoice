@@ -29,17 +29,10 @@ public sealed record HomeBatchOcrResult(
     IReadOnlyList<string>? QueuedFilePaths = null,
     string? Error = null);
 
-public interface IHomeOcrService
-{
-    bool CanUseOcr(HomeTenantInfo tenant);
-    Task<HomeSingleOcrResult> StartOcrAsync(string filePath, HomeTenantInfo tenant, string orgUser, BatchSummary? batch);
-    Task<HomeBatchOcrResult> BatchOcrAsync(int batchId, bool skipAlreadyOcrd, HomeTenantInfo tenant);
-}
-
 public sealed class HomeOcrService : IHomeOcrService
 {
     private readonly IBatchService _batchSvc;
-    private readonly DatabaseService _dbSvc;
+    private readonly IOrgDatabaseService _dbSvc;
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly IConfigurationService _configSvc;
     private readonly IOcrEnqueueService _ocrEnqueueSvc;
@@ -49,7 +42,7 @@ public sealed class HomeOcrService : IHomeOcrService
 
     public HomeOcrService(
         IBatchService batchSvc,
-        DatabaseService dbSvc,
+        IOrgDatabaseService dbSvc,
         IOrgConfigService orgConfigSvc,
         IConfigurationService configSvc,
         IOcrEnqueueService ocrEnqueueSvc,

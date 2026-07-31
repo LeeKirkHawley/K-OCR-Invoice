@@ -1,4 +1,5 @@
 using K_OCRLib.Models;
+using K_OCRLib.Services;
 using K_OCRLib.Services.Interfaces;
 
 namespace K_OCR.Services.Workflow;
@@ -9,16 +10,18 @@ namespace K_OCR.Services.Workflow;
 public class SaveContextStep : WorkflowStepBase
 {
     private readonly IFileService _fileService;
+    private readonly IOrgDatabaseService _orgDatabaseService;
 
     public override string Name => "Save Context";
 
-    public SaveContextStep(IFileService fileService)
+    public SaveContextStep(IFileService fileService, IOrgDatabaseService orgDatabaseService)
     {
         _fileService = fileService;
+        _orgDatabaseService = orgDatabaseService;   
     }
 
     public override async Task ExecuteAsync(PipelineContext context, CancellationToken cancellationToken = default)
     {
-        await _fileService.SaveContextAsync(context.InputPath, context);
+        await _orgDatabaseService.SaveContextAsync(context.InputPath, context);
     }
 }

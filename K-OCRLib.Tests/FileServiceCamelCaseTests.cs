@@ -113,11 +113,11 @@ public class FileServiceCamelCaseTests
         }
     }
 
-    private static (DatabaseService DbService, string DbPath) CreateDatabaseService()
+    private static (OrgDatabaseService DbService, string DbPath) CreateDatabaseService()
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"files-{Guid.NewGuid()}.db");
         var factory = new DirectDbContextFactory(dbPath);
-        var dbService = new DatabaseService(factory, Mock.Of<ILogger<DatabaseService>>());
+        var dbService = new DatabaseService(factory, Mock.Of<ILogger<OrgDatabaseService>>());
         return (dbService, dbPath);
     }
 

@@ -74,9 +74,9 @@ public sealed class DefaultOcrWorkflow : IQueuedOcrWorkflow
         // Manually construct the DB-dependent services using a direct factory so that
         // the scoped OrgDbContextFactory (which requires ITenantContext) is never invoked.
         var directFactory = new DirectDbContextFactory(dbPath);
-        var dbService     = new DatabaseService(directFactory, _loggerFactory.CreateLogger<DatabaseService>());
-        var fileService   = new FileService(dbService, _loggerFactory.CreateLogger<FileService>());
-        var saveStep      = new SaveContextStep(fileService);
+        var fileService   = new FileService(_loggerFactory.CreateLogger<FileService>());
+        var dbService     = new OrgDatabaseService(directFactory, fileService, _loggerFactory.CreateLogger<OrgDatabaseService>());
+        var saveStep      = new SaveContextStep(fileService, dbService);
 
         // All remaining steps depend only on singleton services and are safe to resolve from scope.
         var azureStep  = sp.GetRequiredService<AzureOcrStep>();

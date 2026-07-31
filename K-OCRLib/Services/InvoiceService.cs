@@ -22,6 +22,13 @@ namespace K_OCRLib.Services
         private static bool _mappingsLoaded;
         private static readonly object _mappingsLock = new();
 
+        public InvoiceService(int maxConcurrentRequests = 3, ILogger<InvoiceService>? logger = null)
+        {
+            _semaphore = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
+            _logger = logger ?? NullLogger<InvoiceService>.Instance;
+        }
+
+
         private static void EnsureMappingsLoaded()
         {
             // mappings at Azure
@@ -132,11 +139,6 @@ namespace K_OCRLib.Services
             return null;
         }
 
-        public InvoiceService(int maxConcurrentRequests = 3, ILogger<InvoiceService>? logger = null)
-        {
-            _semaphore = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
-            _logger = logger ?? NullLogger<InvoiceService>.Instance;
-        }
 
         // Helper method to find Total value in raw OCR when Azure doesn't extract it
         private static (decimal? value, List<BoundingBoxDto> boxes) FindTotalInRawOcr(

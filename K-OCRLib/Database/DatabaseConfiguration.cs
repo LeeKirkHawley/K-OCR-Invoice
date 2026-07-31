@@ -53,7 +53,7 @@ namespace K_OCRLib.Database
 
             services.AddSingleton<IDbContextFactory<KOCRDbContext>>(sp =>
                 new OptionsDbContextFactory(sp.GetRequiredService<DbContextOptions<KOCRDbContext>>()));
-            services.AddSingleton<DatabaseService>();
+            services.AddSingleton<OrgDatabaseService>();
 
             return services;
         }
@@ -67,7 +67,7 @@ namespace K_OCRLib.Database
 
             services.AddSingleton<IDbContextFactory<KOCRDbContext>>(sp =>
                 new OptionsDbContextFactory(sp.GetRequiredService<DbContextOptions<KOCRDbContext>>()));
-            services.AddSingleton<DatabaseService>();
+            services.AddSingleton<OrgDatabaseService>();
 
             return services;
         }

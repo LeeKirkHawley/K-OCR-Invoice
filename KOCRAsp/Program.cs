@@ -1,23 +1,23 @@
 using K_OCR.Services;
-using KOCRAsp.Infrastructure;
+using K_OCRLib.Configuration;
+using K_OCRLib.Data;
+using K_OCRLib.Identity;
+using K_OCRLib.Security;
+using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using KOCRAsp.Hubs;
 using KOCRAsp.Identity;
+using KOCRAsp.Infrastructure;
+using KOCRAsp.Models;
 using KOCRAsp.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.FileProviders;
 using OCRQueue.Abstractions;
 using OCRQueue.Services;
 using Serilog;
-using K_OCRLib.Services;
-using K_OCRLib.Services.Interfaces;
-using K_OCRLib.Data;
-using K_OCRLib.Configuration;
-using K_OCRLib.Identity;
-using K_OCRLib.Security;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -73,7 +73,7 @@ builder.Services.AddScoped<IDbContextFactory<KOCRDbContext>>(sp =>
         sp.GetRequiredService<ITenantContext>(),
         sp.GetRequiredService<IPathService>(),
         databaseSettings));
-builder.Services.AddScoped<DatabaseService>();
+builder.Services.AddScoped<IOrgDatabaseService, OrgDatabaseService>();
 
 // Allow in-flight OCR jobs to finish during a graceful shutdown (e.g. deployment).
 // The default 5 s is far too short for OCR; 2 minutes gives most jobs time to complete

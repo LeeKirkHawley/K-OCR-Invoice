@@ -1,4 +1,4 @@
-namespace K_OCRLib.Services;
+namespace K_OCRLib.Models;
 
 public static class InvoiceActionTypes
 {

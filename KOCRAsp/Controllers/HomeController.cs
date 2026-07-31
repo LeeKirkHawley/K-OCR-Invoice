@@ -10,6 +10,7 @@ using KOCRAsp.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Razor.TagHelpers;
 using Newtonsoft.Json;
 using OCRQueue.Abstractions;
 using System.Security.Claims;
@@ -29,6 +30,7 @@ public class HomeController : Controller
     private readonly IConfigurationService _configSvc;
     private readonly IOrgConfigService _orgConfigSvc;
     private readonly IOcrQueueRepository _ocrQueueRepo;
+    private readonly IOrgDatabaseService _databaseService;
     private readonly ILogger<HomeController> _logger;
     private readonly K_OCRLib.Services.IBatchChangeNotifier _batchNotifier;
 
@@ -43,6 +45,7 @@ public class HomeController : Controller
         IConfigurationService configSvc,
         IOrgConfigService orgConfigSvc,
         IOcrQueueRepository ocrQueueRepo,
+        IOrgDatabaseService databaseService,
         ILogger<HomeController> logger,
         IBatchChangeNotifier batchNotifier)
     {
@@ -55,6 +58,7 @@ public class HomeController : Controller
         _configSvc = configSvc;
         _orgConfigSvc = orgConfigSvc;
         _ocrQueueRepo = ocrQueueRepo;
+        _databaseService = databaseService;
         _logger = logger;
         _batchNotifier = batchNotifier;
     }
@@ -611,6 +615,49 @@ public class HomeController : Controller
             return Json(new { success = false, error = ex.Message });
         }
     }
+
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> SaveInvoiceEdits()
+    {
+        if (User.IsInRole(RoleNames.SuperAdmin))
+            return Json(new { success = false, error = "Super-admin does not have org batch access." });
+
+        FieldEditDTO request;
+        try
+        {
+            using StreamReader reader = new StreamReader(Request.Body);
+            string body = await reader.ReadToEndAsync();
+            request = JsonConvert.DeserializeObject<FieldEditDTO>(body);
+
+            _databaseService.SaveInvoiceEdits(request);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SaveInvoiceEdits: failed to parse request body");
+            return Json(new { success = false, error = "Invalid request body." });
+        }
+
+
+
+        return Json(new { success = true });
+
+        //if (request == null || string.IsNullOrWhiteSpace(request.FilePath) || request.Invoice == null)
+        //    return Json(new { success = false, error = "Invalid request." });
+
+        //try
+        //{
+        //    await _homePageSvc.SaveInvoiceAsync(request.FilePath, request.Invoice);
+        //    return Json(new { success = true });
+        //}
+        //catch (Exception ex)
+        //{
+        //    _logger.LogError(ex, "SaveInvoice failed for {FilePath}", request.FilePath);
+        //    return Json(new { success = false, error = ex.Message });
+        //}
+    }
+
 
     [HttpPost]
     [ValidateAntiForgeryToken]

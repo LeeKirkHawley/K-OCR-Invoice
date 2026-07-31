@@ -1,31 +1,35 @@
 ﻿using K_OCRLib.Models;
 
-namespace K_OCRLib.Services.Interfaces
+namespace K_OCRLib.Services
 {
-    public interface IFileService
+    public interface IOrgDatabaseService
     {
-        IEnumerable<string> LoadFiles(string directory, string[]? extensions = null);
-        /// <summary>
-        /// List directories and files for a given path
-        /// </summary>
-        IEnumerable<DirectoryEntry> ListDirectory(string? path = null);
+        Task ClearAllDataAsync();
+        Task<bool> DeleteInvoiceAsync(int id);
+        Task<List<Invoice>> GetAllInvoicesAsync();
+        Task<Invoice?> GetInvoiceByFilePathAsync(string filePath);
+        Task<Invoice?> GetInvoiceByIdAsync(int id);
+        Task<List<Invoice>> GetInvoicesByBatchAsync(int batchId);
+        Task<bool> IsDatabaseAvailableAsync();
+        Task<Invoice> SaveInvoiceAsync(Invoice invoice);
+        Task<FieldEditDTO> SaveInvoiceEdits(FieldEditDTO fieldEditDTO);
 
         /// <summary>
         /// Load pipeline context from database
         /// </summary>
-        //Task<PipelineContext?> LoadContextAsync(string imagePath);
+        Task<PipelineContext?> LoadContextAsync(string imagePath);
 
         /// <summary>
         /// Save pipeline context to database
         /// </summary>
-        //Task SaveContextAsync(string imagePath, PipelineContext context);
+        Task SaveContextAsync(string imagePath, PipelineContext context);
 
         /// <summary>
         /// Save the validated Invoice DTO back to the Invoice row: updates all scalar
         /// field values, sets IsValidationAccepted = true, ProcessedAtUtc, and ValidatedOcrText.
         /// OcrText (original OCR output) is never changed by this method.
         /// </summary>
-        //Task SaveValidatedLayoutAsync(string imagePath, InvoiceDto invoice);
+        Task SaveValidatedLayoutAsync(string imagePath, InvoiceDto invoice);
 
         /// <summary>
         /// Load files from a directory, optionally filtered by extensions.
@@ -34,7 +38,6 @@ namespace K_OCRLib.Services.Interfaces
         /// <param name="directory">The directory to search</param>
         /// <param name="extensions">Optional file extensions to filter (e.g., ".png", ".jpg"). If null, returns all files.</param>
         /// <returns>Lazy enumerable of file paths</returns>
-
 
     }
 }
