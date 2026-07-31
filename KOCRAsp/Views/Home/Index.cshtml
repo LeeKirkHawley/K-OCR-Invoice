@@ -449,6 +449,8 @@
     }
 
     function replayEdits(invoice){
+        if(!invoice?.invoiceEdits || !invoice.invoiceEdits.length)
+            return;
         const edits = invoice.invoiceEdits;
         const editsObj = JSON.parse(invoice.invoiceEdits);
         editsObj.forEach(item => {
@@ -457,9 +459,8 @@
     }
 
     function toCamelCase(str) {
-        return str
-            .toLowerCase()
-            .replace(/[^a-zA-Z0-9]+(.)/g, (match, chr) => chr.toUpperCase());
+        const camelCase = str.charAt(0).toLowerCase() + str.slice(1);
+        return camelCase;
     }
 
     function normalizeFilePathKey(filePath) {
@@ -2023,7 +2024,7 @@
     }
 
     async function saveInvoice() {
-        debugger;  // Force break when DevTools is open
+        //debugger;  // Force break when DevTools is open
         console.log("saveInvoice()");
         if (!_currentFilePath || !_currentInvoice) 
             return;
@@ -2060,7 +2061,7 @@
             }
 
             const result = await postJson('/home/saveinvoiceedits',
-               { filePath: _currentFilePath, edits: _currentInvoice.invoiceEdits });
+                    { filePath: _currentFilePath, edits: _currentInvoice.invoiceEdits, invoiceItems: _currentInvoice.items });
             if (result.success) {
                // Move all pending edits to persisted (three-state model)
                for (const fieldKey of _pendingEdits) {
