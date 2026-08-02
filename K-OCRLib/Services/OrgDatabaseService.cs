@@ -50,79 +50,12 @@ namespace K_OCRLib.Services
                     try
                     {
                         context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(invoice.OcrText);
-
-                        // looks like invoice.OcrText may not have the updated IsInvoiceAccepted value, so we need to set it from the database entity
-                        //if(context?.Layout?.Count() > 0)
-                        //{
-                        //    context.Layout[0].IsInvoiceAccepted = invoice.IsInvoiceAccepted;
-                        //}
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "[Database] Failed to deserialize OcrText for {FileName}.", Path.GetFileName(imagePath));
                     }
                 }
-
-                // If ValidatedOcrText exists (user has edited/approved), use it but preserve bboxes from original
-                //if (context != null && !string.IsNullOrEmpty(invoice.ValidatedOcrText))
-                //{
-                //    try
-                //    {
-                //        var validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<InvoiceDto>>(invoice.ValidatedOcrText);
-                //        if (validatedInvoices != null && context.Layout != null && validatedInvoices.Count > 0 && context.Layout.Count > 0)
-                //        {
-                //            // Copy bboxes from original to validated invoice using JSON manipulation
-                //            var validatedJson = Newtonsoft.Json.JsonConvert.SerializeObject(validatedInvoices);
-                //            var validatedJArray = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JArray>(validatedJson);
-
-                //            var originalJson = Newtonsoft.Json.JsonConvert.SerializeObject(context.Layout);
-                //            var originalJArray = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JArray>(originalJson);
-
-                //            if (validatedJArray != null && originalJArray != null)
-                //            {
-                //                for (int i = 0; i < validatedJArray.Count && i < originalJArray.Count; i++)
-                //                {
-                //                    var validatedObj = validatedJArray[i] as Newtonsoft.Json.Linq.JObject;
-                //                    var originalObj = originalJArray[i] as Newtonsoft.Json.Linq.JObject;
-
-                //                    if (validatedObj != null && originalObj != null)
-                //                    {
-                //                        // Copy bbox fields from original
-                //                        validatedObj["fieldBoundingBoxes"] = originalObj["fieldBoundingBoxes"];
-                //                        validatedObj["originalPageWidth"] = originalObj["originalPageWidth"];
-                //                        validatedObj["originalPageHeight"] = originalObj["originalPageHeight"];
-                //                        validatedObj["pageCount"] = originalObj["pageCount"];
-
-                //                        // Copy item bboxes
-                //                        var validatedItems = validatedObj["items"] as Newtonsoft.Json.Linq.JArray;
-                //                        var originalItems = originalObj["items"] as Newtonsoft.Json.Linq.JArray;
-                //                        if (validatedItems != null && originalItems != null)
-                //                        {
-                //                            for (int j = 0; j < validatedItems.Count && j < originalItems.Count; j++)
-                //                            {
-                //                                var vItem = validatedItems[j] as Newtonsoft.Json.Linq.JObject;
-                //                                var oItem = originalItems[j] as Newtonsoft.Json.Linq.JObject;
-                //                                if (vItem != null && oItem != null)
-                //                                {
-                //                                    vItem["boundingBoxes"] = oItem["boundingBoxes"];
-                //                                }
-                //                            }
-                //                        }
-                //                    }
-                //                }
-                //            }
-
-                //            // Deserialize back to InvoiceDto with bboxes preserved
-                //            validatedInvoices = Newtonsoft.Json.JsonConvert.DeserializeObject<List<InvoiceDto>>(validatedJArray.ToString());
-                //            if (validatedInvoices != null)
-                //                context.Layout = validatedInvoices;
-                //        }
-                //    }
-                //    catch (Exception ex)
-                //    {
-                //        _logger.LogError(ex, "[Database] Failed to deserialize/merge ValidatedOcrText for {FileName}.", Path.GetFileName(imagePath));
-                //    }
-                //}
 
                 if (context != null
                     && string.IsNullOrWhiteSpace(context.TesseractOcrText)
@@ -151,14 +84,17 @@ namespace K_OCRLib.Services
                             var dbItems = invoice.Items.ToList();
                             for (int i = 0; i < invoiceDto.Items.Count && i < dbItems.Count; i++)
                             {
-                                var dbItem = dbItems[i];
-                                var dtoItem = invoiceDto.Items[i];
+                                Models.InvoiceItem dbItem = dbItems[i];
+                                InvoiceItemDto dtoItem = invoiceDto.Items[i];
+
                                 dtoItem.Description = dbItem.Description;
                                 dtoItem.Quantity = dbItem.Quantity;
                                 dtoItem.UnitPrice = dbItem.UnitPrice;
                                 dtoItem.Amount = dbItem.LineTotal;
                                 dtoItem.TaxRate = dbItem.TaxRate ?? dtoItem.TaxRate;
                                 dtoItem.ItemEdits = dbItem.ItemEdits;
+                                //dtoItem.Id = dbItem.Id;
+                                //dtoItem.InvoiceId = dbItem.InvoiceId;
                             }
                         }
                     }
@@ -366,10 +302,34 @@ namespace K_OCRLib.Services
 
             if (invoice != null)
             {
-
+                // save edited invoice fields
                 invoice.InvoiceEdits = fieldEditDTO.Edits;
                 ctx.Invoices.Update(invoice);
                 var result = await ctx.SaveChangesAsync();
+
+
+                // save edited line item fields
+                bool itemsHaveEdits = false;
+                foreach(Models.InvoiceItem editedInvoiceItem in fieldEditDTO.invoiceItems)
+                {
+                    Models.InvoiceItem? invoiceItem = ctx.InvoiceItems.Where(i => i.Id == editedInvoiceItem.Id).FirstOrDefault();
+                    if(invoiceItem == null)
+                    {
+                        throw new InvalidOperationException($"InvoiceItem {editedInvoiceItem.Id} for {invoice.Id} not found.");
+                    }
+
+                    if(editedInvoiceItem.ItemEdits != invoiceItem?.ItemEdits)
+                    {
+                        invoiceItem.ItemEdits = editedInvoiceItem.ItemEdits;
+                        ctx.InvoiceItems.Update(invoiceItem);
+                        itemsHaveEdits = true;
+                    }
+                }
+
+                if(itemsHaveEdits == true)
+                {
+                    ctx.SaveChanges();
+                }
             }
             else
             {

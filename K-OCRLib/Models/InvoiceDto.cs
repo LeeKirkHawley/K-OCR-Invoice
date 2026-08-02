@@ -10,6 +10,8 @@ namespace K_OCRLib.Models
 
     public sealed class InvoiceItemDto
     {
+        public int Id { get; init; }    
+        public int InvoiceId { get; init; } 
         public string Description { get; set; } = string.Empty;
         public decimal? Quantity { get; set; }
         public decimal? UnitPrice { get; set; }
