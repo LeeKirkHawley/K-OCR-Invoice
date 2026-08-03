@@ -409,7 +409,7 @@
             const result = await fetch('/home/getinvoice?filePath=' + encodeURIComponent(filePath));
             const data = await result.json();
             _ocrLoaded = data?.invoice != null;
-            if (data.success && data.invoice)
+            if (data.success && data.invoice && data.invoice.ocrText)
             {
                 _currentInvoice = data.invoice;
 
@@ -449,13 +449,47 @@
     }
 
     function replayEdits(invoice){
-        if(!invoice?.invoiceEdits || !invoice.invoiceEdits.length)
-            return;
-        const edits = invoice.invoiceEdits;
-        const editsObj = JSON.parse(invoice.invoiceEdits);
-        editsObj.forEach(item => {
-            invoice[toCamelCase(item.fieldName)] = item.value;
-        });
+        if(invoice?.invoiceEdits || invoice?.invoiceEdits?.length)
+        {
+            //const edits = invoice.invoiceEdits;
+            const editsObj = JSON.parse(invoice.invoiceEdits);
+            editsObj.forEach(item => {
+                invoice[toCamelCase(item.fieldName)] = item.value;
+            });
+        }
+
+        if(invoice?.items)
+        {
+            // for each line item
+            invoice.items.forEach(item => 
+            {
+                if(item.itemEdits)
+                {
+                    const itemEditsObj = JSON.parse(item.itemEdits);
+
+                   // for each individual edit for the item
+                    itemEditsObj.forEach(itemEdit => 
+                    {
+                        item[toCamelCase(itemEdit.fieldName)] = itemEdit.value;
+                        //setPropertyIgnoreCase(item, item.fieldName, item.value);
+                    });
+                }
+            });
+        }
+    }
+
+    function setPropertyIgnoreCase(obj, fieldName, value) 
+    {
+        // Look for an existing key that matches ignoring case
+        const existingKey = Object.keys(obj).find
+        (
+            key => key.toLowerCase() === String(fieldName).toLowerCase()
+        );
+
+        // Prefer the original casing if it exists, otherwise fall back to camelCase
+        const keyToUse = existingKey ?? toCamelCase(fieldName);
+
+        obj[keyToUse] = value;
     }
 
     function toCamelCase(str) {

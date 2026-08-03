@@ -553,7 +553,9 @@ namespace K_OCRLib.Services
                     }
                 }
 
-                return new InvoiceDto
+
+
+                InvoiceDto dto =  new InvoiceDto
                 {
                     VendorName    = GetString("VendorName"),
                     CustomerName  = GetString("CustomerName"),
@@ -573,6 +575,8 @@ namespace K_OCRLib.Services
                     OriginalPageHeight = pageHeight,
                     PageCount          = result.Pages?.Count ?? 1
                 };
+
+                return dto;
             }).ToList();
         }
         public async Task<Dictionary<string, List<InvoiceDto>>> ProcessInvoiceBatchAsync(

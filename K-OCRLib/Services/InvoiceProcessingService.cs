@@ -132,8 +132,8 @@ public class InvoiceProcessingService : IInvoiceProcessingService
 
     public async Task<InvoiceDto?> LoadInvoiceAsync(string filePath)
     {
-        var context = await _databaseService.LoadContextAsync(filePath);
-        return context?.Layout?.FirstOrDefault();
+        InvoiceDto? context = await _databaseService.LoadContextAsync(filePath);
+        return context;
     }
 }
 

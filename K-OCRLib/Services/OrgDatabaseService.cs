@@ -38,69 +38,106 @@ namespace K_OCRLib.Services
             }
         }
 
-        public async Task<PipelineContext?> LoadContextAsync(string imagePath)
+        public async Task<InvoiceDto?> LoadContextAsync(string imagePath)
         {
             Models.Invoice? invoice = await GetInvoiceByFilePathAsync(imagePath);
             if (invoice != null)
             {
-                PipelineContext? context = null;
-
-                if (!string.IsNullOrEmpty(invoice.OcrText))
+                //PipelineContext? context = null;
+                InvoiceDto invoiceDto = new InvoiceDto()
                 {
-                    try
+                    VendorName = invoice.VendorName,
+                    CustomerName = invoice.CustomerName,
+                    InvoiceId = invoice.InvoiceId,
+                    InvoiceDate = invoice.InvoiceDate?.ToString("yyyy-MM-dd"),
+                    DueDate = invoice.DueDate?.ToString("yyyy-MM-dd"),
+                    PurchaseOrder = invoice.PurchaseOrder,
+                    Subtotal = invoice.Subtotal,
+                    TotalTax = invoice.TotalTax,
+                    Discount = invoice.Discount,
+                    Total = invoice.Total,
+                    Items = invoice.Items.Select(i => new InvoiceItemDto
                     {
-                        context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(invoice.OcrText);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "[Database] Failed to deserialize OcrText for {FileName}.", Path.GetFileName(imagePath));
-                    }
-                }
+                        Description = i.Description,
+                        Quantity = i.Quantity,
+                        UnitPrice = i.UnitPrice,
+                        Amount = i.LineTotal,
+                        TaxRate = decimal.TryParse(i.TaxRate, out var taxRate) ? taxRate.ToString() : "",
+                        ItemEdits = i.ItemEdits,
+                        Id = i.Id,
+                        InvoiceId = i.InvoiceId
+                    }).ToList(),
+                    FieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>(),
+                    FieldConfidences = new Dictionary<string, double>(),
+                    OriginalPageWidth = 0.0, // Placeholder, populate as needed
+                    OriginalPageHeight = 0.0, // Placeholder, populate as needed
+                    PageCount = invoice.TotalPages,
+                    TesseractConfirmed = new Dictionary<string, bool>(),
+                    IsInvoiceAccepted = invoice.IsInvoiceAccepted,
+                    InvoiceEdits = invoice.InvoiceEdits,
+                    Notes = invoice.Notes,
+                    VendorCountry = invoice.VendorCountry,
+                    CurrencyCode = invoice.CurrencyCode,
+                    OcrText = invoice.OcrText
+                };  
 
-                if (context != null
-                    && string.IsNullOrWhiteSpace(context.TesseractOcrText)
-                    && !string.IsNullOrWhiteSpace(invoice.TesseractOcrText))
-                {
-                    context.TesseractOcrText = invoice.TesseractOcrText;
-                }
+                //if (!string.IsNullOrEmpty(invoice.OcrText))
+                //{
+                //    try
+                //    {
+                //        context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(invoice.OcrText);
+                //    }
+                //    catch (Exception ex)
+                //    {
+                //        _logger.LogError(ex, "[Database] Failed to deserialize OcrText for {FileName}.", Path.GetFileName(imagePath));
+                //    }
+                //}
+
+                //if (context != null
+                //    && string.IsNullOrWhiteSpace(context.TesseractOcrText)
+                //    && !string.IsNullOrWhiteSpace(invoice.TesseractOcrText))
+                //{
+                //    context.TesseractOcrText = invoice.TesseractOcrText;
+                //}
 
                 // Attach raw OcrText and ValidatedOcrText to each invoice for frontend use
-                if (context?.Layout != null)
-                {
-                    foreach (var invoiceDto in context.Layout)
-                    {
-                        if (!string.IsNullOrEmpty(invoice.OcrText))
-                            invoiceDto.OcrText = invoice.OcrText;
+                //if (context?.Layout != null)
+                //{
+                //    foreach (var invoiceDto in context.Layout)
+                //    {
+                //        if (!string.IsNullOrEmpty(invoice.OcrText))
+                //            invoiceDto.OcrText = invoice.OcrText;
 
-                        if (!string.IsNullOrEmpty(invoice.InvoiceEdits))
-                            invoiceDto.InvoiceEdits = invoice.InvoiceEdits;
+                //        if (!string.IsNullOrEmpty(invoice.InvoiceEdits))
+                //            invoiceDto.InvoiceEdits = invoice.InvoiceEdits;
 
-                        invoiceDto.IsInvoiceAccepted = invoice.IsInvoiceAccepted;
+                //        invoiceDto.IsInvoiceAccepted = invoice.IsInvoiceAccepted;
 
-                        // Overlay DB InvoiceItem rows onto context items so editable fields
-                        // and ItemEdits come from the database, not the OcrText blob.
-                        if (invoice.Items.Count > 0 && invoiceDto.Items.Count > 0)
-                        {
-                            var dbItems = invoice.Items.ToList();
-                            for (int i = 0; i < invoiceDto.Items.Count && i < dbItems.Count; i++)
-                            {
-                                Models.InvoiceItem dbItem = dbItems[i];
-                                InvoiceItemDto dtoItem = invoiceDto.Items[i];
+                //        // Overlay DB InvoiceItem rows onto context items so editable fields
+                //        // and ItemEdits come from the database, not the OcrText blob.
+                //        if (invoice.Items.Count > 0 && invoiceDto.Items.Count > 0)
+                //        {
+                //            var dbItems = invoice.Items.ToList();
+                //            for (int i = 0; i < invoiceDto.Items.Count && i < dbItems.Count; i++)
+                //            {
+                //                Models.InvoiceItem dbItem = dbItems[i];
+                //                InvoiceItemDto dtoItem = invoiceDto.Items[i];
 
-                                dtoItem.Description = dbItem.Description;
-                                dtoItem.Quantity = dbItem.Quantity;
-                                dtoItem.UnitPrice = dbItem.UnitPrice;
-                                dtoItem.Amount = dbItem.LineTotal;
-                                dtoItem.TaxRate = dbItem.TaxRate ?? dtoItem.TaxRate;
-                                dtoItem.ItemEdits = dbItem.ItemEdits;
-                                //dtoItem.Id = dbItem.Id;
-                                //dtoItem.InvoiceId = dbItem.InvoiceId;
-                            }
-                        }
-                    }
-                }
+                //                dtoItem.Description = dbItem.Description;
+                //                dtoItem.Quantity = dbItem.Quantity;
+                //                dtoItem.UnitPrice = dbItem.UnitPrice;
+                //                dtoItem.Amount = dbItem.LineTotal;
+                //                dtoItem.TaxRate = dbItem.TaxRate ?? dtoItem.TaxRate;
+                //                dtoItem.ItemEdits = dbItem.ItemEdits;
+                //                //dtoItem.Id = dbItem.Id;
+                //                //dtoItem.InvoiceId = dbItem.InvoiceId;
+                //            }
+                //        }
+                //    }
+                //}
 
-                return context;
+                //return context;
+                return invoiceDto;
             }
 
             return null;
@@ -135,6 +172,24 @@ namespace K_OCRLib.Services
                 var ocrItems = context.Layout?.FirstOrDefault()?.Items;
                 if (ocrItems != null)
                     SyncItemsFromDto(existing, ocrItems, preserveEdits: false);
+
+                InvoiceDto invoiceDto = context.Layout[0];
+                existing.CustomerName = invoiceDto.CustomerName;
+                existing.CurrencyCode = invoiceDto.CurrencyCode;
+                existing.Discount = invoiceDto.Discount;
+                existing.PurchaseOrder = invoiceDto.PurchaseOrder;
+                existing.Subtotal = invoiceDto.Subtotal;
+                existing.Total = invoiceDto.Total;
+                existing.TotalPages = invoiceDto.PageCount;
+                existing.TotalTax = invoiceDto.TotalTax;
+                existing.VendorCountry = invoiceDto.VendorCountry;
+                existing.VendorName = invoiceDto.VendorName;
+                existing.InvoiceId = invoiceDto.InvoiceId;
+
+                if(!String.IsNullOrEmpty(invoiceDto.DueDate))
+                    existing.DueDate = DateTime.Parse(invoiceDto.DueDate);
+                if(!String.IsNullOrEmpty(invoiceDto.InvoiceDate))
+                    existing.InvoiceDate = DateTime.Parse(invoiceDto.InvoiceDate);
 
                 await SaveInvoiceAsync(existing);
                 _logger.LogDebug("[Database] Updated OCR data for: {FileName}.", Path.GetFileName(imagePath));

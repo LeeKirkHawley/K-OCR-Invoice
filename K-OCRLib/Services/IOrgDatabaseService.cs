@@ -17,7 +17,7 @@ namespace K_OCRLib.Services
         /// <summary>
         /// Load pipeline context from database
         /// </summary>
-        Task<PipelineContext?> LoadContextAsync(string imagePath);
+        Task<InvoiceDto?> LoadContextAsync(string imagePath);
 
         /// <summary>
         /// Save pipeline context to database
