@@ -43,7 +43,26 @@ namespace K_OCRLib.Services
             Models.Invoice? invoice = await GetInvoiceByFilePathAsync(imagePath);
             if (invoice != null)
             {
-                //PipelineContext? context = null;
+                // Recover bounding-box geometry (field bboxes, confidences, page dimensions,
+                // Tesseract confirmation) from the original OCR JSON blob. The DB-sourced
+                // Invoice/InvoiceItem rows above are authoritative for field *values* (they
+                // reflect user edits), but they don't store geometry, so we backfill that
+                // from the original OcrText/PipelineContext here.
+                InvoiceDto? originalLayoutInvoice = null;
+                if (!string.IsNullOrEmpty(invoice.OcrText))
+                {
+                    try
+                    {
+                        PipelineContext? context = Newtonsoft.Json.JsonConvert.DeserializeObject<PipelineContext>(invoice.OcrText);
+                        originalLayoutInvoice = context?.Layout?.FirstOrDefault();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[Database] Failed to deserialize OcrText for {FileName}.", Path.GetFileName(imagePath));
+                    }
+                }
+
+                var dbItems = invoice.Items.ToList();
                 InvoiceDto invoiceDto = new InvoiceDto()
                 {
                     VendorName = invoice.VendorName,
@@ -56,23 +75,32 @@ namespace K_OCRLib.Services
                     TotalTax = invoice.TotalTax,
                     Discount = invoice.Discount,
                     Total = invoice.Total,
-                    Items = invoice.Items.Select(i => new InvoiceItemDto
+                    Items = dbItems.Select((i, idx) =>
                     {
-                        Description = i.Description,
-                        Quantity = i.Quantity,
-                        UnitPrice = i.UnitPrice,
-                        Amount = i.LineTotal,
-                        TaxRate = decimal.TryParse(i.TaxRate, out var taxRate) ? taxRate.ToString() : "",
-                        ItemEdits = i.ItemEdits,
-                        Id = i.Id,
-                        InvoiceId = i.InvoiceId
+                        InvoiceItemDto? origItem = originalLayoutInvoice?.Items != null && idx < originalLayoutInvoice.Items.Count
+                            ? originalLayoutInvoice.Items[idx]
+                            : null;
+                        return new InvoiceItemDto
+                        {
+                            Description = i.Description,
+                            Quantity = i.Quantity,
+                            UnitPrice = i.UnitPrice,
+                            Amount = i.LineTotal,
+                            TaxRate = decimal.TryParse(i.TaxRate, out var taxRate) ? taxRate.ToString() : "",
+                            ItemEdits = i.ItemEdits,
+                            Id = i.Id,
+                            InvoiceId = i.InvoiceId,
+                            BoundingBoxes = origItem?.BoundingBoxes ?? new List<BoundingBoxDto>(),
+                            FieldConfidences = origItem?.FieldConfidences ?? new Dictionary<string, double>(),
+                            TesseractConfirmed = origItem?.TesseractConfirmed ?? new Dictionary<string, bool>()
+                        };
                     }).ToList(),
-                    FieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>(),
-                    FieldConfidences = new Dictionary<string, double>(),
-                    OriginalPageWidth = 0.0, // Placeholder, populate as needed
-                    OriginalPageHeight = 0.0, // Placeholder, populate as needed
-                    PageCount = invoice.TotalPages,
-                    TesseractConfirmed = new Dictionary<string, bool>(),
+                    FieldBoundingBoxes = originalLayoutInvoice?.FieldBoundingBoxes ?? new Dictionary<string, List<BoundingBoxDto>>(),
+                    FieldConfidences = originalLayoutInvoice?.FieldConfidences ?? new Dictionary<string, double>(),
+                    OriginalPageWidth = originalLayoutInvoice?.OriginalPageWidth ?? 0.0,
+                    OriginalPageHeight = originalLayoutInvoice?.OriginalPageHeight ?? 0.0,
+                    PageCount = invoice.TotalPages > 0 ? invoice.TotalPages : (originalLayoutInvoice?.PageCount ?? 1),
+                    TesseractConfirmed = originalLayoutInvoice?.TesseractConfirmed ?? new Dictionary<string, bool>(),
                     IsInvoiceAccepted = invoice.IsInvoiceAccepted,
                     InvoiceEdits = invoice.InvoiceEdits,
                     Notes = invoice.Notes,
