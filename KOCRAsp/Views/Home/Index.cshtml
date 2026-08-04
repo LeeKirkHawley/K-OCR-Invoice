@@ -950,16 +950,20 @@
         menu.style.top = `${Math.max(8, top)}px`;
     }
 
-    document.getElementById('fieldMenuAcceptBtn').addEventListener('click', function () 
+    document.getElementById('fieldMenuAcceptBtn').addEventListener('click', async function () 
     {
         if (!_selectedFieldKey) return;
-        // Mark as persisted (saved/validated state)
-        _persistedEdits.add(_selectedFieldKey);
-        _pendingEdits.delete(_selectedFieldKey);
-        refreshSavedFieldStyling();
-        renderBboxOverlay();
+
+        if (!_pendingEdits.has(_selectedFieldKey)) {
+            hideFieldContextMenu();
+            return;
+        }
+
+        const result = await savePendingEdits(new Set([_selectedFieldKey]));
         hideFieldContextMenu();
-        showToast('Field marked as validated.');
+        if (!result.success) {
+            showToast(result.error ?? 'Failed to save field.', 'error');
+        }
     });
 
     document.getElementById('fieldMenuRevertBtn').addEventListener('click', function () 
@@ -1351,8 +1355,7 @@
         tabindex="-1">${escapeHtml(inv.notes ?? '')}</textarea>
         </div>`;
 
-        html += `<div class="d-flex gap-2 mt-2 flex-wrap">
-        <button id="saveBtn"   class="btn btn-sm btn-primary"           tabindex="-1">Save</button>`;
+        html += `<div class="d-flex gap-2 mt-2 flex-wrap">`;
 
         const role = "@User.ActiveOrganizationRole()";
         console.log(role);
@@ -1366,10 +1369,8 @@
         container.innerHTML = html;
 
         // Wire up button event handlers after DOM insertion
-        const saveBtnEl = container.querySelector('#saveBtn');
-        if (saveBtnEl) {
-            saveBtnEl.addEventListener('click', saveInvoice);
-        }
+        // NOTE: There is no standalone Save button - Accept persists all
+        // pending edits to the database itself (see acceptValidation()).
         const acceptBtnEl = container.querySelector('#acceptBtn');
         if (acceptBtnEl) {
             acceptBtnEl.addEventListener('click', acceptValidation);
@@ -1480,6 +1481,10 @@
 
         // Load persisted edits from database so a reload shows blue borders 
         // without requiring a new save in this session.
+        // NOTE: Accepting the invoice (isInvoiceAccepted) does NOT mark every
+        // field as persisted - only fields with actual saved edits are blue.
+        // The invoice-level accepted state is shown separately via the
+        // "Validated"/"Not Validated" label at the top of the panel.
         for (const [k] of _editingInvoiceEdits) {
             const f = HEADER_FIELDS.find(hf => hf.prop === k);
             if (f) _persistedEdits.add(f.key);
@@ -1499,15 +1504,6 @@
                 if (suffix) _persistedEdits.add(`Item_${i}_${suffix}`);
             }
         });
-        // If the invoice is accepted, every field is considered persisted
-        if (inv.isInvoiceAccepted) {
-            for (const f of HEADER_FIELDS) _persistedEdits.add(f.key);
-            (inv.items ?? []).forEach((_, i) => {
-                ['Desc','Qty','Price','Tax','Amt'].forEach(suffix => {
-                    _persistedEdits.add(`Item_${i}_${suffix}`);
-                });
-            });
-        }
         refreshSavedFieldStyling();
 
         // Auto-select first field
@@ -2082,26 +2078,62 @@
             .join(' · ');
     }
 
-    async function saveInvoice() {
-        //debugger;  // Force break when DevTools is open
-        console.log("saveInvoice()");
+    // Builds the pending-edits history for header + item fields and persists
+    // them via /home/saveinvoiceedits. Shared by acceptValidation() (so
+    // accepting always persists in-progress edits), the "Unsaved changes"
+    // switch-file prompt, and the field context menu's "Mark as Validated"
+    // action (which saves just the one selected field immediately).
+    // If fieldKeys is omitted, ALL pending edits are saved. If fieldKeys is a
+    // Set of field keys (e.g. 'VendorName', 'Item_0_Qty'), only edits for
+    // those fields are appended to history and persisted - other pending
+    // edits are left untouched (still green) for a later save.
+    // Returns { success, error } and skips the network call entirely when
+    // there is nothing to save.
+    async function savePendingEdits(fieldKeys) {
         if (!_currentFilePath || !_currentInvoice) 
-            return;
-        
-        const btn = document.getElementById('saveBtn');
-        setButtonLoading(btn, true);
+            return { success: true };
+
+        // Which field keys are we actually saving this call?
+        const targetKeys = fieldKeys
+            ? new Set([...fieldKeys].filter(k => _pendingEdits.has(k)))
+            : new Set(_pendingEdits);
+
+        if (targetKeys.size === 0) 
+            return { success: true };
 
         // Store the original edit strings to restore on failure
         const savedInvoiceEdits = _currentInvoice.invoiceEdits;
         const savedItemEdits = (_currentInvoice.items ?? []).map(item => item.itemEdits);
 
+        // Narrow _changedInvoiceFields/_changedItemFields down to just the
+        // fields being saved this call, so appendPendingEditsToHistory only
+        // appends history entries for those fields. Fields left out stay
+        // tracked as "changed" for a future save.
+        const changedInvoiceFieldsToSave = new Set();
+        for (const prop of _changedInvoiceFields) {
+            const f = HEADER_FIELDS.find(hf => hf.prop === prop);
+            if (f && targetKeys.has(f.key)) changedInvoiceFieldsToSave.add(prop);
+        }
+        const ITEM_FIELD_KEY_SUFFIX = { description: 'Desc', quantity: 'Qty', unitPrice: 'Price', taxRate: 'Tax', amount: 'Amt' };
+        const changedItemFieldsToSave = new Map(); // itemIdx -> Set<prop>
+        for (const [itemIdx, propSet] of _changedItemFields) {
+            for (const prop of propSet) {
+                const suffix = ITEM_FIELD_KEY_SUFFIX[prop];
+                const key = suffix ? `Item_${itemIdx}_${suffix}` : null;
+                if (key && targetKeys.has(key)) {
+                    if (!changedItemFieldsToSave.has(itemIdx)) changedItemFieldsToSave.set(itemIdx, new Set());
+                    changedItemFieldsToSave.get(itemIdx).add(prop);
+                }
+            }
+        }
+
         try {
             // Append new edits to the existing edit history (as a JSON array)
-            // Only append fields that the user actually changed (tracked in _changedInvoiceFields)
+            // Only append fields being saved this call
             _currentInvoice.invoiceEdits = appendPendingEditsToHistory(
                _originalInvoiceEditsJson,
                 _editingInvoiceEdits,
-                _changedInvoiceFields,  // Only changed fields
+                changedInvoiceFieldsToSave,
                 _currentInvoice
             );
 
@@ -2110,11 +2142,11 @@
                const item = _currentInvoice.items[i];
                const originalItemJson = _originalItemEditsJson.get(i) || '[]';
                const editingItemMap = _editingItemEdits.get(i) || new Map();
-               const changedItemFieldSet = _changedItemFields.get(i) || new Set();  // Only changed fields for this item
+               const changedItemFieldSet = changedItemFieldsToSave.get(i) || new Set();
                item.itemEdits = appendPendingEditsToHistory(
                     originalItemJson,
                     editingItemMap,
-                    changedItemFieldSet,  // Only changed fields
+                    changedItemFieldSet,
                     item
                 );
             }
@@ -2122,32 +2154,81 @@
             const result = await postJson('/home/saveinvoiceedits',
                     { filePath: _currentFilePath, edits: _currentInvoice.invoiceEdits, invoiceItems: _currentInvoice.items });
             if (result.success) {
-               // Move all pending edits to persisted (three-state model)
-               for (const fieldKey of _pendingEdits) {
+               // Move only the saved fields from pending to persisted (three-state model)
+               for (const fieldKey of targetKeys) {
                    _persistedEdits.add(fieldKey);
+                   _pendingEdits.delete(fieldKey);
                }
-               _pendingEdits.clear();
+
+               // Advance the "base" history to what was just saved, and clear
+               // changed-field tracking for the fields just saved. This makes
+               // it safe to call savePendingEdits() again later in the same
+               // session (e.g. a second field save or a later Accept) WITHOUT
+               // requiring an invoice reload in between - otherwise a later
+               // call would rebuild history from a stale base and silently
+               // drop the edits just appended here.
+               _originalInvoiceEditsJson = _currentInvoice.invoiceEdits;
+               (_currentInvoice.items ?? []).forEach((item, i) => {
+                   _originalItemEditsJson.set(i, item.itemEdits);
+               });
+               for (const prop of changedInvoiceFieldsToSave) _changedInvoiceFields.delete(prop);
+               for (const [itemIdx, propSet] of changedItemFieldsToSave) {
+                   const existing = _changedItemFields.get(itemIdx);
+                   if (existing) {
+                       for (const prop of propSet) existing.delete(prop);
+                       if (existing.size === 0) _changedItemFields.delete(itemIdx);
+                   }
+               }
+
                // Apply updated styling to all fields
                refreshSavedFieldStyling();
                // Also redraw the bbox overlay to show correct borders
                renderBboxOverlay();
+            } else {
+               // Restore original edit strings so further edits still work
+               _currentInvoice.invoiceEdits = savedInvoiceEdits;
+               (_currentInvoice.items ?? []).forEach((item, i) => { item.itemEdits = savedItemEdits[i]; });
+            }
+            return result;
+        } catch (err) {
+            // Restore original edit strings so further edits still work
+            _currentInvoice.invoiceEdits = savedInvoiceEdits;
+            (_currentInvoice.items ?? []).forEach((item, i) => { item.itemEdits = savedItemEdits[i]; });
+            return { success: false, error: err.message };
+        }
+    }
+
+    // Saves ALL currently pending (unsaved/green) edits. Used by
+    // acceptValidation() and the "Unsaved changes" switch-file prompt.
+    async function saveAllPendingEdits() {
+        return savePendingEdits();
+    }
+
+    async function saveInvoice() {
+        //debugger;  // Force break when DevTools is open
+        console.log("saveInvoice()");
+        if (!_currentFilePath || !_currentInvoice) 
+            return;
+        
+        // There is no standalone Save button in the field panel anymore -
+        // this is only called from the "Unsaved changes" switch-file prompt.
+        const btn = document.getElementById('unsavedChangesSaveBtn');
+        if (btn) setButtonLoading(btn, true);
+
+        try {
+            const result = await saveAllPendingEdits();
+            if (result.success) {
                showToast('Invoice saved.');
                // Reload invoice to display updated ValidatedOcrText from database
                await selectFile(_currentFilePath, false);
                await refreshFileList();
             } else {
-               // Restore original edit strings so further edits still work
-               _currentInvoice.invoiceEdits = savedInvoiceEdits;
-               (_currentInvoice.items ?? []).forEach((item, i) => { item.itemEdits = savedLlineItemEdits[i]; });
                showToast(result.error ?? 'Save failed.', 'error');
             }
         } catch (err) {
-            // Restore original edit strings so further edits still work
-            _currentInvoice.invoiceEdits = savedInvoiceEdits;
-            (_currentInvoice.items ?? []).forEach((item, i) => { item.itemEdits = savedLineItemEdits[i]; });
             showToast('Save error: ' + err.message, 'error');
         } finally {
-            setButtonLoading(btn, false);
+            if (btn) setButtonLoading(btn, false);
         }
     }
 
@@ -2173,20 +2254,31 @@
         try {
             const parsed = JSON.parse(str);
             
-            // Check if it's new format: array of objects with fieldName, value, userName, timestampUtc
+            // Check if it's new format: array of objects with fieldName/value.
+            // userName/timestampUtc are for reporting only, not required here.
             if (Array.isArray(parsed) && parsed.length > 0) {
                 const firstItem = parsed[0];
-                if (typeof firstItem === 'object' && 'fieldName' in firstItem && 'userName' in firstItem) {
+                if (typeof firstItem === 'object' && 'fieldName' in firstItem) {
                     // New format: convert FieldEdit array to Map
                     const map = new Map();
                     for (const edit of parsed) {
-                        // Latest edit for each field wins
-                        map.set(edit.fieldName, edit.value);
+                        // History stores PascalCase fieldName (e.g. "VendorName",
+                        // "UnitPrice") to match the C# model, but every consumer of
+                        // this Map (editing maps, persisted-edit tracking, JSON
+                        // export) expects camelCase property names. Normalize here
+                        // so callers don't have to special-case the casing.
+                        // Latest edit for each field wins.
+                        map.set(toCamelCase(edit.fieldName), edit.value);
                     }
                     return map;
                 } else if (Array.isArray(firstItem) && firstItem.length >= 2) {
-                    // Legacy format: array of pairs
-                    return new Map(parsed);
+                    // Legacy format: array of pairs. Normalize keys too, in case
+                    // any legacy data was ever written with PascalCase keys.
+                    const map = new Map();
+                    for (const [k, v] of parsed) {
+                        map.set(toCamelCase(k), v);
+                    }
+                    return map;
                 }
             }
             
@@ -2245,7 +2337,6 @@
             lastEditByField[edit.fieldName] = edit.value;
         }
         // Only append edits for fields that the user actually changed in this session
-        // Only append edits for fields that the user actually changed in this session
         for (const fieldKey of changedFields) {
             // Map camelCase field keys to PascalCase field names for history
             let fieldName = fieldKey;
@@ -2299,27 +2390,25 @@
         const btn = document.getElementById('acceptBtn');
         setButtonLoading(btn, true);
         try {
+            // Persist any pending (unsaved/green) edits before marking the invoice
+            // accepted, since there is no separate Save step the user must take first.
+            const saveResult = await saveAllPendingEdits();
+            if (!saveResult.success) {
+                showToast(saveResult.error ?? 'Failed to save pending edits.', 'error');
+                return;
+            }
+
             const fd = new FormData();
             fd.append('filePath', _currentFilePath);
             const result = await postForm('/home/acceptvalidation', fd);
             if (result.success) {
-                // Mark ALL fields as persisted when invoice is accepted
-                const container = document.getElementById('invoiceFields');
-                if (container) {
-                    container.querySelectorAll('.inv-field').forEach(input => {
-                        const fieldKey = input.dataset.fieldkey;
-                        if (fieldKey) {
-                            _persistedEdits.add(fieldKey);
-                            _pendingEdits.delete(fieldKey);
-                        }
-                    });
-                }
-                // Apply updated styling to all fields
-                refreshSavedFieldStyling();
-                // Also redraw the bbox overlay to show correct borders
-                renderBboxOverlay();
+                // NOTE: Do NOT mark every field as persisted here - accepting the
+                // invoice only changes the top-of-panel "Validated" status label.
+                // Field-level blue styling continues to reflect only fields that
+                // actually have saved edits (recomputed below from the reloaded invoice).
                 showToast('Validation accepted.');
                 // Reload invoice to display updated ValidatedOcrText from database
+                // and recompute _persistedEdits/_pendingEdits from the saved edit maps.
                 await selectFile(_currentFilePath, false);
                 await refreshFileList();
                 await updateExportButtonState();
