@@ -483,19 +483,19 @@
         }
     }
 
-    function setPropertyIgnoreCase(obj, fieldName, value) 
-    {
-        // Look for an existing key that matches ignoring case
-        const existingKey = Object.keys(obj).find
-        (
-            key => key.toLowerCase() === String(fieldName).toLowerCase()
-        );
+    // function setPropertyIgnoreCase(obj, fieldName, value) 
+    // {
+    //     // Look for an existing key that matches, ignoring case
+    //     const existingKey = Object.keys(obj).find
+    //     (
+    //         key => key.toLowerCase() === String(fieldName).toLowerCase()
+    //     );
 
-        // Prefer the original casing if it exists, otherwise fall back to camelCase
-        const keyToUse = existingKey ?? toCamelCase(fieldName);
+    //     // Prefer the original casing if it exists, otherwise fall back to camelCase
+    //     const keyToUse = existingKey ?? toCamelCase(fieldName);
 
-        obj[keyToUse] = value;
-    }
+    //     obj[keyToUse] = value;
+    // }
 
     function toCamelCase(str) {
         const camelCase = str.charAt(0).toLowerCase() + str.slice(1);

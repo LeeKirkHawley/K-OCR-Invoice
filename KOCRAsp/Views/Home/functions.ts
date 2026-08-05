@@ -1,3 +1,26 @@
+// ===== Ambient declarations for globals defined elsewhere (site.js / Index.cshtml / _Layout.cshtml) =====
+declare function postForm(url: string, formData: FormData): Promise<any>;
+declare function showToast(message: string, type?: string): void;
+declare function showBetaDialog(message: string): void;
+declare function showGuestOcrLimitModal(message: string, title: string): void;
+declare function setBetaLimitStateFromServer(data: any): void;
+declare function refreshFileList(page?: number): Promise<void>;
+declare function refreshBatchDropdown(): Promise<void>;
+declare function updateExportButtonState(): Promise<void>;
+declare function showUploadOverlay(): void;
+declare function hideUploadOverlay(): void;
+
+declare var _isBetaTestOrganization: boolean;
+declare var _betaLimitExceeded: boolean;
+declare var _betaUsedPages: number;
+declare var _betaMaxPages: number;
+declare var _isGuestOrganization: boolean;
+declare var _guestMaxInvoicesPerBatch: number;
+declare var _guestMaxBatches: number;
+declare var _guestBatchLimitExceeded: boolean;
+declare var _maxPagesPerInvoice: number;
+declare var _totalFiles: number;
+
 function safeParseJson(jsonString: string): any[] {
     if (!jsonString) return [];
 
@@ -108,29 +131,6 @@ var resetState = function(dropZone: HTMLElement, fileListEl: HTMLElement, upload
 var closeDialog = function (dialog: HTMLDialogElement): void {
     dialog.close();
 };
-
-// ===== Ambient declarations for globals defined elsewhere (site.js / Index.cshtml / _Layout.cshtml) =====
-declare function postForm(url: string, formData: FormData): Promise<any>;
-declare function showToast(message: string, type?: string): void;
-declare function showBetaDialog(message: string): void;
-declare function showGuestOcrLimitModal(message: string, title: string): void;
-declare function setBetaLimitStateFromServer(data: any): void;
-declare function refreshFileList(page?: number): Promise<void>;
-declare function refreshBatchDropdown(): Promise<void>;
-declare function updateExportButtonState(): Promise<void>;
-declare function showUploadOverlay(): void;
-declare function hideUploadOverlay(): void;
-
-declare var _isBetaTestOrganization: boolean;
-declare var _betaLimitExceeded: boolean;
-declare var _betaUsedPages: number;
-declare var _betaMaxPages: number;
-declare var _isGuestOrganization: boolean;
-declare var _guestMaxInvoicesPerBatch: number;
-declare var _guestMaxBatches: number;
-declare var _guestBatchLimitExceeded: boolean;
-declare var _maxPagesPerInvoice: number;
-declare var _totalFiles: number;
 
 function exceedsBatchLimits(fileCount: number): string  // return if match limits exceeded
 {
