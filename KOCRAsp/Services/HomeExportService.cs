@@ -4,6 +4,7 @@ using K_OCRLib.Services;
 using K_OCRLib.Services.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Reflection;
 
 namespace KOCRAsp.Services;
 
@@ -57,9 +58,17 @@ public sealed class HomeExportService : IHomeExportService
         }
     }
 
-    public string BuildBatchJson(IReadOnlyList<(string FileName, InvoiceDto Invoice)> invoice)
+    public string BuildBatchJson(IReadOnlyList<(string FileName, InvoiceDto Invoice)> invoices)
     {
-        var payload = invoice
+        // create a new list of invoices with replayed edits
+        List<(string FileName, InvoiceDto Invoice)> editedInvoices = new List<(string FileName, InvoiceDto Invoice)>();
+        foreach ((string FileName, InvoiceDto Invoice) in invoices)
+        {
+            InvoiceDto editedInvoice = ReplayEdits(Invoice);
+            editedInvoices.Add((FileName, editedInvoice));
+        }
+
+        var payload = editedInvoices
             .Select(t => new { fileName = t.FileName, invoice = StripBboxFields(t.Invoice) })
             .ToList();
         return JsonConvert.SerializeObject(payload, Formatting.Indented);
@@ -161,6 +170,172 @@ public sealed class HomeExportService : IHomeExportService
                 "Post-export soft-delete failed for batch {BatchId} ({BatchName}); export file was still returned.",
                 batch.BatchId, batch.Name);
         }
+    }
+
+    public InvoiceDto ReplayEdits(InvoiceDto invoice)
+    {
+        if (string.IsNullOrEmpty(invoice.InvoiceEdits))
+            return invoice;
+
+        var edits = JsonConvert.DeserializeObject<List<EditRecord>>(invoice.InvoiceEdits) ?? [];
+        var updated = invoice;
+
+        foreach (var edit in edits)
+        {
+            string propName = ToCamelCase(edit.FieldName);
+            PropertyInfo? prop = typeof(InvoiceDto).GetProperty(propName, System.Reflection.BindingFlags.IgnoreCase | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            if (prop != null && !prop.Name.StartsWith("Items", StringComparison.Ordinal))
+            {
+                object? convertedValue = ConvertValue(edit.Value, prop.PropertyType);
+                updated = updated.GetType().GetProperty(prop.Name)?.GetValue(updated) == convertedValue
+                    ? updated
+                    : ApplyPropertyEdit(updated, prop.Name, convertedValue);
+            }
+        }
+
+        if (invoice.Items?.Count > 0)
+        {
+            List<InvoiceItemDto> newItems = invoice.Items.Select(item => ReplayItemEdits(item)).ToList();
+            updated = new InvoiceDto
+            {
+                VendorName = updated.VendorName,
+                CustomerName = updated.CustomerName,
+                InvoiceId = updated.InvoiceId,
+                InvoiceDate = updated.InvoiceDate,
+                DueDate = updated.DueDate,
+                PurchaseOrder = updated.PurchaseOrder,
+                Subtotal = updated.Subtotal,
+                TotalTax = updated.TotalTax,
+                Discount = updated.Discount,
+                Total = updated.Total,
+                Items = newItems,
+                FieldBoundingBoxes = updated.FieldBoundingBoxes,
+                FieldConfidences = updated.FieldConfidences,
+                OriginalPageWidth = updated.OriginalPageWidth,
+                OriginalPageHeight = updated.OriginalPageHeight,
+                PageCount = updated.PageCount,
+                TesseractConfirmed = updated.TesseractConfirmed,
+                IsInvoiceAccepted = updated.IsInvoiceAccepted,
+                InvoiceEdits = updated.InvoiceEdits,
+                Notes = updated.Notes,
+                VendorCountry = updated.VendorCountry,
+                CurrencyCode = updated.CurrencyCode,
+                OcrText = updated.OcrText
+            };
+        }
+
+        return updated;
+    }
+
+    private static InvoiceDto ApplyPropertyEdit(InvoiceDto invoice, string propName, object? value)
+    {
+        return new InvoiceDto
+        {
+            VendorName = propName == nameof(InvoiceDto.VendorName) ? (string)value! : invoice.VendorName,
+            CustomerName = propName == nameof(InvoiceDto.CustomerName) ? (string)value! : invoice.CustomerName,
+            InvoiceId = propName == nameof(InvoiceDto.InvoiceId) ? (string)value! : invoice.InvoiceId,
+            InvoiceDate = propName == nameof(InvoiceDto.InvoiceDate) ? (string)value! : invoice.InvoiceDate,
+            DueDate = propName == nameof(InvoiceDto.DueDate) ? (string)value! : invoice.DueDate,
+            PurchaseOrder = propName == nameof(InvoiceDto.PurchaseOrder) ? (string)value! : invoice.PurchaseOrder,
+            Subtotal = propName == nameof(InvoiceDto.Subtotal) ? (decimal?)value : invoice.Subtotal,
+            TotalTax = propName == nameof(InvoiceDto.TotalTax) ? (decimal?)value : invoice.TotalTax,
+            Discount = propName == nameof(InvoiceDto.Discount) ? (decimal?)value : invoice.Discount,
+            Total = propName == nameof(InvoiceDto.Total) ? (decimal?)value : invoice.Total,
+            Items = invoice.Items,
+            FieldBoundingBoxes = invoice.FieldBoundingBoxes,
+            FieldConfidences = invoice.FieldConfidences,
+            OriginalPageWidth = invoice.OriginalPageWidth,
+            OriginalPageHeight = invoice.OriginalPageHeight,
+            PageCount = invoice.PageCount,
+            TesseractConfirmed = invoice.TesseractConfirmed,
+            IsInvoiceAccepted = invoice.IsInvoiceAccepted,
+            InvoiceEdits = invoice.InvoiceEdits,
+            Notes = invoice.Notes,
+            VendorCountry = invoice.VendorCountry,
+            CurrencyCode = invoice.CurrencyCode,
+            OcrText = invoice.OcrText
+        };
+    }
+
+    private InvoiceItemDto ReplayItemEdits(InvoiceItemDto item)
+    {
+        if (string.IsNullOrEmpty(item.ItemEdits))
+            return item;
+
+        var edits = JsonConvert.DeserializeObject<List<EditRecord>>(item.ItemEdits) ?? [];
+        var updated = item;
+
+        foreach (var edit in edits)
+        {
+            var propName = ToCamelCase(edit.FieldName);
+            var prop = typeof(InvoiceItemDto).GetProperty(propName, System.Reflection.BindingFlags.IgnoreCase | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            if (prop != null && prop.CanWrite)
+            {
+                var convertedValue = ConvertValue(edit.Value, prop.PropertyType);
+                updated = ApplyItemPropertyEdit(updated, prop.Name, convertedValue);
+            }
+        }
+
+        return updated;
+    }
+
+    private static InvoiceItemDto ApplyItemPropertyEdit(InvoiceItemDto item, string propName, object? value)
+    {
+        return new InvoiceItemDto
+        {
+            Id = item.Id,
+            InvoiceId = item.InvoiceId,
+            Description = propName == nameof(InvoiceItemDto.Description) ? (string)value! : item.Description,
+            Quantity = propName == nameof(InvoiceItemDto.Quantity) ? (decimal?)value : item.Quantity,
+            UnitPrice = propName == nameof(InvoiceItemDto.UnitPrice) ? (decimal?)value : item.UnitPrice,
+            Amount = propName == nameof(InvoiceItemDto.Amount) ? (decimal?)value : item.Amount,
+            TaxRate = propName == nameof(InvoiceItemDto.TaxRate) ? (string?)value : item.TaxRate,
+            BoundingBoxes = item.BoundingBoxes,
+            FieldConfidences = item.FieldConfidences,
+            TesseractConfirmed = item.TesseractConfirmed,
+            ItemEdits = item.ItemEdits
+        };
+    }
+
+    private static string ToCamelCase(string str)
+    {
+        if (string.IsNullOrEmpty(str))
+            return str;
+        return char.ToLowerInvariant(str[0]) + str.Substring(1);
+    }
+
+    private static object? ConvertValue(object? value, Type targetType)
+    {
+        if (value == null)
+            return null;
+
+        if (targetType == typeof(string))
+            return Convert.ToString(value);
+
+        var underlyingType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+        if (underlyingType == typeof(decimal))
+            return decimal.Parse(value.ToString() ?? "0");
+
+        if (underlyingType == typeof(int))
+            return int.Parse(value.ToString() ?? "0");
+
+        if (underlyingType == typeof(double))
+            return double.Parse(value.ToString() ?? "0");
+
+        if (underlyingType == typeof(float))
+            return float.Parse(value.ToString() ?? "0");
+
+        return Convert.ChangeType(value, underlyingType);
+    }
+
+    private class EditRecord
+    {
+        [JsonProperty("fieldName")]
+        public string FieldName { get; set; } = string.Empty;
+
+        [JsonProperty("value")]
+        public object? Value { get; set; }
     }
 
     private static JObject StripBboxFields(InvoiceDto invoice)

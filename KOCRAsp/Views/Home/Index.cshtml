@@ -456,7 +456,6 @@
     function replayEdits(invoice){
         if(invoice?.invoiceEdits || invoice?.invoiceEdits?.length)
         {
-            //const edits = invoice.invoiceEdits;
             const editsObj = JSON.parse(invoice.invoiceEdits);
             editsObj.forEach(item => {
                 invoice[toCamelCase(item.fieldName)] = item.value;
@@ -476,7 +475,6 @@
                     itemEditsObj.forEach(itemEdit => 
                     {
                         item[toCamelCase(itemEdit.fieldName)] = itemEdit.value;
-                        //setPropertyIgnoreCase(item, item.fieldName, item.value);
                     });
                 }
             });

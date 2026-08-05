@@ -749,15 +749,17 @@ public class HomeController : Controller
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Forbid();
 
-        var batch = await GetCurrentBatchAsync();
-        if (batch == null) return BadRequest("No batch selected.");
+        BatchSummary? batch = await GetCurrentBatchAsync();
+        if (batch == null) 
+            return BadRequest("No batch selected.");
 
-        var invoices = await _homePageSvc.LoadBatchInvoicesAsync(batch);
-        var json = _homeExportSvc.BuildBatchJson(invoices);
-        var bytes = Encoding.UTF8.GetBytes(json);
-        var name = Path.GetFileName(batch.FolderPath.TrimEnd(Path.DirectorySeparatorChar));
+        List<(string FileName, InvoiceDto Invoice)> invoices = await _homePageSvc.LoadBatchInvoicesAsync(batch);
 
-        var orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        string json = _homeExportSvc.BuildBatchJson(invoices);
+        byte[] bytes = Encoding.UTF8.GetBytes(json);
+        string name = Path.GetFileName(batch.FolderPath.TrimEnd(Path.DirectorySeparatorChar));
+
+        string orgUser = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         await _homeExportSvc.LogBatchExportAsync(batch, invoices, orgUser);
 
         // Soft-deleting the batch happens only after the browser confirms the
