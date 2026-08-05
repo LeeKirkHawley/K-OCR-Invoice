@@ -209,7 +209,7 @@
 </div>
 
 <div id="invoiceContextMenu" class="invoice-context-menu" style="display:none;">
-    <button type="button" id="invoiceMenuRunOcrBtn" class="invoice-context-item">Run OCR</button>
+    <button type="button" id="invoiceMenuRunOcrBtn" class="invoice-context-item">OCR this Invoice</button>
     <button type="button" id="invoiceMenuRemoveBtn" class="invoice-context-item">Remove Invoice from Batch</button>
     <button type="button" id="invoiceMenuMoveBtn" class="invoice-context-item">Move Invoice to another Batch</button>
 </div>
@@ -1360,7 +1360,7 @@
 
         if (role === "OrganizationAdmin" || role === "OrganizationValidator")
         {
-            @Html.Raw("html += `<button id=\"acceptBtn\" class=\"btn btn-sm btn-success\" tabindex=\"-1\" onclick=\"acceptValidation()\">Accept</button>`;");
+            @Html.Raw("html += `<button id=\"acceptBtn\" class=\"btn btn-sm btn-success\" tabindex=\"-1\">Accept</button>`;");
         };
         html += `</div>`;
 
@@ -1573,7 +1573,7 @@
         if (!btn) return;
         const state = getRunOcrButtonState(filePath, exceedsLimit);
         btn.className = state.className;
-        btn.textContent = '▶ Run OCR';
+        btn.textContent = '▶ OCR This Invoice';
         btn.dataset.queueToggle = 'true';
         btn.disabled = state.disabled;
         btn.title = state.title;
@@ -1706,12 +1706,18 @@
         return Number.isFinite(n) ? n.toFixed(2) : stripped;
     }
 
-    function showUploadOverlay() {
-        document.getElementById('uploadOverlay').classList.add('active');
+    function showUploadOverlay(label) {
+        const overlay = document.getElementById('uploadOverlay');
+        const labelEl = overlay.querySelector('.ocr-overlay-label');
+        if (labelEl) labelEl.textContent = label || 'Uploading...';
+        overlay.classList.add('active');
     }
 
     function hideUploadOverlay() {
-        document.getElementById('uploadOverlay').classList.remove('active');
+        const overlay = document.getElementById('uploadOverlay');
+        overlay.classList.remove('active');
+        const labelEl = overlay.querySelector('.ocr-overlay-label');
+        if (labelEl) labelEl.textContent = 'Uploading...'; // reset to default for next use
     }
 
     function updateValidationStatusLabel(inv) {
@@ -2482,6 +2488,7 @@
     }
 
     window.exportBatchJson = async function () {
+        showUploadOverlay('Exporting to JSON...');
         try {
             const result = await _exportAndSave('/home/exportbatchjson', 'batch.json', 'application/json', ['.json']);
             if (!result.saved) return; // user cancelled the save dialog
@@ -2489,10 +2496,13 @@
             location.reload();
         } catch (err) {
             showToast('Export failed: ' + err.message, 'error');
+        } finally {
+            hideUploadOverlay();
         }
     };
 
     window.exportBatchExcel = async function () {
+        showUploadOverlay('Exporting to Excel...');
         try {
             const result = await _exportAndSave(
                 '/home/exportbatchexcel',
@@ -2505,6 +2515,8 @@
             location.reload();
         } catch (err) {
             showToast('Export failed: ' + err.message, 'error');
+        } finally {
+            hideUploadOverlay();
         }
     };
 
