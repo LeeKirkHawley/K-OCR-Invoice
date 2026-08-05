@@ -76,6 +76,15 @@ public sealed class HomeExportService : IHomeExportService
 
     public byte[] BuildBatchExcel(IReadOnlyList<(string FileName, InvoiceDto Invoice)> invoices)
     {
+        // create a new list of invoices with replayed edits
+        List<(string FileName, InvoiceDto Invoice)> editedInvoices = new List<(string FileName, InvoiceDto Invoice)>();
+        foreach ((string FileName, InvoiceDto Invoice) in invoices)
+        {
+            InvoiceDto editedInvoice = ReplayEdits(Invoice);
+            editedInvoices.Add((FileName, editedInvoice));
+        }
+
+
         using var wb = new XLWorkbook();
 
         var ws = wb.Worksheets.Add("Invoices");
@@ -87,9 +96,9 @@ public sealed class HomeExportService : IHomeExportService
             cell.Style.Font.Bold = true;
         }
 
-        for (int r = 0; r < invoices.Count; r++)
+        for (int r = 0; r < editedInvoices.Count; r++)
         {
-            var (fn, inv) = invoices[r];
+            var (fn, inv) = editedInvoices[r];
             int row = r + 2;
             ws.Cell(row, 1).Value = fn;
             ws.Cell(row, 2).Value = inv.VendorName;
@@ -115,7 +124,7 @@ public sealed class HomeExportService : IHomeExportService
         }
 
         int row2 = 2;
-        foreach (var (fn, inv) in invoices)
+        foreach (var (fn, inv) in editedInvoices)
         {
             for (int i = 0; i < inv.Items.Count; i++)
             {
