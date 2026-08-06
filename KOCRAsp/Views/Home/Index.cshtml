@@ -1215,8 +1215,7 @@
 
         // Store the original edit history JSON and initialize editing Maps
         _originalInvoiceEditsJson = inv.invoiceEdits || '[]';
-        _editingInvoiceEdits = parseEditsMap(inv.invoiceEdits);  // Parse to Map for in-memory editing
-        // Keep _currentInvoice.invoiceEdits as JSON string always - do NOT store the Map back
+        _editingInvoiceEdits = parseEditsMap(inv.invoiceEdits);  // Always reinitialize (fresh Map even if no edits)
         
         _originalItemEditsJson.clear();
         _editingItemEdits.clear();
@@ -2940,12 +2939,12 @@
     function refreshSavedFieldStyling() {
         const container = document.getElementById('invoiceFields');
         if (!container) return;
-        
+
         container.querySelectorAll('.inv-field').forEach(input => {
             const fieldKey = input.dataset.fieldkey;
             if (!fieldKey) 
                 return;
-            
+
             // Remove both classes first
             input.classList.remove('inv-persisted-input', 'inv-pending-input');
             
@@ -2956,6 +2955,59 @@
                 input.classList.add('inv-pending-input');
             }
         });
+
+
+
+        
+        // container.querySelectorAll('.inv-field').forEach(input => {
+        //     const fieldKey = input.dataset.fieldkey;
+        //     if (!fieldKey) return;
+            
+        //     input.classList.remove('inv-persisted-input', 'inv-pending-input');
+            
+        //     const origValue = _originalValues.get(fieldKey) ?? '';
+
+        //     // Determine if this field has a saved (persisted) edit by comparing
+        //     // the saved edit value against the original OCR value.
+        //     let persistedValue = null;
+        //     if (fieldKey.startsWith('Item_')) 
+        //     {
+        //         const match = fieldKey.match(/^Item_(\d+)_(\w+)$/);
+        //         if (match) 
+        //         {
+        //             const itemIdx = parseInt(match[1], 10);
+        //             const suffix = match[2];
+        //             const propMap = { Desc: 'description', Qty: 'quantity', Price: 'unitPrice', Tax: 'taxRate', Amt: 'amount' };
+        //             const prop = propMap[suffix];
+        //             if (prop) 
+        //             {
+        //                 const itemEditsMap = _editingItemEdits.get(itemIdx);
+        //                 if (itemEditsMap) persistedValue = itemEditsMap.get(prop) ?? null;
+        //             }
+        //         }
+        //     } 
+        //     else 
+        //     {
+        //         const f = HEADER_FIELDS.find(hf => hf.key === fieldKey);
+        //         if (f) 
+        //         {
+        //             persistedValue = _editingInvoiceEdits.get(f.prop) ?? null;
+        //         }
+        //     }
+
+        //     const hasSavedEdit = persistedValue !== null && String(persistedValue) !== origValue;
+        //     const currentValue = input.value;
+        //     const hasPendingEdit = currentValue !== origValue;
+
+        //     if (hasSavedEdit) 
+        //     {
+        //         input.classList.add('inv-persisted-input');  // blue: saved edit
+        //     } 
+        //     else if (hasPendingEdit) 
+        //     {
+        //         input.classList.add('inv-pending-input');    // green: unsaved edit
+        //     }
+        //});
     }
 
     // ── Init ────────────────────────────────────────────────────
