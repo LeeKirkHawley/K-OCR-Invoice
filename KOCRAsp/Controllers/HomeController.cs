@@ -10,7 +10,6 @@ using KOCRAsp.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Razor.TagHelpers;
 using Newtonsoft.Json;
 using OCRQueue.Abstractions;
 using System.Security.Claims;
@@ -116,7 +115,8 @@ public class HomeController : Controller
             : null;
 
         const int defaultPageSize = 25;
-        int maxPagesPerInvoice = _tenantContext.IsGuestOrganization ? 20 : 20;
+        int maxInvoicesPerBatch = _configSvc.GetMaxInvoicesPerBatch(_tenantContext.IsGuestOrganization);
+        int maxPagesPerInvoice = _configSvc.GetMaxPagesPerInvoice(_tenantContext.IsGuestOrganization);
         List<FileListEntry> files = new List<FileListEntry>();
         int totalFiles = 0, currentPage = 1, totalPages = 0;
         if (currentBatch != null)
@@ -143,6 +143,7 @@ public class HomeController : Controller
             PageSize = defaultPageSize,
             TotalPages = totalPages,
             MaxPagesPerInvoice = maxPagesPerInvoice,
+            MaxInvoicesPerBatch = maxInvoicesPerBatch,
             IsBetaTestOrganization = betaStatus.IsBetaTestOrganization,
             IsOrgAdmin = isOrgAdmin,
             ShowBetaWelcomeDialog = betaStatus.IsBetaTestOrganization && isOrgAdmin,

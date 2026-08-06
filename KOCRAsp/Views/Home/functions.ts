@@ -16,6 +16,7 @@ declare var _betaUsedPages: number;
 declare var _betaMaxPages: number;
 declare var _isGuestOrganization: boolean;
 declare var _guestMaxInvoicesPerBatch: number;
+declare var _maxInvoicesPerBatch: number;
 declare var _guestMaxBatches: number;
 declare var _guestBatchLimitExceeded: boolean;
 declare var _maxPagesPerInvoice: number;
@@ -146,7 +147,7 @@ function exceedsBatchLimits(fileCount: number): string  // return if match limit
             return "Guest batch limit exceeded.";
     }
     else {
-        if ((_totalFiles + fileCount) > _maxPagesPerInvoice)
+        if ((_totalFiles + fileCount) > _maxInvoicesPerBatch)
             return "File count exceeds maximum pages per invoice.";
     }
 

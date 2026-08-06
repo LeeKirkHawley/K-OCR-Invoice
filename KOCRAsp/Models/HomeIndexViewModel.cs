@@ -14,6 +14,7 @@ public class HomeIndexViewModel
     public int PageSize { get; set; } = 25;
     public int TotalPages { get; set; }
     public int MaxPagesPerInvoice { get; set; } = 20;
+    public int MaxInvoicesPerBatch { get; set; } = 100;
     public bool IsBetaTestOrganization { get; set; }
     public bool IsOrgAdmin { get; set; }
     public bool ShowBetaWelcomeDialog { get; set; }

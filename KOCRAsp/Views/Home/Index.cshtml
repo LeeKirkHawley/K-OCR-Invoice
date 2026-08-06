@@ -336,6 +336,7 @@
     var _currentUserEmail        = '@Html.Raw(Model.CurrentUserEmail)';
     var _currentBatchId          = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
     var _maxPagesPerInvoice      = @Model.MaxPagesPerInvoice;
+    var _maxInvoicesPerBatch     = @Model.MaxInvoicesPerBatch;
     var _isBetaTestOrganization  = @(Model.IsBetaTestOrganization.ToString().ToLowerInvariant());
     var _isOrgAdmin              = @(Model.IsOrgAdmin.ToString().ToLowerInvariant());
     var _minConfidenceThreshold    = @Model.MinConfidenceThreshold.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
