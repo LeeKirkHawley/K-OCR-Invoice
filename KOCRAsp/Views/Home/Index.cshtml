@@ -312,7 +312,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                This invoice has unsaved changes. Would you like to save them before switching?
+                This invoice has unsaved changes. Would you like to save and validate them before switching?
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" id="unsavedChangesNoBtn" data-bs-dismiss="modal">No, Discard</button>
@@ -953,9 +953,46 @@
     {
         if (!_selectedFieldKey) return;
 
+        // If the field has no pending edits (it might already be persisted, or unchanged),
+        // check if its current value differs from the original OCR value. If so, mark it
+        // as a pending edit so it can be saved/validated.
         if (!_pendingEdits.has(_selectedFieldKey)) {
-            hideFieldContextMenu();
-            return;
+            const container = document.getElementById('invoiceFields');
+            const input = container?.querySelector(`.inv-field[data-fieldkey="${CSS.escape(_selectedFieldKey)}"]`);
+            if (input) {
+                const origValue = _originalValues.get(_selectedFieldKey) ?? '';
+                const currentValue = input.value;
+                
+                // If the field has been edited from the original, mark it as pending
+                if (currentValue !== origValue) {
+                    _pendingEdits.add(_selectedFieldKey);
+                    
+                    // Also ensure it's tracked in the changed fields map
+                    if (_selectedFieldKey.startsWith('Item_')) {
+                        const match = _selectedFieldKey.match(/^Item_(\d+)_(\w+)$/);
+                        if (match) {
+                            const itemIdx = parseInt(match[1], 10);
+                            const suffix = match[2];
+                            const propMap = { Desc: 'description', Qty: 'quantity', Price: 'unitPrice', Tax: 'taxRate', Amt: 'amount' };
+                            const prop = propMap[suffix];
+                            if (prop) {
+                                if (!_changedItemFields.has(itemIdx)) _changedItemFields.set(itemIdx, new Set());
+                                _changedItemFields.get(itemIdx).add(prop);
+                            }
+                        }
+                    } else {
+                        const f = HEADER_FIELDS.find(hf => hf.key === _selectedFieldKey);
+                        if (f) _changedInvoiceFields.add(f.prop);
+                    }
+                } else {
+                    // Field hasn't changed from original, nothing to save
+                    hideFieldContextMenu();
+                    return;
+                }
+            } else {
+                hideFieldContextMenu();
+                return;
+            }
         }
 
         const result = await savePendingEdits(new Set([_selectedFieldKey]));
