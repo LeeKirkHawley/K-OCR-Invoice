@@ -22,18 +22,6 @@ declare var _guestBatchLimitExceeded: boolean;
 declare var _maxPagesPerInvoice: number;
 declare var _totalFiles: number;
 
-// function safeParseJson(jsonString: string): any[] {
-//     if (!jsonString) return [];
-
-//     try {
-//         return JSON.parse(jsonString);
-//     }
-//     catch (e) {
-//         console.error("Failed to parse JSON:", jsonString);
-//         return [];
-//     }
-// }
-
 var readFileEntry = async function(entry: any): Promise<any> {
     return new Promise(resolve => {
         entry.file((file: any) => {
