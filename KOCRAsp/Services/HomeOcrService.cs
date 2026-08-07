@@ -29,6 +29,7 @@ public sealed record HomeBatchOcrResult(
     IReadOnlyList<string>? QueuedFilePaths = null,
     string? Error = null);
 
+
 public sealed class HomeOcrService : IHomeOcrService
 {
     private readonly IBatchService _batchSvc;
