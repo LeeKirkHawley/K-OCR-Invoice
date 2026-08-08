@@ -1,9 +1,13 @@
+using DocumentFormat.OpenXml.Office2016.Drawing.Command;
 using K_OCR.Services.Workflow;
 using K_OCRLib.Identity;
 using K_OCRLib.Models;
 using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace K_OCRLib.Services;
 
@@ -133,7 +137,38 @@ public class InvoiceProcessingService : IInvoiceProcessingService
     public async Task<InvoiceDto?> LoadInvoiceAsync(string filePath)
     {
         InvoiceDto? context = await _databaseService.LoadContextAsync(filePath);
+
+        if(!string.IsNullOrEmpty(context?.OcrText))
+        {
+            context.OcrText = StripSensitiveJson(context.OcrText);
+        }
+
         return context;
+    }
+
+    string StripSensitiveJson(string ocrText)
+    {
+        JsonNode? node = JsonNode.Parse(ocrText);
+
+        bool result = true;
+        result = node!.AsObject().Remove("ArtifactsDirectory");
+        Debug.Assert(result);
+        result = node!["Organization"]!.AsObject().Remove("StripeCustomerId");
+        Debug.Assert(result);
+        result = node!["Organization"]!.AsObject().Remove("StripeSubscriptionId");
+        Debug.Assert(result);
+        result = node!["Organization"]!.AsObject().Remove("StripeSubscriptionItemId");
+        Debug.Assert(result);
+        result = node!["Organization"]!.AsObject().Remove("StripePriceId");
+        Debug.Assert(result);
+        result = node!["Organization"]!.AsObject().Remove("StripeSubscriptionStatus");
+        Debug.Assert(result);
+
+
+        var options = new JsonSerializerOptions { WriteIndented = true };
+        string strippedJson = node.ToJsonString(options);
+
+        return strippedJson;
     }
 }
 
