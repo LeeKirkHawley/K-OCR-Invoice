@@ -1385,9 +1385,11 @@
 
         html += `<div class="mt-3">
         <label class="form-label form-label-sm mb-1" for="notesField">Notes</label>
-        <textarea id="notesField" class="form-control form-control-sm" rows="3"
+        <textarea id="notesField" class="form-control form-control-sm inv-field" rows="3"
         style="resize:vertical;overflow-y:auto"
-        tabindex="-1">${escapeHtml(inv.notes ?? '')}</textarea>
+        tabindex="-1"
+        data-field="notes"
+        data-fieldkey="Notes">${escapeHtml(inv.notes ?? '')}</textarea>
         </div>`;
 
         html += `<div class="d-flex gap-2 mt-2 flex-wrap">`;
@@ -1409,15 +1411,6 @@
         const acceptBtnEl = container.querySelector('#acceptBtn');
         if (acceptBtnEl) {
             acceptBtnEl.addEventListener('click', acceptValidation);
-        }
-
-        const notesEl = container.querySelector('#notesField');
-        if (notesEl) 
-        {
-            notesEl.addEventListener('input', () => 
-            {
-                if (_currentInvoice) _currentInvoice.notes = notesEl.value;
-            });
         }
 
         initLiColResize();
@@ -2407,7 +2400,8 @@
                         'subtotal': 'Subtotal',
                         'totalTax': 'TotalTax',
                         'discount': 'Discount',
-                        'total': 'Total'
+                        'total': 'Total',
+                        'notes': 'Notes'
                     };
                     fieldName = pascalMap[fieldKey] || fieldKey;
                 }

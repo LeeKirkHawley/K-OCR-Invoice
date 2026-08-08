@@ -90,6 +90,7 @@ public sealed class FieldRegistry
             new() { Key = "TotalTax",      PropertyName = "TotalTax",      PropertyNameCamelCase = "totalTax",      Label = "Tax",         FieldType = "Currency", IsHeaderField = true },
             new() { Key = "Discount",      PropertyName = "Discount",      PropertyNameCamelCase = "discount",      Label = "Discount",    FieldType = "Currency", IsHeaderField = true },
             new() { Key = "Total",         PropertyName = "Total",         PropertyNameCamelCase = "total",         Label = "Total",       FieldType = "Currency", IsHeaderField = true },
+            new() { Key = "Notes",         PropertyName = "Notes",         PropertyNameCamelCase = "notes",         Label = "Notes",       FieldType = "Text",     IsHeaderField = true },
         };
         HeaderFields = headerFields.AsReadOnly();
 
