@@ -1251,6 +1251,7 @@
         const container = document.getElementById('invoiceFields');
         const hasTaxData = inv.items?.some(item => item.taxRate);
 
+
         // Store the original edit history JSON and initialize editing Maps
         _originalInvoiceEditsJson = inv.invoiceEdits || '[]';
         _editingInvoiceEdits = parseEditsMap(inv.invoiceEdits);  // Always reinitialize (fresh Map even if no edits)
@@ -1374,10 +1375,11 @@
                 const sc = f => f ? ' inv-suspect-input' : '';
                 const unitPrice = fmtMoney(unitPriceValue);
                 const amount    = fmtMoney(amountValue);
+                const currencyClass = f => CURRENCY_FIELDS.includes(f) ? ' currency-input' : '';
                 html += `<tr class="inv-field-row${(dSusp || qSusp || uSusp || aSusp) ? ' inv-suspect-row' : ''}" data-fieldkey="${fk}">
                 <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fkDesc}" value="${escapeHtml(description ?? '')}" /></td>
                 <td><input class="form-control form-control-sm inv-field${sc(qSusp)}" ${vtip(qTip)} data-item-idx="${i}" data-field="quantity"    data-fieldkey="${fkQty}" value="${quantity ?? ''}" /></td>
-                <td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fkPrice}" value="${escapeHtml(unitPrice)}" /></td>
+                <td><input class="form-control form-control-sm inv-field${sc(uSusp)}${currencyClass('unitPrice')}" ${vtip(uTip)} data-item-idx="${i}" data-field="unitPrice"   data-fieldkey="${fkPrice}" value="${escapeHtml(unitPrice)}" /></td>
                 ${hasTaxData ? `<td><input class="form-control form-control-sm inv-field${sc(uSusp)}" ${vtip(tTip)} data-item-idx="${i}" data-field="taxRate" data-fieldkey="${fkTax}" value="${escapeHtml(taxRate)}" /></td>` : ''}
                 <td><input class="form-control form-control-sm inv-field${sc(aSusp)}" ${vtip(aTip)} data-item-idx="${i}" data-field="amount"      data-fieldkey="${fkAmt}" value="${escapeHtml(amount)}" /></td>
                 </tr>`;
@@ -1433,7 +1435,18 @@
                     const i = parseInt(itemIdx);
                     if (_currentInvoice?.items?.[i] != null) 
                     {
-                        const value = ITEM_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
+                        let value = ITEM_MONEY_FIELDS.has(field) ? fmtMoney(input.value) : input.value;
+                        
+                        // Validate currency fields
+                        if (CURRENCY_FIELDS.includes(field) && value) {
+                            const validation = validateCurrencyInput(value, field, i);
+                            if (!validation.isValid) {
+                                showToast(validation.error, 'error');
+                                input.value = _originalValues.get(fieldKey) ?? '';
+                                value = input.value;
+                            }
+                        }
+                        
                         input.value = value;
                         _currentInvoice.items[i][field] = value;
                         
@@ -1489,6 +1502,30 @@
                 }
             });
             input.addEventListener('focus', () => selectField(input.dataset.fieldkey));
+            
+            // For currency fields, filter out invalid characters in real-time
+            if (CURRENCY_FIELDS.includes(input.dataset.field)) {
+                input.addEventListener('keypress', (e) => {
+                    const char = e.key;
+                    // Allow: digits, decimal point, comma, minus sign, parentheses
+                    if (!/[\d.,\-()]/.test(char)) {
+                        e.preventDefault();
+                        // Only show one toast per 500ms
+                        if (!_currencyErrorThrottleTimer) {
+                            const fieldName = input.dataset.field;
+                            const itemIdx = input.dataset.itemIdx;
+                            const msg = itemIdx !== undefined 
+                                ? `Invalid currency: ${fieldName} (Line Item ${parseInt(itemIdx) + 1})` 
+                                : `Invalid currency: ${fieldName}`;
+                            showToast(msg, 'error');
+                            _currencyErrorThrottleTimer = setTimeout(() => {
+                                _currencyErrorThrottleTimer = null;
+                            }, 500);
+                        }
+                    }
+                });
+            }
+            
             input.addEventListener('keydown', e => {
                 if (e.key !== 'Tab') return;
                 if (!e.shiftKey && idx === allInputs.length - 1) 
@@ -1681,6 +1718,8 @@
     let ITEM_FIELDS = [];
     let HEADER_MONEY_FIELDS = new Set();
     let ITEM_MONEY_FIELDS = new Set();
+    let CURRENCY_FIELDS = ['unitPrice', 'subtotal', 'totalTax', 'discount', 'total', 'amount'];  // Item fields that should accept only currency values
+    let _currencyErrorThrottleTimer = null;  // Throttle currency validation errors
 
     async function loadFieldRegistry() {
         try {
@@ -1737,6 +1776,25 @@
         if (!stripped) return '';
         const n = Number(stripped.replace(/,/g, ''));
         return Number.isFinite(n) ? n.toFixed(2) : stripped;
+    }
+
+    function validateCurrencyInput(value, fieldName, itemIndex) {
+        const stripped = stripCurrencySymbols(value);
+        if (!stripped) {
+            return { isValid: true };  // Empty is allowed
+        }
+        const n = Number(stripped.replace(/,/g, ''));
+        if (!Number.isFinite(n)) {
+            let errorMsg = `Invalid currency: ${fieldName}`;
+            if (itemIndex !== undefined) {
+                errorMsg = `Invalid currency: ${fieldName} (Line Item ${itemIndex + 1})`;
+            }
+            return { 
+                isValid: false, 
+                error: errorMsg
+            };
+        }
+        return { isValid: true };
     }
 
     function showUploadOverlay(label) {
