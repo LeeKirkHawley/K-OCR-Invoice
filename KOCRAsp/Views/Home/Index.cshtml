@@ -1288,6 +1288,9 @@
 
         for (const f of HEADER_FIELDS) 
         {
+            // Skip Notes field - it's rendered separately as a larger textarea at the bottom
+            if (f.key === 'Notes') continue;
+
             const raw     = inv[f.prop];
             const isNum   = f.prop === 'subtotal' || f.prop === 'totalTax' || f.prop === 'discount'  || f.prop === 'total';
             let value   = isNum ? fmtMoney(raw) : (raw ?? '');
