@@ -215,7 +215,6 @@
 </div>
 <!-- Field context menu -->
 <div id="fieldContextMenu" class="invoice-context-menu" style="display:none;">
-    <button type="button" id="fieldMenuAcceptBtn" class="invoice-context-item">Mark as Validated</button>
     <button type="button" id="fieldMenuRevertBtn" class="invoice-context-item">Revert Edits</button>
 </div>
 <!-- Upload In Progress overlay -->
@@ -370,7 +369,8 @@
 
     // ── Field state tracking ──────────────────────────────────────
     var _originalValues = new Map();  // fieldKey -> original value from OCR
-    var _pendingEdits = new Set();    // fieldKeys that differ from original (unsaved)
+    var _committedValues = new Map(); // fieldKey -> value currently saved to the database (or original, if never edited)
+    var _pendingEdits = new Set();    // fieldKeys that differ from the last committed/saved value (unsaved)
     var _persistedEdits = new Set();  // fieldKeys that have been saved to database
 
 
@@ -873,12 +873,13 @@
     document.getElementById('unsavedChangesSaveBtn').addEventListener('click', async function () 
     {
         if (!_pendingFilePathSwitch) return;
-        // Save current invoice
-        await saveInvoice();
-        // Then switch to the pending file
+        const nextFilePath = _pendingFilePathSwitch;
+        const nextExceedsLimit = _pendingExceedsLimit;
         bootstrap.Modal.getInstance(document.getElementById('unsavedChangesModal'))?.hide();
-        await selectFile(_pendingFilePathSwitch, _pendingExceedsLimit);
         _pendingFilePathSwitch = null;
+        // Reuse the same Accept flow used by the Accept button: persists
+        // pending edits, marks the invoice validated, then loads the next file.
+        await acceptValidation(nextFilePath, nextExceedsLimit);
     });
 
     document.getElementById('unsavedChangesNoBtn').addEventListener('click', function () 
@@ -943,59 +944,6 @@
         menu.style.left = `${Math.max(8, left)}px`;
         menu.style.top = `${Math.max(8, top)}px`;
     }
-
-    document.getElementById('fieldMenuAcceptBtn').addEventListener('click', async function () 
-    {
-        if (!_selectedFieldKey) return;
-
-        // If the field has no pending edits (it might already be persisted, or unchanged),
-        // check if its current value differs from the original OCR value. If so, mark it
-        // as a pending edit so it can be saved/validated.
-        if (!_pendingEdits.has(_selectedFieldKey)) {
-            const container = document.getElementById('invoiceFields');
-            const input = container?.querySelector(`.inv-field[data-fieldkey="${CSS.escape(_selectedFieldKey)}"]`);
-            if (input) {
-                const origValue = _originalValues.get(_selectedFieldKey) ?? '';
-                const currentValue = input.value;
-                
-                // If the field has been edited from the original, mark it as pending
-                if (currentValue !== origValue) {
-                    _pendingEdits.add(_selectedFieldKey);
-                    
-                    // Also ensure it's tracked in the changed fields map
-                    if (_selectedFieldKey.startsWith('Item_')) {
-                        const match = _selectedFieldKey.match(/^Item_(\d+)_(\w+)$/);
-                        if (match) {
-                            const itemIdx = parseInt(match[1], 10);
-                            const suffix = match[2];
-                            const propMap = { Desc: 'description', Qty: 'quantity', Price: 'unitPrice', Tax: 'taxRate', Amt: 'amount' };
-                            const prop = propMap[suffix];
-                            if (prop) {
-                                if (!_changedItemFields.has(itemIdx)) _changedItemFields.set(itemIdx, new Set());
-                                _changedItemFields.get(itemIdx).add(prop);
-                            }
-                        }
-                    } else {
-                        const f = HEADER_FIELDS.find(hf => hf.key === _selectedFieldKey);
-                        if (f) _changedInvoiceFields.add(f.prop);
-                    }
-                } else {
-                    // Field hasn't changed from original, nothing to save
-                    hideFieldContextMenu();
-                    return;
-                }
-            } else {
-                hideFieldContextMenu();
-                return;
-            }
-        }
-
-        const result = await savePendingEdits(new Set([_selectedFieldKey]));
-        hideFieldContextMenu();
-        if (!result.success) {
-            showToast(result.error ?? 'Failed to save field.', 'error');
-        }
-    });
 
     document.getElementById('fieldMenuRevertBtn').addEventListener('click', function () 
     {
@@ -1257,6 +1205,7 @@
         _changedItemFields.clear();     // Clear tracking of user changes to items
 
         _originalValues.clear();  // Clear and rebuild original values map for this invoice
+        _committedValues.clear(); // Clear and rebuild committed (DB) values map for this invoice
         _pendingEdits.clear();
         // Preserve _persistedEdits across invoice reloads
 
@@ -1299,6 +1248,14 @@
             if (editedValue !== undefined) {
                 value = editedValue;
             }
+
+            // Track the value currently committed to the database (either the
+            // latest saved edit, or the original OCR value if never edited).
+            // This is the baseline the blur handler compares against to decide
+            // whether a field has unsaved changes - NOT the original OCR value,
+            // so that editing back to the original text after a save is still
+            // detected as a real (unsaved) change from what's in the database.
+            _committedValues.set(f.key, String(value));
 
             html += `<tr class="inv-field-row${suspect ? ' inv-suspect-row' : ''}" data-fieldkey="${f.key}" data-vtip="${escapeHtml(tipData.value)}" data-vtip-errors="${escapeHtml(tipData.errors.join('\n'))}">
                 <td>${escapeHtml(f.label)}</td>
@@ -1370,6 +1327,17 @@
                 const sc = f => f ? ' inv-suspect-input' : '';
                 const unitPrice = fmtMoney(unitPriceValue);
                 const amount    = fmtMoney(amountValue);
+
+                // Track the values currently committed to the database for this
+                // item (either the latest saved edit, or the original OCR value
+                // if never edited) - see header-field comment above for why the
+                // blur handler compares against these rather than the original.
+                _committedValues.set(fkDesc,  String(description ?? ''));
+                _committedValues.set(fkQty,   String(quantity ?? ''));
+                _committedValues.set(fkPrice, String(unitPrice));
+                _committedValues.set(fkTax,   String(taxRate ?? ''));
+                _committedValues.set(fkAmt,   String(amount));
+
                 const currencyClass = f => CURRENCY_FIELDS.includes(f) ? ' currency-input' : '';
                 html += `<tr class="inv-field-row${(dSusp || qSusp || uSusp || aSusp) ? ' inv-suspect-row' : ''}" data-fieldkey="${fk}">
                 <td><input class="form-control form-control-sm inv-field${sc(dSusp)}" ${vtip(dTip)} data-item-idx="${i}" data-field="description" data-fieldkey="${fkDesc}" value="${escapeHtml(description ?? '')}" /></td>
@@ -1410,7 +1378,7 @@
         // pending edits to the database itself (see acceptValidation()).
         const acceptBtnEl = container.querySelector('#acceptBtn');
         if (acceptBtnEl) {
-            acceptBtnEl.addEventListener('click', acceptValidation);
+            acceptBtnEl.addEventListener('click', () => acceptValidation());
         }
 
         initLiColResize();
@@ -1418,7 +1386,13 @@
         const allInputs = Array.from(container.querySelectorAll('.inv-field'));
         allInputs.forEach((input, idx) => 
         {
-            input.addEventListener('input', (event) => 
+            // NOTE: Stashing edits (formatting, validation, map updates, styling)
+            // happens on 'blur' rather than 'input' so that reformatting/validation
+            // doesn't run on every keystroke (which corrupted cursor position and
+            // caused stale/duplicate map entries while typing). Character-level
+            // handling is still needed for currency fields only, and is done via
+            // the 'keypress' listener below.
+            input.addEventListener('blur', (event) => 
             {
                 const control = event.target;
                 const itemIdx = input.dataset.itemIdx;
@@ -1457,16 +1431,22 @@
                         }
                         _changedItemFields.get(i).add(field);
                         
-                        // Three-state model: track pending edits (unsaved)
-                        if (value !== _originalValues.get(fieldKey)) 
+                        // Three-state model: track pending edits (unsaved). Compare
+                        // against the last value committed (saved) to the database -
+                        // NOT the original OCR value - so that editing a field back
+                        // to its original text after a save is still recognized as a
+                        // real, unsaved change from what's currently in the database.
+                        // (Explicitly reverting via the "Revert Edits" context menu
+                        // item is the only place that intentionally discards edits
+                        // without creating a new saved history entry.)
+                        if (value !== _committedValues.get(fieldKey)) 
                         {
                             _pendingEdits.add(fieldKey);
                             _persistedEdits.delete(fieldKey);  // Reverts persisted status when field is edited
                         } 
                         else 
                         {
-                            _pendingEdits.delete(fieldKey);
-                            _persistedEdits.delete(fieldKey);  // Reverts to original state
+                            _pendingEdits.delete(fieldKey);  // Matches what's already saved (or never edited) - nothing to save
                         }
 
                         refreshSavedFieldStyling();
@@ -1481,16 +1461,22 @@
                     _editingInvoiceEdits.set(field, value);
                     _changedInvoiceFields.add(field);  // Track that user changed this field
 
-                    // Three-state model: track pending edits (unsaved)
-                    if (value !== _originalValues.get(fieldKey)) 
+                    // Three-state model: track pending edits (unsaved). Compare
+                    // against the last value committed (saved) to the database -
+                    // NOT the original OCR value - so that editing a field back
+                    // to its original text after a save is still recognized as a
+                    // real, unsaved change from what's currently in the database.
+                    // (Explicitly reverting via the "Revert Edits" context menu
+                    // item is the only place that intentionally discards edits
+                    // without creating a new saved history entry.)
+                    if (value !== _committedValues.get(fieldKey)) 
                     {
                         _pendingEdits.add(fieldKey);
                         _persistedEdits.delete(fieldKey);  // Reverts persisted status when field is edited
                     } 
                     else 
                     {
-                        _pendingEdits.delete(fieldKey);
-                        _persistedEdits.delete(fieldKey);  // Reverts to original state
+                        _pendingEdits.delete(fieldKey);  // Matches what's already saved (or never edited) - nothing to save
                     }
 
                     refreshSavedFieldStyling();
@@ -2137,10 +2123,11 @@
     }
 
     // Builds the pending-edits history for header + item fields and persists
-    // them via /home/saveinvoiceedits. Shared by acceptValidation() (so
-    // accepting always persists in-progress edits), the "Unsaved changes"
-    // switch-file prompt, and the field context menu's "Mark as Validated"
-    // action (which saves just the one selected field immediately).
+    // them via /home/saveinvoiceedits. Called only when the user clicks
+    // Accept (acceptValidation()) or confirms saving via the "Unsaved
+    // changes" switch-file prompt (which itself now runs the same Accept
+    // flow) - edits are NEVER written to the database at any other time
+    // (e.g. on blur), only tracked locally as pending until then.
     // If fieldKeys is omitted, ALL pending edits are saved. If fieldKeys is a
     // Set of field keys (e.g. 'VendorName', 'Item_0_Qty'), only edits for
     // those fields are appended to history and persisted - other pending
@@ -2218,6 +2205,21 @@
                    _pendingEdits.delete(fieldKey);
                }
 
+               // Advance the committed-values baseline to what was just saved, so
+               // the blur handler's pending-detection compares against the new
+               // database state rather than the pre-save one.
+               for (const prop of changedInvoiceFieldsToSave) {
+                   const f = HEADER_FIELDS.find(hf => hf.prop === prop);
+                   if (f) _committedValues.set(f.key, String(_editingInvoiceEdits.get(prop)));
+               }
+               for (const [itemIdx, propSet] of changedItemFieldsToSave) {
+                   const editingItemMap = _editingItemEdits.get(itemIdx);
+                   for (const prop of propSet) {
+                       const suffix = ITEM_FIELD_KEY_SUFFIX[prop];
+                       if (suffix) _committedValues.set(`Item_${itemIdx}_${suffix}`, String(editingItemMap?.get(prop)));
+                   }
+               }
+
                // Advance the "base" history to what was just saved, and clear
                // changed-field tracking for the fields just saved. This makes
                // it safe to call savePendingEdits() again later in the same
@@ -2257,37 +2259,9 @@
     }
 
     // Saves ALL currently pending (unsaved/green) edits. Used by
-    // acceptValidation() and the "Unsaved changes" switch-file prompt.
+    // acceptValidation() - the only place edits are written to the database.
     async function saveAllPendingEdits() {
         return savePendingEdits();
-    }
-
-    async function saveInvoice() {
-        //debugger;  // Force break when DevTools is open
-        console.log("saveInvoice()");
-        if (!_currentFilePath || !_currentInvoice) 
-            return;
-        
-        // There is no standalone Save button in the field panel anymore -
-        // this is only called from the "Unsaved changes" switch-file prompt.
-        const btn = document.getElementById('unsavedChangesSaveBtn');
-        if (btn) setButtonLoading(btn, true);
-
-        try {
-            const result = await saveAllPendingEdits();
-            if (result.success) {
-               showToast('Invoice saved.');
-               // Reload invoice to display updated ValidatedOcrText from database
-               await selectFile(_currentFilePath, false);
-               await refreshFileList();
-            } else {
-               showToast(result.error ?? 'Save failed.', 'error');
-            }
-        } catch (err) {
-            showToast('Save error: ' + err.message, 'error');
-        } finally {
-            if (btn) setButtonLoading(btn, false);
-        }
     }
 
     // Convert object/array to JSON string (for sending to API)
@@ -2388,12 +2362,7 @@
         // Determine if this is a header invoice or an item
         const isItem = sourceObject.description !== undefined && sourceObject.quantity !== undefined && 
                        sourceObject.unitPrice !== undefined && sourceObject.amount !== undefined;
-        
-        // Find the last edit for each field in history
-        const lastEditByField = {};
-        for (const edit of history) {
-            lastEditByField[edit.fieldName] = edit.value;
-        }
+
         // Only append edits for fields that the user actually changed in this session
         for (const fieldKey of changedFields) {
             // Map camelCase field keys to PascalCase field names for history
@@ -2430,25 +2399,41 @@
                     fieldName = pascalMap[fieldKey] || fieldKey;
                 }
 
-                const lastValue = lastEditByField[fieldName];
-                // Only add if it changed from the last edit (or no previous edit exists)
-                if (lastValue !== String(currentValue)) {
-                    history.push({
-                        fieldName: fieldName,
-                        value: String(currentValue)
-                    });
-                }
+                // Always append a new history entry for every field the user
+                // changed this session - even if the saved value happens to
+                // match an earlier historical entry (e.g. the user typed
+                // something then deleted it back to the original text). Each
+                // save is a distinct audit event and must be recorded as such;
+                // deduping against the last entry would silently drop real
+                // edits and let a stale saved value reappear on reload.
+                history.push({
+                    fieldName: fieldName,
+                    value: String(currentValue)
+                });
             }
         }
 
         return JSON.stringify(history);
     }
 
-    async function acceptValidation() {
+    // Persists all pending edits and marks the invoice as validated. This is
+    // the ONLY place edits are ever written to the database - blur just
+    // tracks edits locally as "pending" (see the .inv-field blur handlers).
+    // If nextFilePath is provided (used by the "Changes Not Saved" switch-file
+    // dialog), the given file is loaded afterward instead of reloading the
+    // current one.
+    async function acceptValidation(nextFilePath, nextExceedsLimit) {
         if (!_currentFilePath) return;
         const btn = document.getElementById('acceptBtn');
         setButtonLoading(btn, true);
         try {
+            // Flush the currently-focused field (if any) so an in-progress
+            // edit that hasn't blurred yet is still captured before saving.
+            const active = document.activeElement;
+            if (active instanceof HTMLElement && active.classList.contains('inv-field')) {
+                active.blur();
+            }
+
             // Persist any pending (unsaved/green) edits before marking the invoice
             // accepted, since there is no separate Save step the user must take first.
             const saveResult = await saveAllPendingEdits();
@@ -2468,7 +2453,7 @@
                 showToast('Validation accepted.');
                 // Reload invoice to display updated ValidatedOcrText from database
                 // and recompute _persistedEdits/_pendingEdits from the saved edit maps.
-                await selectFile(_currentFilePath, false);
+                await selectFile(nextFilePath ?? _currentFilePath, nextFilePath ? (nextExceedsLimit ?? false) : false);
                 await refreshFileList();
                 await updateExportButtonState();
             } else {
