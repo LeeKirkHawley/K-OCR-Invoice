@@ -215,6 +215,7 @@
 </div>
 <!-- Field context menu -->
 <div id="fieldContextMenu" class="invoice-context-menu" style="display:none;">
+    <button type="button" id="fieldMenuAcceptBtn" class="invoice-context-item">Mark as Validated</button>
     <button type="button" id="fieldMenuRevertBtn" class="invoice-context-item">Revert Edits</button>
 </div>
 <!-- Upload In Progress overlay -->
@@ -944,6 +945,66 @@
         menu.style.left = `${Math.max(8, left)}px`;
         menu.style.top = `${Math.max(8, top)}px`;
     }
+
+    // "Mark as Validated" on a single field: saves just that field to the
+    // database immediately (unlike Accept, which saves all pending edits).
+    // This is the one intentional exception to the "only Accept writes to
+    // the DB" rule - the user explicitly asked for a per-field save action.
+    document.getElementById('fieldMenuAcceptBtn').addEventListener('click', async function () 
+    {
+        if (!_selectedFieldKey) return;
+
+        // If the field isn't already marked pending (e.g. the user right-clicked
+        // without blurring first), check whether its current value differs from
+        // what's committed in the database. If so, mark it pending so it gets
+        // included in the save below.
+        if (!_pendingEdits.has(_selectedFieldKey)) {
+            const container = document.getElementById('invoiceFields');
+            const input = container?.querySelector(`.inv-field[data-fieldkey="${CSS.escape(_selectedFieldKey)}"]`);
+            if (input) {
+                const committedValue = _committedValues.get(_selectedFieldKey) ?? '';
+                const currentValue = input.value;
+
+                if (currentValue !== committedValue) {
+                    _pendingEdits.add(_selectedFieldKey);
+
+                    // Also ensure it's tracked in the changed fields map so
+                    // appendPendingEditsToHistory() knows to append it.
+                    if (_selectedFieldKey.startsWith('Item_')) {
+                        const match = _selectedFieldKey.match(/^Item_(\d+)_(\w+)$/);
+                        if (match) {
+                            const itemIdx = parseInt(match[1], 10);
+                            const suffix = match[2];
+                            const propMap = { Desc: 'description', Qty: 'quantity', Price: 'unitPrice', Tax: 'taxRate', Amt: 'amount' };
+                            const prop = propMap[suffix];
+                            if (prop) {
+                                if (!_changedItemFields.has(itemIdx)) _changedItemFields.set(itemIdx, new Set());
+                                _changedItemFields.get(itemIdx).add(prop);
+                            }
+                        }
+                    } else {
+                        const f = HEADER_FIELDS.find(hf => hf.key === _selectedFieldKey);
+                        if (f) _changedInvoiceFields.add(f.prop);
+                    }
+                } else {
+                    // Field matches what's already saved, nothing to do
+                    hideFieldContextMenu();
+                    return;
+                }
+            } else {
+                hideFieldContextMenu();
+                return;
+            }
+        }
+
+        const result = await savePendingEdits(new Set([_selectedFieldKey]));
+        hideFieldContextMenu();
+        if (!result.success) {
+            showToast(result.error ?? 'Failed to save field.', 'error');
+        } else {
+            showToast('Field saved.');
+        }
+    });
 
     document.getElementById('fieldMenuRevertBtn').addEventListener('click', function () 
     {
@@ -2123,11 +2184,12 @@
     }
 
     // Builds the pending-edits history for header + item fields and persists
-    // them via /home/saveinvoiceedits. Called only when the user clicks
-    // Accept (acceptValidation()) or confirms saving via the "Unsaved
-    // changes" switch-file prompt (which itself now runs the same Accept
-    // flow) - edits are NEVER written to the database at any other time
-    // (e.g. on blur), only tracked locally as pending until then.
+    // them via /home/saveinvoiceedits. Called when the user clicks Accept
+    // (acceptValidation()), confirms saving via the "Unsaved changes"
+    // switch-file prompt (which runs the same Accept flow), or explicitly
+    // saves a single field via the field context menu's "Mark as Validated"
+    // button - edits are NEVER written to the database on blur or any other
+    // implicit action, only tracked locally as pending until then.
     // If fieldKeys is omitted, ALL pending edits are saved. If fieldKeys is a
     // Set of field keys (e.g. 'VendorName', 'Item_0_Qty'), only edits for
     // those fields are appended to history and persisted - other pending
@@ -2259,7 +2321,9 @@
     }
 
     // Saves ALL currently pending (unsaved/green) edits. Used by
-    // acceptValidation() - the only place edits are written to the database.
+    // acceptValidation(). (A single field can also be saved directly via
+    // the field context menu's "Mark as Validated" button, which calls
+    // savePendingEdits() with just that one field key.)
     async function saveAllPendingEdits() {
         return savePendingEdits();
     }
@@ -2416,12 +2480,13 @@
         return JSON.stringify(history);
     }
 
-    // Persists all pending edits and marks the invoice as validated. This is
-    // the ONLY place edits are ever written to the database - blur just
-    // tracks edits locally as "pending" (see the .inv-field blur handlers).
-    // If nextFilePath is provided (used by the "Changes Not Saved" switch-file
-    // dialog), the given file is loaded afterward instead of reloading the
-    // current one.
+    // Persists all pending edits and marks the invoice as validated. Blur
+    // just tracks edits locally as "pending" (see the .inv-field blur
+    // handlers); a single field can also be saved immediately via the field
+    // context menu's "Mark as Validated" button (savePendingEdits() with one
+    // field key). If nextFilePath is provided (used by the "Changes Not
+    // Saved" switch-file dialog), the given file is loaded afterward instead
+    // of reloading the current one.
     async function acceptValidation(nextFilePath, nextExceedsLimit) {
         if (!_currentFilePath) return;
         const btn = document.getElementById('acceptBtn');
