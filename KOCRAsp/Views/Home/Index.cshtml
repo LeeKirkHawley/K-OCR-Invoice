@@ -1267,18 +1267,18 @@
         if (rawInvoiceData) {
             // Store original header field values
             for (const f of HEADER_FIELDS) {
-                const origValue = getCI(rawInvoiceData, f.prop) ?? '';
+                const origValue = CaseInsensitivePropertyLookup(rawInvoiceData, f.prop) ?? '';
                 _originalValues.set(f.key, String(origValue));
             }
             // Store original item field values
-            const items = getCI(rawInvoiceData, 'items') ?? getCI(rawInvoiceData, 'Items') ?? [];
+            const items = CaseInsensitivePropertyLookup(rawInvoiceData, 'items') ?? CaseInsensitivePropertyLookup(rawInvoiceData, 'Items') ?? [];
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
-                _originalValues.set(`Item_${i}_Desc`, String(getCI(item, 'description') ?? ''));
-                _originalValues.set(`Item_${i}_Qty`, String(getCI(item, 'quantity') ?? ''));
-                _originalValues.set(`Item_${i}_Price`, String(getCI(item, 'unitPrice') ?? ''));
-                _originalValues.set(`Item_${i}_Tax`, String(getCI(item, 'taxRate') ?? ''));
-                _originalValues.set(`Item_${i}_Amt`, String(getCI(item, 'amount') ?? ''));
+                _originalValues.set(`Item_${i}_Desc`, String(CaseInsensitivePropertyLookup(item, 'description') ?? ''));
+                _originalValues.set(`Item_${i}_Qty`, String(CaseInsensitivePropertyLookup(item, 'quantity') ?? ''));
+                _originalValues.set(`Item_${i}_Price`, String(CaseInsensitivePropertyLookup(item, 'unitPrice') ?? ''));
+                _originalValues.set(`Item_${i}_Tax`, String(CaseInsensitivePropertyLookup(item, 'taxRate') ?? ''));
+                _originalValues.set(`Item_${i}_Amt`, String(CaseInsensitivePropertyLookup(item, 'amount') ?? ''));
             }
         }
 
@@ -2956,9 +2956,12 @@
     }
 
     // Case-insensitive property lookup (OcrText may be PascalCase or camelCase)
-    function getCI(obj, propName) {
-        if (!obj || typeof obj !== 'object') return undefined;
-        if (propName in obj) return obj[propName];
+    function CaseInsensitivePropertyLookup(obj, propName) {
+        if (!obj || typeof obj !== 'object') 
+            return undefined;
+        if (propName in obj) 
+            return obj[propName];
+        
         const lower = propName.toLowerCase();
         for (const k of Object.keys(obj)) {
             if (k.toLowerCase() === lower) return obj[k];
