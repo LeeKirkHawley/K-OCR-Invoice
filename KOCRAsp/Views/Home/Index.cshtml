@@ -333,7 +333,7 @@
     var _totalFiles = @Model.TotalFiles;
 
     var _orgId                   = '@Html.Raw(Model.OrgId)';
-    var _currentUserEmail        = '@Html.Raw(Model.CurrentUserEmail)';
+    //var _currentUserEmail        = '@Html.Raw(Model.CurrentUserEmail)';
     var _currentBatchId          = @(Model.CurrentBatch?.BatchId.ToString() ?? "null");
     var _maxPagesPerInvoice      = @Model.MaxPagesPerInvoice;
     var _maxInvoicesPerBatch     = @Model.MaxInvoicesPerBatch;
@@ -357,6 +357,23 @@
     var _guestMaxInvoicesPerBatch  = @Model.GuestMaxInvoicesPerBatch;
     var _guestMaxPagesPerInvoice   = @Model.GuestMaxPagesPerInvoice;
 
+    let HEADER_FIELDS = [];
+    //let ITEM_FIELDS = [];
+    let HEADER_MONEY_FIELDS = new Set();
+    let ITEM_MONEY_FIELDS = new Set();
+    let CURRENCY_FIELDS = ['unitPrice', 'subtotal', 'totalTax', 'discount', 'total', 'amount'];  // Item fields that should accept only currency values
+    let _currencyErrorThrottleTimer = null;  // Throttle currency validation errors
+
+    // Pending file path when showing unsaved changes dialog
+    var _pendingFilePathSwitch = null;
+    var _pendingExceedsLimit = false;
+
+    // ── Field state tracking ──────────────────────────────────────
+    var _originalValues = new Map();  // fieldKey -> original value from OCR
+    var _pendingEdits = new Set();    // fieldKeys that differ from original (unsaved)
+    var _persistedEdits = new Set();  // fieldKeys that have been saved to database
+
+
     // ── File list click handlers (assigned early so onclick attributes work even if later init crashes) ──
     window.handleFileListItemClick = function (item, event) 
     {
@@ -371,14 +388,6 @@
         activateFileListItem(item);
     };
 
-    // Pending file path when showing unsaved changes dialog
-    var _pendingFilePathSwitch = null;
-    var _pendingExceedsLimit = false;
-
-    // ── Field state tracking ──────────────────────────────────────
-    var _originalValues = new Map();  // fieldKey -> original value from OCR
-    var _pendingEdits = new Set();    // fieldKeys that differ from original (unsaved)
-    var _persistedEdits = new Set();  // fieldKeys that have been saved to database
 
     function showUnsavedChangesDialog(filePath, exceedsLimit) {
         _pendingFilePathSwitch = filePath;
@@ -481,20 +490,6 @@
             });
         }
     }
-
-    // function setPropertyIgnoreCase(obj, fieldName, value) 
-    // {
-    //     // Look for an existing key that matches, ignoring case
-    //     const existingKey = Object.keys(obj).find
-    //     (
-    //         key => key.toLowerCase() === String(fieldName).toLowerCase()
-    //     );
-
-    //     // Prefer the original casing if it exists, otherwise fall back to camelCase
-    //     const keyToUse = existingKey ?? toCamelCase(fieldName);
-
-    //     obj[keyToUse] = value;
-    // }
 
     function toCamelCase(str) {
         const camelCase = str.charAt(0).toLowerCase() + str.slice(1);
@@ -668,26 +663,26 @@
         }
     }
 
-    function setGuestLimitStateFromServer(data)
-    {
-        if (!_isGuestOrganization) return;
-        if (typeof data.guestActiveBatchCount === 'number') _guestActiveBatchCount = data.guestActiveBatchCount;
-        if (typeof data.guestRemainingBatches === 'number') _guestRemainingBatches = data.guestRemainingBatches;
-        if (typeof data.guestBatchLimitExceeded === 'boolean') _guestBatchLimitExceeded = data.guestBatchLimitExceeded;
-        applyGuestLimitState();
-    }
+    // function setGuestLimitStateFromServer(data)
+    // {
+    //     if (!_isGuestOrganization) return;
+    //     if (typeof data.guestActiveBatchCount === 'number') _guestActiveBatchCount = data.guestActiveBatchCount;
+    //     if (typeof data.guestRemainingBatches === 'number') _guestRemainingBatches = data.guestRemainingBatches;
+    //     if (typeof data.guestBatchLimitExceeded === 'boolean') _guestBatchLimitExceeded = data.guestBatchLimitExceeded;
+    //     applyGuestLimitState();
+    // }
 
-    function applyGuestLimitState()
-    {
-        if (!_isGuestOrganization || !_guestBatchLimitExceeded) return;
-        for (const id of ['batchOcrBtn', 'runOcrBtn']) 
-        {
-            const el = document.getElementById(id);
-            if (!el) continue;
-            el.disabled = true;
-            el.classList.add('disabled');
-        }
-    }
+    // function applyGuestLimitState()
+    // {
+    //     if (!_isGuestOrganization || !_guestBatchLimitExceeded) return;
+    //     for (const id of ['batchOcrBtn', 'runOcrBtn']) 
+    //     {
+    //         const el = document.getElementById(id);
+    //         if (!el) continue;
+    //         el.disabled = true;
+    //         el.classList.add('disabled');
+    //     }
+    // }
 
     // ── Initialize field registry (must happen before using HEADER_FIELDS) ───────────────────────────────────────
     loadFieldRegistry();
@@ -1714,13 +1709,6 @@
         }
     }
 
-    let HEADER_FIELDS = [];
-    let ITEM_FIELDS = [];
-    let HEADER_MONEY_FIELDS = new Set();
-    let ITEM_MONEY_FIELDS = new Set();
-    let CURRENCY_FIELDS = ['unitPrice', 'subtotal', 'totalTax', 'discount', 'total', 'amount'];  // Item fields that should accept only currency values
-    let _currencyErrorThrottleTimer = null;  // Throttle currency validation errors
-
     async function loadFieldRegistry() {
         try {
             const result = await fetch('/home/getfieldregistry');
@@ -1730,13 +1718,13 @@
                 label: f.label,
                 prop: f.propertyNameCamelCase
             }));
-            ITEM_FIELDS = data.itemFields.map(f => ({
-                propertyName: f.propertyName,
-                propertyNameCamelCase: f.propertyNameCamelCase,
-                label: f.label,
-                fieldType: f.fieldType,
-                itemFieldSuffix: f.itemFieldSuffix
-            }));
+            // ITEM_FIELDS = data.itemFields.map(f => ({
+            //     propertyName: f.propertyName,
+            //     propertyNameCamelCase: f.propertyNameCamelCase,
+            //     label: f.label,
+            //     fieldType: f.fieldType,
+            //     itemFieldSuffix: f.itemFieldSuffix
+            // }));
             HEADER_MONEY_FIELDS = new Set(
                 data.moneyPropertyNames.filter(p => ['subtotal', 'totalTax', 'discount', 'total'].includes(p))
             );
@@ -1745,25 +1733,8 @@
             );
         } catch (err) {
             console.error('Failed to load field registry:', err);
-            // // Fallback to hardcoded values if API fails
-            // HEADER_FIELDS = [
-            //     { key: 'VendorName',    label: 'Vendor',    prop: 'vendorName'    },
-            //     { key: 'CustomerName',  label: 'Customer',  prop: 'customerName'  },
-            //     { key: 'InvoiceId',     label: 'Invoice #', prop: 'invoiceId'     },
-            //     { key: 'InvoiceDate',   label: 'Date',      prop: 'invoiceDate'   },
-            //     { key: 'DueDate',       label: 'Due Date',  prop: 'dueDate'       },
-            //     { key: 'PurchaseOrder', label: 'PO #',      prop: 'purchaseOrder' },
-            //     { key: 'Subtotal',      label: 'Subtotal',  prop: 'subtotal'      },
-            //     { key: 'TotalTax',      label: 'Tax',       prop: 'totalTax'      },
-            //     { key: 'Discount',      label: 'Discount',  prop: 'discount'      },
-            //     { key: 'Total',         label: 'Total',     prop: 'total'         },
-            // ];
-            // HEADER_MONEY_FIELDS = new Set(['subtotal', 'totalTax', 'discount', 'total']);
-            // ITEM_MONEY_FIELDS = new Set(['unitPrice', 'amount']);
         }
     }
-
-    // Initialize field registry before doing anything else
 
     function stripCurrencySymbols(v) {
         return String(v ?? '')
@@ -2000,7 +1971,8 @@
     {
         const polygon  = document.querySelector('.viewer-bbox.bbox-selected');
         const scroller = document.getElementById('viewerScroll');
-        if (!polygon || !scroller) return;
+        if (!polygon || !scroller) 
+            return;
         const pr = polygon.getBoundingClientRect();
         const sr = scroller.getBoundingClientRect();
         const targetTop  = scroller.scrollTop  + (pr.top  + pr.height / 2 - sr.top)  - sr.height / 2;
@@ -2011,7 +1983,12 @@
     function formatBboxPoints(pts) 
     {
         const pairs = [];
-        for (let j = 0; j + 1 < pts.length; j += 2) pairs.push(`${pts[j]},${pts[j + 1]}`);
+        
+        for (let j = 0; j + 1 < pts.length; j += 2) 
+        {
+            pairs.push(`${pts[j]},${pts[j + 1]}`);
+        }
+
         return pairs.join(' ');
     }
 
@@ -2081,16 +2058,16 @@
             || (fc && key in fc && fc[key] < _minConfidenceThreshold);
     }
 
-    function fieldTooltip(inv, key) {
-        const reasons = [];
-        const tc = inv.tesseractConfirmed;
-        const mc = inv._mathConfirmed ?? {};
-        const fc = inv.fieldConfidences;
-        if (tc && key in tc && tc[key] === false) reasons.push('Secondary OCR mismatch');
-        if (fc && key in fc && fc[key] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
-        if (mc && key in mc && mc[key] === false) reasons.push('Math error');
-        return reasons.join(' · ');
-    }
+    // function fieldTooltip(inv, key) {
+    //     const reasons = [];
+    //     const tc = inv.tesseractConfirmed;
+    //     const mc = inv._mathConfirmed ?? {};
+    //     const fc = inv.fieldConfidences;
+    //     if (tc && key in tc && tc[key] === false) reasons.push('Secondary OCR mismatch');
+    //     if (fc && key in fc && fc[key] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
+    //     if (mc && key in mc && mc[key] === false) reasons.push('Math error');
+    //     return reasons.join(' · ');
+    // }
 
     // Tooltip: value on line 1, one validation error per subsequent line.
     function buildFieldTooltip(inv, key, value) {
@@ -2104,6 +2081,7 @@
         const valueStr = (value !== null && value !== undefined && value !== '') ? String(value) : '—';
         return { value: valueStr, errors };
     }
+
     function isItemSuspect(inv, item, idx) {
         if (inv.isInvoiceAccepted) return false;
         const tc = item.tesseractConfirmed ?? {};
@@ -2127,50 +2105,35 @@
         return false;
     }
 
-    function itemFieldTooltip(inv, item, fieldKey, idx) {
-        if (inv.isInvoiceAccepted) return '';
-        const reasons = [];
-        const tc = item.tesseractConfirmed ?? {};
-        const fc = item.fieldConfidences ?? {};
-        const mc = inv._mathConfirmed ?? {};
-        if (tc[fieldKey] === false) reasons.push('Secondary OCR mismatch');
-        if (fieldKey in fc && fc[fieldKey] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
-        if (fieldKey === 'Amount') {
-            if (mc[`LineItem[${idx}].Amount`] === false) reasons.push('Math error');
-        }
-        return reasons.join(' · ');
-    }
+    // function itemFieldTooltip(inv, item, fieldKey, idx) {
+    //     if (inv.isInvoiceAccepted) return '';
+    //     const reasons = [];
+    //     const tc = item.tesseractConfirmed ?? {};
+    //     const fc = item.fieldConfidences ?? {};
+    //     const mc = inv._mathConfirmed ?? {};
+    //     if (tc[fieldKey] === false) reasons.push('Secondary OCR mismatch');
+    //     if (fieldKey in fc && fc[fieldKey] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
+    //     if (fieldKey === 'Amount') {
+    //         if (mc[`LineItem[${idx}].Amount`] === false) reasons.push('Math error');
+    //     }
+    //     return reasons.join(' · ');
+    // }
 
     // Tooltip showing the field value on line 1, then one error per line.
     function buildItemFieldTooltip(inv, item, fieldKey, idx, value) {
         const errors = [];
         if (!inv.isInvoiceAccepted) {
-            const tc = item.tesseractConfirmed ?? {};
-            const fc = item.fieldConfidences ?? {};
-            const mc = inv._mathConfirmed ?? {};
-        if (tc[fieldKey] === false) errors.push('Secondary OCR mismatch');
-            if (fieldKey in fc && fc[fieldKey] < _minConfidenceThreshold) errors.push('Low Azure confidence');
+            const tesseractConfirmed = item.tesseractConfirmed ?? {};
+            const fieldConfidences = item.fieldConfidences ?? {};
+            const mathConfirmed = inv._mathConfirmed ?? {};
+        if (tesseractConfirmed[fieldKey] === false) errors.push('Secondary OCR mismatch');
+            if (fieldKey in fieldConfidences && fieldConfidences[fieldKey] < _minConfidenceThreshold) errors.push('Low Azure confidence');
             if (fieldKey === 'Amount') {
-                if (mc[`LineItem[${idx}].Amount`] === false) errors.push('Math error');
+                if (mathConfirmed[`LineItem[${idx}].Amount`] === false) errors.push('Math error');
             }
         }
         const valueStr = (value !== null && value !== undefined && value !== '') ? String(value) : '—';
         return { value: valueStr, errors };
-    }
-
-    function itemTooltip(inv, item, idx) {
-        if (inv.isInvoiceAccepted) return '';
-        const fieldReasons = {};
-        const add = (field, reason) => { (fieldReasons[field] ??= []).push(reason); };
-        const tc = item.tesseractConfirmed ?? {};
-        const fc = item.fieldConfidences ?? {};
-        const mc = inv._mathConfirmed ?? {};
-        for (const [k, v] of Object.entries(tc)) if (v === false) add(k, 'Secondary OCR mismatch');
-        for (const [k, v] of Object.entries(fc)) if (v < _minConfidenceThreshold) add(k, 'Low Azure confidence');
-        if (mc[`LineItem[${idx}].Amount`] === false) add('Amount', 'Math error');
-        return Object.entries(fieldReasons)
-            .map(([k, v]) => `${k}: ${v.join(', ')}`)
-            .join(' · ');
     }
 
     // Builds the pending-edits history for header + item fields and persists
@@ -2329,19 +2292,19 @@
 
     // Convert object/array to JSON string (for sending to API)
     // Note: Edit serialization is now handled separately by appendPendingEditsToHistory()
-    function toJsonString(value) {
-        if (value === null || value === undefined) {
-            return null;
-        }
+    // function toJsonString(value) {
+    //     if (value === null || value === undefined) {
+    //         return null;
+    //     }
 
-        // If it's already a string, return it
-        if (typeof value === 'string') {
-            return value;
-        }
+    //     // If it's already a string, return it
+    //     if (typeof value === 'string') {
+    //         return value;
+    //     }
 
-        // Normal case
-        return JSON.stringify(value);
-    }
+    //     // Normal case
+    //     return JSON.stringify(value);
+    // }
 
     // Parse a JSON string (either new FieldEdit format or legacy array-of-pairs) back into a Map
     function parseEditsMap(str) {
@@ -2384,22 +2347,22 @@
     }
 
     // Parse JSON string back to object (when loading from API)
-    function parseJson(value, defaultValue = {}) 
-    {
-        if (!value) return defaultValue;
+    // function parseJson(value, defaultValue = {}) 
+    // {
+    //     if (!value) return defaultValue;
      
-        if (typeof value === 'object') return value;
+    //     if (typeof value === 'object') return value;
 
-        try 
-        {
-            return JSON.parse(value);
-        } 
-        catch (e) 
-        {
-            console.error("Invalid JSON:", value);
-            return defaultValue;
-        }
-    }
+    //     try 
+    //     {
+    //         return JSON.parse(value);
+    //     } 
+    //     catch (e) 
+    //     {
+    //         console.error("Invalid JSON:", value);
+    //         return defaultValue;
+    //     }
+    // }
 
     // Append pending edits to the existing edit history (JSON array)
     // Parameters:
@@ -2518,11 +2481,11 @@
         }
     }
 
-    function exportDocx(e) {
-        e.preventDefault();
-        if (!_currentFilePath) return;
-        window.location.href = '/home/exportdocx?filePath=' + encodeURIComponent(_currentFilePath);
-    }
+    // function exportDocx(e) {
+    //     e.preventDefault();
+    //     if (!_currentFilePath) return;
+    //     window.location.href = '/home/exportdocx?filePath=' + encodeURIComponent(_currentFilePath);
+    // }
 
     // Two-phase export:
     //   1. Ask the user where to save FIRST. If they cancel, we never touch
@@ -2926,32 +2889,6 @@
         return null;
     }
 
-    // ── Extract ValidatedOcrText from database field ──────────────
-    // Returns the stripped invoice data stored in the database's ValidatedOcrText field.
-    // Returns null if ValidatedOcrText is not set or cannot be parsed.
-    // function getValidatedOcrTextDisplay(inv) {
-    //     if (!inv || !inv.validatedOcrText || inv.validatedOcrText.trim() === '') return null;
-        
-    //     try {
-    //         // ValidatedOcrText is stored as JSON string containing a List<InvoiceDto>
-    //         const parsed = JSON.parse(inv.validatedOcrText);
-            
-    //         // If it's an array, get the first element (there should only be one)
-    //         if (Array.isArray(parsed) && parsed.length > 0) {
-    //             return parsed[0];
-    //         }
-            
-    //         // If it's a single object, return it
-    //         if (typeof parsed === 'object' && parsed !== null) {
-    //             return parsed;
-    //         }
-    //     } catch (err) {
-    //         console.warn('Failed to parse ValidatedOcrText:', err);
-    //     }
-        
-    //     return null;
-    // }
-
     // ── Strip bbox-only fields for JSON display / export ────────
     // Keeps _currentInvoice intact so 2-way highlighting still works.
     function stripBboxFields(inv) {
@@ -3048,59 +2985,6 @@
                 input.classList.add('inv-pending-input');
             }
         });
-
-
-
-        
-        // container.querySelectorAll('.inv-field').forEach(input => {
-        //     const fieldKey = input.dataset.fieldkey;
-        //     if (!fieldKey) return;
-            
-        //     input.classList.remove('inv-persisted-input', 'inv-pending-input');
-            
-        //     const origValue = _originalValues.get(fieldKey) ?? '';
-
-        //     // Determine if this field has a saved (persisted) edit by comparing
-        //     // the saved edit value against the original OCR value.
-        //     let persistedValue = null;
-        //     if (fieldKey.startsWith('Item_')) 
-        //     {
-        //         const match = fieldKey.match(/^Item_(\d+)_(\w+)$/);
-        //         if (match) 
-        //         {
-        //             const itemIdx = parseInt(match[1], 10);
-        //             const suffix = match[2];
-        //             const propMap = { Desc: 'description', Qty: 'quantity', Price: 'unitPrice', Tax: 'taxRate', Amt: 'amount' };
-        //             const prop = propMap[suffix];
-        //             if (prop) 
-        //             {
-        //                 const itemEditsMap = _editingItemEdits.get(itemIdx);
-        //                 if (itemEditsMap) persistedValue = itemEditsMap.get(prop) ?? null;
-        //             }
-        //         }
-        //     } 
-        //     else 
-        //     {
-        //         const f = HEADER_FIELDS.find(hf => hf.key === fieldKey);
-        //         if (f) 
-        //         {
-        //             persistedValue = _editingInvoiceEdits.get(f.prop) ?? null;
-        //         }
-        //     }
-
-        //     const hasSavedEdit = persistedValue !== null && String(persistedValue) !== origValue;
-        //     const currentValue = input.value;
-        //     const hasPendingEdit = currentValue !== origValue;
-
-        //     if (hasSavedEdit) 
-        //     {
-        //         input.classList.add('inv-persisted-input');  // blue: saved edit
-        //     } 
-        //     else if (hasPendingEdit) 
-        //     {
-        //         input.classList.add('inv-pending-input');    // green: unsaved edit
-        //     }
-        //});
     }
 
     // ── Init ────────────────────────────────────────────────────
@@ -3239,13 +3123,9 @@
         });
     }
 
-    // Upload button
-    //uploadBtn.addEventListener('click', () => handleUploadClick(dialog, uploadBtn, fileListEl, selectedFiles));
-
     document.getElementById('upload-btn').addEventListener('click', async () => {
             await handleUpload(dialog, uploadBtn, fileListEl, selectedFiles);
     });
-
 
 </script>
 }
