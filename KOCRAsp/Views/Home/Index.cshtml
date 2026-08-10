@@ -2044,8 +2044,8 @@
     // Returns a dict keyed the same way as the old server-side MathConfirmed.
     function computeMathConfirmed(invoice) 
     {
-        const TOL = 0.02;
-        const mc = {};
+        const tolerance = 0.02;
+        const mathConfirmedFields = {};
 
         // Line items: qty × unitPrice (± tax) ≈ amount
         const items = invoice.items ?? [];
@@ -2063,7 +2063,8 @@
                         expected = expected + tax;
                     }
                 }
-                mc[`LineItem[${i}].Amount`] = Math.abs(expected - it.amount) <= TOL;
+
+                mathConfirmedFields[`LineItem[${i}].Amount`] = Math.abs(expected - it.amount) <= tolerance;
             }
         }
 
@@ -2071,7 +2072,7 @@
         const lineAmounts = items.filter(it => it.amount != null).map(it => it.amount);
         if (lineAmounts.length > 0 && invoice.subtotal != null) {
             const sum = lineAmounts.reduce((a, b) => a + b, 0);
-            mc['Subtotal'] = Math.abs(sum - invoice.subtotal) <= TOL;
+            mathConfirmedFields['Subtotal'] = Math.abs(sum - invoice.subtotal) <= tolerance;
         }
 
         // Total: subtotal + totalTax − discount ≈ total
@@ -2084,10 +2085,10 @@
             }
             if (invoice.totalTax  != null) expected += invoice.totalTax;
             if (invoice.discount  != null) expected -= invoice.discount;
-            mc['Total'] = Math.abs(expected - invoice.total) <= TOL;
+            mathConfirmedFields['Total'] = Math.abs(expected - invoice.total) <= tolerance;
         }
 
-        return mc;
+            return mathConfirmedFields;
     }
 
     // Attaches computed validation to an invoice object so all suspect functions
