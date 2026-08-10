@@ -1302,7 +1302,7 @@
             let value   = isNum ? fmtMoney(raw) : (raw ?? '');
             const suspect = isSuspect(inv, f.key);
             const tipData = buildFieldTooltip(inv, f.key, value);
-
+            const isDateField = f.key === "InvoiceDate" || f.key === "DueDate";
 
             // look for the field in _editingInvoiceEdits by prop name (camelCase key) - if found, replace the value
             const editedValue = _editingInvoiceEdits.get(f.prop);
@@ -1321,6 +1321,7 @@
             html += `<tr class="inv-field-row${suspect ? ' inv-suspect-row' : ''}" data-fieldkey="${f.key}" data-vtip="${escapeHtml(tipData.value)}" data-vtip-errors="${escapeHtml(tipData.errors.join('\n'))}">
                 <td>${escapeHtml(f.label)}</td>
                 <td><input class="form-control form-control-sm inv-field${suspect ? ' inv-suspect-input' : ''}"
+                type="${isDateField ? 'date' : 'text'}"
                 data-field="${f.prop}"
                 data-fieldkey="${f.key}"
                 value="${escapeHtml(String(value))}" /></td>
