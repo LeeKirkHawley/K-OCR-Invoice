@@ -126,6 +126,7 @@ public class BatchAndCleanupTests
     public async Task BatchService_GetNextBatchNumberAsync_ReturnsMaxPlusOne()
     {
         var (factory, dbPath) = CreateBatchDb();
+        var (appDb, appDbPath, appRoot) = await CreateApplicationDbAsync();
         try
         {
             await using (var seed = factory.CreateDbContext())
@@ -139,6 +140,7 @@ public class BatchAndCleanupTests
 
             var service = new BatchService(
                 factory,
+                appDb,
                 Mock.Of<IPathService>(),
                 Mock.Of<IInvoiceProcessingService>(),
                 Mock.Of<IFileService>(),
@@ -154,6 +156,8 @@ public class BatchAndCleanupTests
         }
         finally
         {
+            await appDb.DisposeAsync();
+            CleanupDirectory(appRoot);
             ClearTempDb(dbPath);
         }
     }
@@ -162,6 +166,7 @@ public class BatchAndCleanupTests
     public async Task BatchService_DeleteBatchAsync_SoftDeletesBatch()
     {
         var (factory, dbPath) = CreateBatchDb();
+        var (appDb, appDbPath, appRoot) = await CreateApplicationDbAsync();
         try
         {
             int batchId;
@@ -183,6 +188,7 @@ public class BatchAndCleanupTests
 
             var service = new BatchService(
                 factory,
+                appDb,
                 Mock.Of<IPathService>(),
                 Mock.Of<IInvoiceProcessingService>(),
                 Mock.Of<IFileService>(),
@@ -203,6 +209,8 @@ public class BatchAndCleanupTests
         }
         finally
         {
+            await appDb.DisposeAsync();
+            CleanupDirectory(appRoot);
             ClearTempDb(dbPath);
         }
     }

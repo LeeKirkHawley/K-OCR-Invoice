@@ -20,6 +20,7 @@ public class AdminControllerTests
     private readonly Mock<ILogger<AdminController>> _mockLogger;
     private readonly Mock<IOcrJobQueue> _mockOcrJobQueue;
     private readonly Mock<IOcrQueueProcessor> _mockOcrQueueProcessor;
+    private readonly Mock<IOrganizationAdminService> _mockOrganizationAdminService;
     private readonly IConfiguration _configuration;
     private readonly AdminController _controller;
 
@@ -30,6 +31,7 @@ public class AdminControllerTests
         _mockLogger = new Mock<ILogger<AdminController>>();
         _mockOcrJobQueue = new Mock<IOcrJobQueue>();
         _mockOcrQueueProcessor = new Mock<IOcrQueueProcessor>();
+        _mockOrganizationAdminService = new Mock<IOrganizationAdminService>();
 
         _configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -41,6 +43,7 @@ public class AdminControllerTests
         _controller = new AdminController(
             _mockSuperAdminSvc.Object,
             _mockDataSvc.Object,
+            _mockOrganizationAdminService.Object,
             _configuration,
             _mockOcrJobQueue.Object,
             _mockOcrQueueProcessor.Object,

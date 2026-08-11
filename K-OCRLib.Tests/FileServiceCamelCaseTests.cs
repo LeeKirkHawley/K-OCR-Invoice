@@ -1,7 +1,4 @@
-using K_OCRLib.Models;
-using K_OCRLib.Data;
 using K_OCRLib.Services;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -10,151 +7,72 @@ namespace K_OCRLib.Tests;
 public class FileServiceCamelCaseTests
 {
     [Fact]
-    public async Task LoadContextAsync_DeserializesCamelCaseJsonWithTaxRate()
+    public void LoadFiles_ReturnsEmptyWhenDirectoryDoesNotExist()
     {
-        var (dbService, dbPath) = CreateDatabaseService();
+        var service = new FileService(Mock.Of<ILogger<FileService>>());
+        
+        var result = service.LoadFiles("/nonexistent/path");
+        
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void LoadFiles_ReturnsFilesWithMatchingExtension()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
         try
         {
-            // Create OcrText JSON with camelCase "taxRate" field
-            string ocrText = """
-            {
-              "inputPath": "invoice.pdf",
-              "tesseractOcrText": "tess",
-              "layout": [
-                {
-                  "vendorName": "Acme",
-                  "customerName": "Contoso",
-                  "invoiceId": "INV-123",
-                  "invoiceDate": "2026-01-01",
-                  "dueDate": "2026-02-01",
-                  "purchaseOrder": "PO-456",
-                  "subtotal": 100.0,
-                  "totalTax": 10.0,
-                  "shipping": 5.0,
-                  "total": 115.0,
-                  "items": [
-                    {
-                      "description": "Widget",
-                      "quantity": 5.0,
-                      "unitPrice": 10.0,
-                      "amount": 50.0,
-                      "taxRate": "10%",
-                      "boundingBoxes": [],
-                      "fieldConfidences": {},
-                      "confidenceConfirmed": {},
-                      "tesseractConfirmed": {}
-                    },
-                    {
-                      "description": "Gadget",
-                      "quantity": 2.0,
-                      "unitPrice": 25.0,
-                      "amount": 50.0,
-                      "taxRate": "20%",
-                      "boundingBoxes": [],
-                      "fieldConfidences": {},
-                      "confidenceConfirmed": {},
-                      "tesseractConfirmed": {}
-                    }
-                  ],
-                  "fieldBoundingBoxes": {},
-                  "fieldConfidences": {},
-                  "originalPageWidth": 8.5,
-                  "originalPageHeight": 11.0,
-                  "pageCount": 1,
-                  "tesseractConfirmed": {},
-                  "confidenceConfirmed": {},
-                  "mathConfirmed": {},
-                  //"isValidationAccepted": false,
-                  "notes": null,
-                  "vendorCountry": null,
-                  "currencyCode": "USD"
-                }
-              ],
-              "artifactsDirectory": null,
-              "minConfidenceThreshold": null,
-              "organization": null,
-              "batch": null
-            }
-            """;
-
-            await SeedInvoiceAsync(dbPath, filePath: "invoice.pdf", ocrText: ocrText);
-            var service = new FileService(dbService, Mock.Of<ILogger<FileService>>());
-
-            var context = await service.LoadContextAsync("invoice.pdf");
-
-            Assert.NotNull(context);
-            Assert.Equal("invoice.pdf", context!.InputPath);
-            Assert.Equal("tess", context.TesseractOcrText);
+            File.WriteAllText(Path.Combine(tempDir, "test1.pdf"), "");
+            File.WriteAllText(Path.Combine(tempDir, "test2.pdf"), "");
+            File.WriteAllText(Path.Combine(tempDir, "test3.txt"), "");
             
-            Assert.NotNull(context.Layout);
-            Assert.Single(context.Layout);
+            var service = new FileService(Mock.Of<ILogger<FileService>>());
             
-            var invoice = context.Layout[0];
-            Assert.Equal("Acme", invoice.VendorName);
-            Assert.Equal("Contoso", invoice.CustomerName);
-            Assert.Equal("INV-123", invoice.InvoiceId);
+            var result = service.LoadFiles(tempDir, [".pdf"]).ToList();
             
-            // Verify Items deserialized correctly
-            Assert.Equal(2, invoice.Items.Count);
-            
-            // Verify first item TaxRate deserialized from camelCase
-            Assert.NotNull(invoice.Items[0].TaxRate);
-            Assert.Equal("10%", invoice.Items[0].TaxRate);
-            Assert.Equal("Widget", invoice.Items[0].Description);
-            
-            // Verify second item TaxRate deserialized from camelCase
-            Assert.NotNull(invoice.Items[1].TaxRate);
-            Assert.Equal("20%", invoice.Items[1].TaxRate);
-            Assert.Equal("Gadget", invoice.Items[1].Description);
+            Assert.Equal(2, result.Count);
+            Assert.True(result.All(f => f.EndsWith(".pdf")));
         }
         finally
         {
-            Cleanup(dbPath);
+            Directory.Delete(tempDir, true);
         }
     }
 
-    private static (OrgDatabaseService DbService, string DbPath) CreateDatabaseService()
+    [Fact]
+    public void ListDirectory_ReturnsEmptyWhenDirectoryDoesNotExist()
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"files-{Guid.NewGuid()}.db");
-        var factory = new DirectDbContextFactory(dbPath);
-        var dbService = new DatabaseService(factory, Mock.Of<ILogger<OrgDatabaseService>>());
-        return (dbService, dbPath);
+        var service = new FileService(Mock.Of<ILogger<FileService>>());
+        
+        var result = service.ListDirectory("/nonexistent/path");
+        
+        Assert.Empty(result);
     }
 
-    private static async Task<int> SeedInvoiceAsync(string dbPath, string filePath, string? ocrText = null)
+    [Fact]
+    public void ListDirectory_ReturnsBothFilesAndDirectories()
     {
-        var options = new DbContextOptionsBuilder<KOCRDbContext>().UseSqlite($"Data Source={dbPath}").Options;
-        await using var db = new KOCRDbContext(options);
-        await db.Database.MigrateAsync();
-
-        var batch = new Batch
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
+        try
         {
-            Name = "Batch 1",
-            BatchNumber = 1,
-            FolderPath = "/tmp",
-            CreatedByUserId = "user",
-            CreatedAtUtc = DateTime.UtcNow
-        };
-        db.Batches.Add(batch);
-        await db.SaveChangesAsync();
-
-        var invoice = new Invoice
+            Directory.CreateDirectory(Path.Combine(tempDir, "subdir"));
+            File.WriteAllText(Path.Combine(tempDir, "file.txt"), "");
+            
+            var service = new FileService(Mock.Of<ILogger<FileService>>());
+            
+            var result = service.ListDirectory(tempDir).ToList();
+            
+            Assert.Equal(2, result.Count);
+            Assert.Single(result.Where(e => e.IsDirectory));
+            Assert.Single(result.Where(e => !e.IsDirectory));
+        }
+        finally
         {
-            BatchId = batch.BatchId,
-            FilePath = filePath,
-            UploadedAtUtc = DateTime.UtcNow,
-            OcrText = ocrText,
-            TotalPages = 1
-        };
-        db.Invoices.Add(invoice);
-        await db.SaveChangesAsync();
-        return invoice.Id;
-    }
-
-    private static void Cleanup(string dbPath)
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (File.Exists(dbPath))
-            File.Delete(dbPath);
+            Directory.Delete(tempDir, true);
+        }
     }
 }

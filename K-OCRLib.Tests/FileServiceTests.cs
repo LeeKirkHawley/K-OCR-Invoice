@@ -1,7 +1,4 @@
-using K_OCRLib.Models;
-using K_OCRLib.Data;
 using K_OCRLib.Services;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -10,109 +7,78 @@ namespace K_OCRLib.Tests;
 public class FileServiceTests
 {
     [Fact]
-    public async Task LoadContextAsync_ReturnsSavedPipelineContext()
+    public void LoadFiles_ReturnsAllFilesWhenNoExtensionFilter()
     {
-        var (dbService, dbPath) = CreateDatabaseService();
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
         try
         {
-            await SeedInvoiceAsync(dbPath, filePath: "invoice.pdf", ocrText: """{"InputPath":"invoice.pdf","TesseractOcrText":"tess"}""");
-            var service = new FileService(dbService, Mock.Of<ILogger<FileService>>());
-
-            var context = await service.LoadContextAsync("invoice.pdf");
-
-            Assert.NotNull(context);
-            Assert.Equal("invoice.pdf", context!.InputPath);
-            Assert.Equal("tess", context.TesseractOcrText);
+            File.WriteAllText(Path.Combine(tempDir, "file1.pdf"), "");
+            File.WriteAllText(Path.Combine(tempDir, "file2.txt"), "");
+            File.WriteAllText(Path.Combine(tempDir, "file3.doc"), "");
+            
+            var service = new FileService(Mock.Of<ILogger<FileService>>());
+            
+            var result = service.LoadFiles(tempDir).ToList();
+            
+            Assert.Equal(3, result.Count);
         }
         finally
         {
-            Cleanup(dbPath);
+            Directory.Delete(tempDir, true);
         }
     }
 
     [Fact]
-    public async Task SaveValidatedLayoutAsync_UpdatesInvoiceFields()
+    public void LoadFiles_FiltersMultipleExtensions()
     {
-        var (dbService, dbPath) = CreateDatabaseService();
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
         try
         {
-            var invoiceId = await SeedInvoiceAsync(dbPath, filePath: "invoice.pdf");
-            var service = new FileService(dbService, Mock.Of<ILogger<FileService>>());
-
-            await service.SaveValidatedLayoutAsync("invoice.pdf", new InvoiceDto
-            {
-                VendorName = "Acme",
-                CustomerName = "Contoso",
-                InvoiceId = "INV-1",
-                Subtotal = 10m,
-                TotalTax = 2m,
-                Discount = 3m,
-                Total = 15m,
-                InvoiceDate = "2026-01-01",
-                DueDate = "2026-02-01",
-                Notes = "note",
-                VendorCountry = "US",
-                CurrencyCode = "USD",
-                IsInvoiceAccepted = true
-            });
-
-            await using var verify = new KOCRDbContext(new DbContextOptionsBuilder<KOCRDbContext>().UseSqlite($"Data Source={dbPath}").Options);
-            var row = await verify.Invoices.FindAsync(invoiceId);
-
-            Assert.NotNull(row);
-            Assert.Equal("Acme", row!.VendorName);
-            Assert.True(row.IsInvoiceAccepted);
-            //Assert.NotNull(row.ValidatedOcrText);
-            Assert.NotNull(row.ProcessedAtUtc);
+            File.WriteAllText(Path.Combine(tempDir, "file1.pdf"), "");
+            File.WriteAllText(Path.Combine(tempDir, "file2.txt"), "");
+            File.WriteAllText(Path.Combine(tempDir, "file3.doc"), "");
+            
+            var service = new FileService(Mock.Of<ILogger<FileService>>());
+            
+            var result = service.LoadFiles(tempDir, [".pdf", ".txt"]).ToList();
+            
+            Assert.Equal(2, result.Count);
+            Assert.True(result.All(f => f.EndsWith(".pdf") || f.EndsWith(".txt")));
         }
         finally
         {
-            Cleanup(dbPath);
+            Directory.Delete(tempDir, true);
         }
     }
 
-    private static (OrgDatabaseService DbService, string DbPath) CreateDatabaseService()
+    [Fact]
+    public void LoadFiles_ReturnsOrderedResults()
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"files-{Guid.NewGuid()}.db");
-        var factory = new DirectDbContextFactory(dbPath);
-        var dbService = new DatabaseService(factory, Mock.Of<ILogger<OrgDatabaseService>>());
-        return (dbService, dbPath);
-    }
-
-    private static async Task<int> SeedInvoiceAsync(string dbPath, string filePath, string? ocrText = null)
-    {
-        var options = new DbContextOptionsBuilder<KOCRDbContext>().UseSqlite($"Data Source={dbPath}").Options;
-        await using var db = new KOCRDbContext(options);
-        await db.Database.MigrateAsync();
-
-        var batch = new Batch
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        
+        try
         {
-            Name = "Batch 1",
-            BatchNumber = 1,
-            FolderPath = "/tmp",
-            CreatedByUserId = "user",
-            CreatedAtUtc = DateTime.UtcNow
-        };
-        db.Batches.Add(batch);
-        await db.SaveChangesAsync();
-
-        var invoice = new Invoice
+            File.WriteAllText(Path.Combine(tempDir, "zzz.txt"), "");
+            File.WriteAllText(Path.Combine(tempDir, "aaa.txt"), "");
+            File.WriteAllText(Path.Combine(tempDir, "mmm.txt"), "");
+            
+            var service = new FileService(Mock.Of<ILogger<FileService>>());
+            
+            var result = service.LoadFiles(tempDir).ToList();
+            
+            Assert.Equal(3, result.Count);
+            Assert.True(result[0].EndsWith("aaa.txt"));
+            Assert.True(result[1].EndsWith("mmm.txt"));
+            Assert.True(result[2].EndsWith("zzz.txt"));
+        }
+        finally
         {
-            BatchId = batch.BatchId,
-            FilePath = filePath,
-            UploadedAtUtc = DateTime.UtcNow,
-            OcrText = ocrText,
-            TotalPages = 1
-        };
-        db.Invoices.Add(invoice);
-        await db.SaveChangesAsync();
-        return invoice.Id;
-    }
-
-    private static void Cleanup(string dbPath)
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (File.Exists(dbPath))
-            File.Delete(dbPath);
+            Directory.Delete(tempDir, true);
+        }
     }
 }

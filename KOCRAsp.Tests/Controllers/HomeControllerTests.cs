@@ -32,6 +32,7 @@ public class HomeControllerTests
     private readonly Mock<IOcrQueueRepository> _mockOcrQueueRepo;
     private readonly Mock<IOrgConfigService> _mockOrgConfigSvc;
     private readonly Mock<K_OCRLib.Services.IBatchChangeNotifier> _mockBatchNotifier;
+    private readonly Mock<IOrgDatabaseService> _mockOrgDatabaseService;
     private readonly HomeController _controller;
     private readonly Mock<ILogger<HomeController>> _logger;
 
@@ -49,8 +50,10 @@ public class HomeControllerTests
         _mockTenantContext = new Mock<ITenantContext>();
         _mockConfigSvc = new Mock<IConfigurationService>();
         _mockOcrQueueRepo = new Mock<IOcrQueueRepository>();
+        _mockOrgDatabaseService = new Mock<IOrgDatabaseService>();
         _mockOrgConfigSvc = new Mock<IOrgConfigService>();
         _mockBatchNotifier = new Mock<K_OCRLib.Services.IBatchChangeNotifier>();
+
         _logger = new Mock<ILogger<HomeController>>(); 
 
         _mockTenantContext.Setup(t => t.OrganizationId).Returns(OrgId);
@@ -82,6 +85,7 @@ public class HomeControllerTests
             _mockConfigSvc.Object,
             _mockOrgConfigSvc.Object,
             _mockOcrQueueRepo.Object,
+            _mockOrgDatabaseService.Object,
             _logger.Object,
             _mockBatchNotifier.Object);
     }
