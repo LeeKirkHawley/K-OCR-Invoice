@@ -1034,27 +1034,60 @@
                 const itemIdx = parseInt(input.dataset.itemIdx, 10);
                 const origValue = origValueStr === '' ? undefined : origValueStr;
 
-                // Remove from item edits map and sync the invoice model
+                // Update the invoice model for display purposes.
                 if (_currentInvoice.items?.[itemIdx]) {
-                    const itemEdits = parseEditsMap(_currentInvoice.items[itemIdx].itemEdits);
-                    itemEdits.delete(fieldProp);
-                    _currentInvoice.items[itemIdx].itemEdits = itemEdits;
                     _currentInvoice.items[itemIdx][fieldProp] = origValue;
                 }
+
+                // Record the revert in _editingItemEdits (the Map savePendingEdits
+                // actually reads from) rather than deleting the entry, so that if
+                // this field had already been saved with a different value, the
+                // revert-to-original is itself persisted as a new history entry
+                // on the next save. Simply deleting the entry here would make
+                // appendPendingEditsToHistory() skip writing anything for this
+                // field, silently leaving the old (edited) value in the database.
+                if (!_editingItemEdits.has(itemIdx)) {
+                    _editingItemEdits.set(itemIdx, new Map());
+                }
+                _editingItemEdits.get(itemIdx).set(fieldProp, origValueStr);
+
+                // Ensure the field is tracked as changed-this-session so the
+                // next save actually appends a history entry for it.
+                if (!_changedItemFields.has(itemIdx)) {
+                    _changedItemFields.set(itemIdx, new Set());
+                }
+                _changedItemFields.get(itemIdx).add(fieldProp);
             } else {
                 const origValue = origValueStr === '' ? undefined : origValueStr;
 
-                // Remove from editing edits map, update _editingInvoiceEdits (not _currentInvoice.invoiceEdits)
-                _editingInvoiceEdits.delete(fieldProp);
+                // Update the invoice model for display purposes.
                 _currentInvoice[fieldProp] = origValue;
+
+                // Record the revert in _editingInvoiceEdits (same reasoning as
+                // the item branch above) instead of deleting the entry, so a
+                // subsequent save persists the revert-to-original as a new
+                // history entry rather than silently skipping it.
+                _editingInvoiceEdits.set(fieldProp, origValueStr);
+                _changedInvoiceFields.add(fieldProp);
             }
             
             // Set field to original value (or empty string if null/undefined)
             input.value = origValueStr === '' ? '' : (isMoney ? fmtMoney(origValueStr) : origValueStr);
             
-            // Remove from state sets
-            _pendingEdits.delete(_selectedFieldKey);
-            _persistedEdits.delete(_selectedFieldKey);
+            // Reverting to the original OCR value is only "no pending change"
+            // if that also matches what's currently saved in the database.
+            // If the field had previously been saved with a different value,
+            // reverting back to the original is itself a new unsaved change
+            // from what's in the database, so it must still trigger the
+            // "Changes Not Saved" dialog on invoice switch.
+            const committedValue = _committedValues.get(_selectedFieldKey) ?? '';
+            if (input.value !== committedValue) {
+                _pendingEdits.add(_selectedFieldKey);
+                _persistedEdits.delete(_selectedFieldKey);
+            } else {
+                _pendingEdits.delete(_selectedFieldKey);
+                _persistedEdits.delete(_selectedFieldKey);
+            }
             
             // Update field styling to reflect reverted state
             refreshSavedFieldStyling();
