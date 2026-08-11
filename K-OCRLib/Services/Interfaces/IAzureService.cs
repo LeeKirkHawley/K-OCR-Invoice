@@ -2,6 +2,6 @@
 {
     public interface IAzureService
     {
-        Task RunAzureOcrAsync(IEnumerable<string> filePaths, string? artifactsDirectory = null);
+        //Task RunAzureOcrAsync(IEnumerable<string> filePaths, string? artifactsDirectory = null);
     }
 }

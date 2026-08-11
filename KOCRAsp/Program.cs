@@ -244,7 +244,7 @@ builder.Services.AddScoped<IStripeProvisioningService, StripeProvisioningService
 
 // Scoped: transitively depend on DatabaseService
 builder.Services.AddScoped<IFileService, FileService>();
-builder.Services.AddScoped<IAzureService, AzureService>();
+//builder.Services.AddScoped<IAzureService, AzureService>();
 //builder.Services.AddScoped<IOCRService, OCRService>();
 builder.Services.AddScoped<IInvoiceEnrichmentService, InvoiceEnrichmentService>();
 builder.Services.AddScoped<IBatchService, BatchService>();

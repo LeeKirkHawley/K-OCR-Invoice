@@ -225,7 +225,7 @@ public sealed class OcrQueueProcessor : BackgroundService, IOcrQueueProcessor
 
         try
         {
-            var workflow = _workflowRegistry.Resolve(job.WorkflowKey);
+            IQueuedOcrWorkflow workflow = _workflowRegistry.Resolve(job.WorkflowKey);
             await workflow.ExecuteAsync(job, ct);
             await _repository.MarkCompletedAsync(job.JobId, job.OrgName, CancellationToken.None);
             _eventPublisher.OnJobCompleted(job);

@@ -1300,9 +1300,24 @@
             const raw     = inv[f.prop];
             const isNum   = f.prop === 'subtotal' || f.prop === 'totalTax' || f.prop === 'discount'  || f.prop === 'total';
             let value   = isNum ? fmtMoney(raw) : (raw ?? '');
+
+            // A date field only gets rendered as <input type="date"> if its
+            // value can actually be loaded into that control (strict
+            // "yyyy-MM-dd"). If the OCR text is in some other/unrecognized
+            // format, fall back to a plain text input with the raw string so
+            // editing/saving that field still works instead of the value
+            // silently vanishing into a blank date picker.
+            let isDateField = f.key === "InvoiceDate" || f.key === "DueDate";
+            if (isDateField && value !== '') {
+                const normalized = fmtDateForInput(value);
+                if (normalized === '') {
+                    isDateField = false; // couldn't parse - treat as plain text
+                } else {
+                    value = normalized;
+                }
+            }
             const suspect = isSuspect(inv, f.key);
             const tipData = buildFieldTooltip(inv, f.key, value);
-            const isDateField = f.key === "InvoiceDate" || f.key === "DueDate";
 
             // look for the field in _editingInvoiceEdits by prop name (camelCase key) - if found, replace the value
             const editedValue = _editingInvoiceEdits.get(f.prop);
@@ -1795,6 +1810,52 @@
         if (!stripped) return '';
         const n = Number(stripped.replace(/,/g, ''));
         return Number.isFinite(n) ? n.toFixed(2) : stripped;
+    }
+
+    // The native <input type="date"> control only accepts values in strict
+    // ISO 8601 "yyyy-MM-dd" format; anything else is silently rejected by the
+    // browser (the control just renders blank even though the DOM's value
+    // attribute still holds the original string). InvoiceDate/DueDate arrive
+    // from the server as free-form OCR-extracted strings (InvoiceDto.InvoiceDate
+    // / DueDate are plain strings, not typed dates) and are not guaranteed to
+    // already be in that format.
+    function isValidDateInputValue(value) {
+        if (value === null || value === undefined || value === '') return true; // empty is allowed
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+        const [y, m, d] = value.split('-').map(Number);
+        const dt = new Date(value + 'T00:00:00');
+        if (Number.isNaN(dt.getTime())) return false;
+        // Guard against JS Date auto-rollover of invalid days (e.g. 2026-02-30 -> 2026-03-02)
+        return dt.getFullYear() === y && dt.getMonth() + 1 === m && dt.getDate() === d;
+    }
+
+    // Attempts to convert an OCR-extracted date string into the "yyyy-MM-dd"
+    // format required by <input type="date">, so the value actually loads
+    // into the control instead of rendering blank. Returns '' if the value
+    // can't be confidently parsed as a date.
+    function fmtDateForInput(value) {
+        if (value === null || value === undefined || value === '') return '';
+        const str = String(value).trim();
+        if (isValidDateInputValue(str)) return str;
+
+        // MM/DD/YYYY or M/D/YYYY (also '-' separated)
+        const slashMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (slashMatch) {
+            const [, mm, dd, yyyy] = slashMatch;
+            const candidate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+            return isValidDateInputValue(candidate) ? candidate : '';
+        }
+
+        // Fallback: let the browser parse it (handles "Jan 15, 2026", ISO
+        // timestamps with a time component, etc.), then reformat from local
+        // date parts to avoid a UTC/local timezone day-shift.
+        const parsed = new Date(str);
+        if (Number.isNaN(parsed.getTime())) return '';
+        const yyyy = parsed.getFullYear();
+        const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+        const dd = String(parsed.getDate()).padStart(2, '0');
+        const candidate = `${yyyy}-${mm}-${dd}`;
+        return isValidDateInputValue(candidate) ? candidate : '';
     }
 
     function validateCurrencyInput(value, fieldName, itemIndex) {

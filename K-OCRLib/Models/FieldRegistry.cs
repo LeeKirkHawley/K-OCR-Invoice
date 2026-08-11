@@ -78,7 +78,7 @@ public sealed class FieldRegistry
     static FieldRegistry()
     {
         // Header fields (PascalCase property names from InvoiceDto)
-        var headerFields = new List<FieldMetadata>
+        List<FieldMetadata> headerFields = new List<FieldMetadata>
         {
             new() { Key = "VendorName",    PropertyName = "VendorName",    PropertyNameCamelCase = "vendorName",    Label = "Vendor",      FieldType = "Text",     IsHeaderField = true },
             new() { Key = "CustomerName",  PropertyName = "CustomerName",  PropertyNameCamelCase = "customerName",  Label = "Customer",    FieldType = "Text",     IsHeaderField = true },
@@ -95,7 +95,7 @@ public sealed class FieldRegistry
         HeaderFields = headerFields.AsReadOnly();
 
         // Item fields (PascalCase from InvoiceItemDto, but represented generically)
-        var itemFields = new List<FieldMetadata>
+        List<FieldMetadata> itemFields = new List<FieldMetadata>
         {
             new() { Key = "Description", PropertyName = "Description", PropertyNameCamelCase = "description", Label = "Description", FieldType = "Text",     IsHeaderField = false, ItemFieldSuffix = "Desc" },
             new() { Key = "Quantity",    PropertyName = "Quantity",    PropertyNameCamelCase = "quantity",    Label = "Qty",          FieldType = "Number",   IsHeaderField = false, ItemFieldSuffix = "Qty" },
