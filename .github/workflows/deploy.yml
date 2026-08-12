@@ -1,4 +1,4 @@
-name: Deploy to hardscrabble.org
+name: Deploy to elkmountainsoftware.com
 
 on:
   push:
@@ -66,9 +66,9 @@ jobs:
                 "Microsoft.AspNetCore": "Warning"
               }
             },
-            "AllowedHosts": "hardscrabble.org;www.hardscrabble.org;localhost;127.0.0.1",
+            "AllowedHosts": "elkmountainsoftware.com;www.elkmountainsoftware.com;localhost;127.0.0.1",
             "Api": {
-              "BaseUrl": "https://www.hardscrabble.org"
+              "BaseUrl": "https://www.elkmountainsoftware.com"
             },
             "Kocr": {
               "BaseDirectory": "KOCRBase"
@@ -169,7 +169,7 @@ jobs:
       - name: Take app offline
         run: |
           echo "<h1>Site is being updated, please check back shortly.</h1>" > app_offline.htm
-          curl -s -T app_offline.htm ftp://209.58.148.243/hardscrabble.org/app_offline.htm \
+          curl -s -T app_offline.htm ftp://209.58.148.243/elkmountainsoftware.com/app_offline.htm \
             --user "kirkhawley:${{ secrets.FTP_PASSWORD }}" --ftp-create-dirs
           echo "app_offline.htm uploaded, waiting for app to shut down..."
           sleep 30
@@ -181,7 +181,7 @@ jobs:
           username: kirkhawley
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./publish/
-          server-dir: /hardscrabble.org/
+          server-dir: /elkmountainsoftware.com/
           state-name: .ftp-deploy-sync-state-v2.json
           # Only upload changed files; does NOT wipe the server directory
           # dangerous-clean-slate would also delete KOCRBase data — keep false
@@ -196,5 +196,5 @@ jobs:
         run: |
           curl -s ftp://209.58.148.243/ \
             --user "kirkhawley:${{ secrets.FTP_PASSWORD }}" \
-            -Q "DELE /hardscrabble.org/app_offline.htm"
+            -Q "DELE /elkmountainsoftware.com/app_offline.htm"
           echo "app_offline.htm removed, app is back online."
