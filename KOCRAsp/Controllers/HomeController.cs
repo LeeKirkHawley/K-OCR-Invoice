@@ -71,7 +71,7 @@ public class HomeController : Controller
 
         if (User.Identity?.IsAuthenticated != true)
         {
-            ViewData["Title"] = "Hardscrabble Invoice";
+            ViewData["Title"] = "Elk Mountain Invoice";
             ViewData["HideNav"] = true;
             ViewData["AllowIndexing"] = true;
             return View("Landing");

@@ -53,7 +53,7 @@
     <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
         <ul class="nav flex-column">
             
-            <li class="nav-item" data-bs-level="1"><a href="#hardscrabble-invoice" class="nav-link">Hardscrabble Invoice</a>
+            <li class="nav-item" data-bs-level="1"><a href="#hardscrabble-invoice" class="nav-link">Elk Mountain Invoice</a>
               <ul class="nav flex-column">
             <li class="nav-item" data-bs-level="2"><a href="#features" class="nav-link">Features</a>
               <ul class="nav flex-column">
@@ -102,8 +102,8 @@
 </div></div>
                     <div class="col-md-9" role="main">
 
-<h1 id="hardscrabble-invoice">Hardscrabble Invoice</h1>
-<p>Hardscrabble Invoice is an invoice management app. Its purpose is to allow the user to upload invoices, OCR them to get the important field values for both normal invoice fields and line items, and give the user a usable edit-and-validation user interface that automatically identifies possible inaccuracies. It then exports the validated data to JSON or Excel files.</p>
+<h1 id="hardscrabble-invoice">Elk Mountain Invoice</h1>
+<p>Elk Mountain Invoice is an invoice management app. Its purpose is to allow the user to upload invoices, OCR them to get the important field values for both normal invoice fields and line items, and give the user a usable edit-and-validation user interface that automatically identifies possible inaccuracies. It then exports the validated data to JSON or Excel files.</p>
 <h2 id="features">Features</h2>
 <ul>
 <li>Upload invoices - Add PDFs or images to a batch and keep related invoices together.</li>
@@ -123,7 +123,7 @@ Pages Per Invoice: 20</p>
 <p><strong>Beta User Limits:</strong>
 Max OCRed Pages: 500</p>
 <h2 id="ui-panels">UI Panels:</h2>
-<p><img alt="Hardscrabble Invoice Panels" src="Panels.png" title="Panels" /></p>
+<p><img alt="Elk Mountain Invoice Panels" src="Panels.png" title="Panels" /></p>
 <p><strong>The Invoice List Panel</strong> contains a Batch selector, a list of the Invoices in the Batch, and some buttons to select batches. Selecting an Invoice by clicking it in the list displays the Invoice in the Invoice Panel.</p>
 <p><strong>The Invoice Panel</strong> is where the Invoice is displayed. </p>
 <p><strong>The Validation Panel</strong> is where the OCR data for the displayed Invoice can be inspected for errors. It has 3 tabs:
@@ -139,9 +139,9 @@ Max OCRed Pages: 500</p>
 <p><strong>OCRing Invoices:</strong> Once the upload is done, the batch can be submitted for OCR by clicking the "OCR All" button - the batch will be sent to the OCR Queue, and a red "Q" will appear to the left of each invoice name. The OCR will take place in the background. When each image has finished processing, the red "Q" will be replaced by an orange dot. </p>
 <p>Single invoices can be OCRed (or re-OCRed) by right-clicking the invoice and selecting "Run OCR". For Invoices that have not been OCRed, there is also a "Run OCR" button in the Validation panel.</p>
 <p><strong>The OCR Process:</strong>
-Hardscrabble Invoice employs a 2-step OCR process. The main process uses Azure Document Intelligence to OCR the invoice. The secondary process employs a local OCR solution that runs while Azure Document Intelligence process the invoice. </p>
+Elk Mountain Invoice employs a 2-step OCR process. The main process uses Azure Document Intelligence to OCR the invoice. The secondary process employs a local OCR solution that runs while Azure Document Intelligence process the invoice. </p>
 <h2 id="queuing">Queuing</h2>
-<p><strong>Invoice Queuing:</strong> Hardscrabble Invoice runs a processing queue that accepts Batch OCR jobs. These jobs are run in succession. Finishing any job may take some time. When the job is done, the orange dot in the Invoice List on the Invoices that were successfully OCRed are changed to green dots.</p>
+<p><strong>Invoice Queuing:</strong> Elk Mountain Invoice runs a processing queue that accepts Batch OCR jobs. These jobs are run in succession. Finishing any job may take some time. When the job is done, the orange dot in the Invoice List on the Invoices that were successfully OCRed are changed to green dots.</p>
 <p><strong>Upload Process:</strong>
 After a batch is created and/or selected, clicking the Upload Invoices button will open a dialog box on the user's machine that will allow him to select any number of invoices for upload to that batch.</p>
 <h2 id="invoice-validation">Invoice Validation</h2>
@@ -154,7 +154,7 @@ When both OCR process are done, the results are compared an analyzed for several
     5. Math errors in invoice total.</p>
 <p><strong>Validation:</strong> As the user tabs through the fields in the validation panel, the corresponding field is highlighted on the invoice image. If the user clicks on a particular field in either window, the corresponding field is highlighted in the other window. </p>
 <p>When the user clicks on an OCRed field in the Invoice panel, the corresponding field will be highlighted in the Validation panel.</p>
-<p>There are several ways Hardscrabble Invoice tries to identify problem fields:
+<p>There are several ways Elk Mountain Invoice tries to identify problem fields:
 - OCR confidence as returned by Azure Document Intelligence and the secondary OCR.
 - Checking that the two OCR process get the same value.
 - Checking that the math for line item totals and the invoice total is correct.</p>
@@ -172,7 +172,7 @@ When a batch has been validated and uploaded to the customer, the batch is marke
 <p>A user can be a member of multiple Organizations, as org admin and/or as a regular user. A user will not be deleted from the system as long as he is a member of any org. A user can be in one of three roles: </p>
 <h2 id="organization-lifetime">Organization Lifetime</h2>
 <p><strong>Organization Deletion</strong>
-When Organizations are deleted, the organization data is retained for 2 weeks. During that period, it is possible to reactivate the Organization by contacting Hardscrabble. When the retention period is over, the Organization and all of its data will be physically and permanently deleted.</p>
+When Organizations are deleted, the organization data is retained for 2 weeks. During that period, it is possible to reactivate the Organization by contacting Elk Mountain. When the retention period is over, the Organization and all of its data will be physically and permanently deleted.</p>
 <p><strong>User Management</strong>
 The organization admin can invite users to the org and delete users. A user can be in one of three roles: User, Validator, and Org Admin. Users can create batches, upload and edit Invoices. Validators have all rights of Users and can validate Invoices.</p>
 <p>Deleting one org removes that org’s memberships; the user account stays as long as they have at least one remaining membership.</p></div>

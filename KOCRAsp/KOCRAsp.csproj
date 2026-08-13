@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Assets\HardscrabbleHeader.png">
+    <None Update="Assets\ElkMountainHeader.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Views\Home\functions.ts">

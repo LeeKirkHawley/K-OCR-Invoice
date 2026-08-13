@@ -18,10 +18,10 @@
     var request = ViewContext.HttpContext.Request;
     var canonicalPath = UrlCanonicalizer.GetCanonicalPath(request.Path.Value ?? string.Empty);
     var resolvedTitle = string.IsNullOrWhiteSpace(pageTitle)
-        ? "Hardscrabble Invoice"
-        : pageTitle == "Hardscrabble Invoice"
+        ? "Elk Mountain Invoice"
+        : pageTitle == "Elk Mountain Invoice"
             ? pageTitle
-            : $"{pageTitle} – Hardscrabble Invoice";
+            : $"{pageTitle} – Elk Mountain Invoice";
     var canonicalUrl = $"{request.Scheme}://{request.Host}{request.PathBase}{canonicalPath}";
     var activeOrgId = User.FindFirst(AppClaimTypes.OrganizationId)?.Value;
     var activeTenantName = User.FindFirst(AppClaimTypes.TenantName)?.Value;
@@ -84,7 +84,7 @@
     {
         <nav class="navbar navbar-dark bg-dark fixed-top px-3">
             <div class="d-flex align-items-center">
-                <a class="navbar-brand fw-bold mb-0" href="/">Hardscrabble Invoice</a>
+                <a class="navbar-brand fw-bold mb-0" href="/">Elk Mountain Invoice</a>
                 <span class="text-light small">@User?.Identity?.Name</span>
 
                 @if (orgOptions.Length > 0)

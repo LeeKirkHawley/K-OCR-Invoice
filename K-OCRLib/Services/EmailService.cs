@@ -166,7 +166,7 @@ public class EmailService : IEmailService
               <h2>Organization Marked for Deletion</h2>
               <p>Hi {WebUtility.HtmlEncode(toName)},</p>
               <p>Your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been marked for deletion on K-OCR.</p>
-              <p>If you would like to reactivate this organization, please contact Hardscrabble at <strong>leekirkhawley@gmail.com</strong>.</p>
+              <p>If you would like to reactivate this organization, please contact Elk Mountain Software at <strong>leekirkhawley@gmail.com</strong>.</p>
               <p style="color:#666;font-size:0.9em;margin-top:24px">
                 This organization will be permanently deleted after the configured retention period expires.
               </p>
