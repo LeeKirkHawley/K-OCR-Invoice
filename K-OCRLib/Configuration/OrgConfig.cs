@@ -9,7 +9,7 @@ public class OrgConfig
     /// Minimum Azure Document Intelligence confidence score (0.0 – 1.0) required
     /// for a field to pass confidence validation.
     /// </summary>
-    public double MinConfidenceThreshold { get; set; } = 0.8;
+    public double MinConfidenceThreshold { get; set; } = 0.2;
 
     /// <summary>
     /// When true, the Export button is disabled until every invoice in the batch

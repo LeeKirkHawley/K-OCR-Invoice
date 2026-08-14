@@ -62,7 +62,7 @@ public class OrgConfigControllerTests
         _dbContext.SaveChanges();
 
         _mockOrgConfigSvc.Setup(s => s.LoadAsync(OrgName))
-                         .ReturnsAsync(new OrgConfig { MinConfidenceThreshold = 0.8 });
+                         .ReturnsAsync(new OrgConfig { MinConfidenceThreshold = 0.2 });
 
         _controller = new OrgConfigController(
             _dbContext,

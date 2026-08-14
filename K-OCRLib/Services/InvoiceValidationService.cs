@@ -1,7 +1,10 @@
-using System.Reflection;
-using System.Text.RegularExpressions;
 using K_OCRLib.Models;
 using K_OCRLib.Services.Interfaces;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.Intrinsics.X86;
+using System.Text.RegularExpressions;
 
 namespace K_OCRLib.Services;
 
@@ -158,7 +161,7 @@ public class InvoiceValidationService : IInvoiceValidationService
     /// Checks a decimal field by trying several common number formats.
     /// Skips the check when Azure returned no value.
     /// </summary>
-    private static void CheckDecimalField(
+    public static void CheckDecimalField(
         Dictionary<string, bool> flags,
         string fieldName,
         decimal? value,
@@ -167,11 +170,23 @@ public class InvoiceValidationService : IInvoiceValidationService
         if (!value.HasValue)
             return; // Not extracted by Azure — nothing to validate
 
-        var confirmed = GenerateDecimalFormats(value.Value)
+        bool confirmed1 = GenerateDecimalFormats(value.Value)
             .Any(fmt => normalizedTess.Contains(fmt, StringComparison.OrdinalIgnoreCase));
 
+        
+        // GenerateDecimalFormats is creating a list of possible ways the value can be formatted
+        // it includes:
+        //      values with dollar signs
+        //      values with the decimals stripped
+        //      values with commas instead of periods
+        //      etc.
+        IEnumerable<string> fmt = GenerateDecimalFormats(value.Value);
+        bool confirmed = fmt.Any(f => normalizedTess.Contains(f, StringComparison.OrdinalIgnoreCase));
+
+        //Debug.Assert(confirmed);
+        //Debug.Assert(confirmed == confirmed1);
+
         flags[fieldName] = confirmed;
-        //System.Diagnostics.Debug.Assert(flags[fieldName] == true);
     }
 
     /// <summary>
@@ -193,6 +208,8 @@ public class InvoiceValidationService : IInvoiceValidationService
         yield return value.ToString("0.00", ic);
         // Thousands-separated, two decimal places, e.g. "1,234.56"
         yield return value.ToString("N2", ic);
+        // Decimal with comma separator, e.g. "1234,56"
+        yield return value.ToString("0.##", ic).Replace('.', ',');
         // Integer (no decimal), e.g. "1234"
         yield return rounded.ToString("0", ic);
         // Thousands-separated integer, e.g. "1,234"
@@ -202,6 +219,7 @@ public class InvoiceValidationService : IInvoiceValidationService
         yield return "$" + value.ToString("0.##", ic);
         yield return "$" + value.ToString("0.00", ic);
         yield return "$" + value.ToString("N2",   ic);
+        yield return "$" + value.ToString("0.##", ic).Replace('.', ',');
         yield return "$" + rounded.ToString("0",  ic);
         yield return "$" + rounded.ToString("N0", ic);
     }

@@ -38,7 +38,7 @@ public class AppSettings
     /// Minimum Azure Document Intelligence confidence score (0.0 – 1.0) required
     /// to consider a field reliable. Used by the UI to highlight low-confidence fields.
     /// </summary>
-    public double MinConfidenceThreshold { get; set; } = 0.8;
+    public double MinConfidenceThreshold { get; set; } = 0.2;
 
     // Database configuration
     public DatabaseSettings? Database { get; set; }

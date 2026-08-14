@@ -2269,10 +2269,14 @@
             const tesseractConfirmed = item.tesseractConfirmed ?? {};
             const fieldConfidences = item.fieldConfidences ?? {};
             const mathConfirmed = inv._mathConfirmed ?? {};
-        if (tesseractConfirmed[fieldKey] === false) errors.push('Secondary OCR mismatch');
-            if (fieldKey in fieldConfidences && fieldConfidences[fieldKey] < _minConfidenceThreshold) errors.push('Low Azure confidence');
+
+            if (tesseractConfirmed[fieldKey] === false) 
+                errors.push('Secondary OCR mismatch');
+            if (fieldKey in fieldConfidences && fieldConfidences[fieldKey] < _minConfidenceThreshold) 
+                errors.push('Low Azure confidence');
             if (fieldKey === 'Amount') {
-                if (mathConfirmed[`LineItem[${idx}].Amount`] === false) errors.push('Math error');
+                if (mathConfirmed[`LineItem[${idx}].Amount`] === false) 
+                    errors.push('Math error');
             }
         }
         const valueStr = (value !== null && value !== undefined && value !== '') ? String(value) : '—';

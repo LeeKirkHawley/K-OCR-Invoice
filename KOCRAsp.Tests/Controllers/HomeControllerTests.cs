@@ -73,7 +73,7 @@ public class HomeControllerTests
             .ReturnsAsync(new TrialOrganizationLimitStatus(false, false, 500, 0, 0, 0));
         _mockOrgConfigSvc
             .Setup(s => s.LoadAsync(OrgName))
-            .ReturnsAsync(new K_OCRLib.Configuration.OrgConfig { MinConfidenceThreshold = 0.8 });
+            .ReturnsAsync(new K_OCRLib.Configuration.OrgConfig { MinConfidenceThreshold = 0.2 });
 
         _controller = new HomeController(
             _mockHomePageSvc.Object,

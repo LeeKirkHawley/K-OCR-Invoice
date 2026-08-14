@@ -1,5 +1,6 @@
 using K_OCRLib.Models;
 using K_OCRLib.Services;
+using System.Diagnostics;
 
 namespace K_OCRLib.Tests;
 
@@ -33,5 +34,35 @@ public class ValidationServiceTests
         Assert.True(invoice.TesseractConfirmed[nameof(InvoiceDto.Subtotal)]);
         Assert.True(invoice.Items[0].TesseractConfirmed[nameof(InvoiceItemDto.Description)]);
         Assert.True(invoice.Items[0].TesseractConfirmed[nameof(InvoiceItemDto.Amount)]);
+    }
+
+    [Fact]
+    public void InvoiceValidationService_ChecksDecimalField()
+    {
+        InvoiceValidationService service = new InvoiceValidationService();
+
+        Dictionary<string, bool> flags = new Dictionary<string, bool>();
+        string fieldName = "TestField";
+        decimal? value = 1234.56m;
+        string normalizedTess = "1234.56";
+
+        InvoiceValidationService.CheckDecimalField(flags, fieldName, value, normalizedTess);
+
+        Debug.Assert(flags["TestField"] == true);
+    }
+
+    [Fact]
+    public void InvoiceValidationService_ChecksDecimalFieldWithComma()
+    {
+        InvoiceValidationService service = new InvoiceValidationService();
+
+        Dictionary<string, bool> flags = new Dictionary<string, bool>();
+        string fieldName = "TestField";
+        decimal? value = 1234.56m;
+        string normalizedTess = "1234,56";
+
+        InvoiceValidationService.CheckDecimalField(flags, fieldName, value, normalizedTess);
+
+        Debug.Assert(flags["TestField"] == true);
     }
 }
