@@ -412,11 +412,11 @@ public class BatchService : IBatchService, IAsyncDisposable
             throw new InvalidOperationException("OCR is unavailable: subscription inactive.");
 
         // Block OCR if guest org exceeds batch limit
-        var limitStatus = await _trialLimitSvc.GetCurrentStatusAsync();
-        if (limitStatus.IsGuestOrganization && limitStatus.IsBatchLimitExceeded())
-            return TriggerOcrResult.Error(
-                $"This guest organization has reached its batch limit ({limitStatus.UsedBatches}/{limitStatus.MaxBatches} batches). " +
-                $"Please delete or export an existing batch to create new ones.");
+        //var limitStatus = await _trialLimitSvc.GetCurrentStatusAsync();
+        //if (limitStatus.IsGuestOrganization && limitStatus.IsBatchLimitExceeded())
+        //    return TriggerOcrResult.Error(
+        //        $"This guest organization has reached its batch limit ({limitStatus.UsedBatches}/{limitStatus.MaxBatches} batches). " +
+        //        $"Please delete or export an existing batch to create new ones.");
 
         var batchLock = _ocrLocks.GetOrAdd(batchId, _ => new SemaphoreSlim(1, 1));
         if (!await batchLock.WaitAsync(0))

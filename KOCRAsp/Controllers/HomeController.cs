@@ -329,15 +329,15 @@ public class HomeController : Controller
             });
         }
 
-        if (betaStatus.IsBatchLimitExceeded())
-        {
-            return Json(new
-            {
-                success = false,
-                guestBatchLimitExceeded = true,
-                error = $"This guest organization has reached its batch limit ({betaStatus.UsedBatches}/{betaStatus.MaxBatches} batches)."
-            });
-        }
+        //if (betaStatus.IsBatchLimitExceeded())
+        //{
+        //    return Json(new
+        //    {
+        //        success = false,
+        //        guestBatchLimitExceeded = true,
+        //        error = $"This guest organization has reached its batch limit ({betaStatus.UsedBatches}/{betaStatus.MaxBatches} batches)."
+        //    });
+        //}
 
         var result = await _homeOcrSvc.BatchOcrAsync(batchId, skipAlreadyOcrd, tenant);
         var baseline = skipAlreadyOcrd ? (await _homePageSvc.GetAlreadyOcrdFilesAsync(batchId)).Count : 0;

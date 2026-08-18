@@ -88,7 +88,7 @@ public sealed class HomeExportService : IHomeExportService
         using var wb = new XLWorkbook();
 
         var ws = wb.Worksheets.Add("Invoices");
-        string[] hdrs = ["File", "Vendor", "Customer", "Invoice #", "Invoice Date", "Due Date", "PO #", "Subtotal", "Tax", "Discount", "Total"];
+        string[] hdrs = ["File", "Vendor", "Customer", "Invoice #", "Invoice Date", "Due Date", "PO #", "Subtotal", "Tax", "Discount", "Total", "Notes"];
         for (int c = 0; c < hdrs.Length; c++)
         {
             var cell = ws.Cell(1, c + 1);
@@ -111,6 +111,7 @@ public sealed class HomeExportService : IHomeExportService
             ws.Cell(row, 9).Value = inv.TotalTax.HasValue ? (double)inv.TotalTax.Value : (double?)null;
             ws.Cell(row, 10).Value = inv.Discount.HasValue ? (double)inv.Discount.Value : (double?)null;
             ws.Cell(row, 11).Value = inv.Total.HasValue ? (double)inv.Total.Value : (double?)null;
+            ws.Cell(row, 12).Value = inv.Notes;
         }
         ws.Columns().AdjustToContents();
 
@@ -186,16 +187,27 @@ public sealed class HomeExportService : IHomeExportService
         if (string.IsNullOrEmpty(invoice.InvoiceEdits))
             return invoice;
 
-        var edits = JsonConvert.DeserializeObject<List<EditRecord>>(invoice.InvoiceEdits) ?? [];
-        var updated = invoice;
+        List<EditRecord> edits = JsonConvert.DeserializeObject<List<EditRecord>>(invoice.InvoiceEdits) ?? [];
+        InvoiceDto updated = invoice;
 
-        foreach (var edit in edits)
+        foreach (EditRecord edit in edits)
         {
             string propName = ToCamelCase(edit.FieldName);
+            
             PropertyInfo? prop = typeof(InvoiceDto).GetProperty(propName, System.Reflection.BindingFlags.IgnoreCase | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            
             if (prop != null && !prop.Name.StartsWith("Items", StringComparison.Ordinal))
             {
                 object? convertedValue = ConvertValue(edit.Value, prop.PropertyType);
+
+                //PropertyInfo? property = updated.GetType().GetProperty(prop.Name);
+
+                //bool value = property?.GetValue(updated) == convertedValue;
+                //updated = value
+                //    ? updated
+                //    : ApplyPropertyEdit(updated, prop.Name, convertedValue);
+
+
                 updated = updated.GetType().GetProperty(prop.Name)?.GetValue(updated) == convertedValue
                     ? updated
                     : ApplyPropertyEdit(updated, prop.Name, convertedValue);
@@ -250,6 +262,7 @@ public sealed class HomeExportService : IHomeExportService
             TotalTax = propName == nameof(InvoiceDto.TotalTax) ? (decimal?)value : invoice.TotalTax,
             Discount = propName == nameof(InvoiceDto.Discount) ? (decimal?)value : invoice.Discount,
             Total = propName == nameof(InvoiceDto.Total) ? (decimal?)value : invoice.Total,
+            Notes = propName == nameof(InvoiceDto.Notes) ? (string)value! : invoice.Notes,
             Items = invoice.Items,
             FieldBoundingBoxes = invoice.FieldBoundingBoxes,
             FieldConfidences = invoice.FieldConfidences,
@@ -259,7 +272,6 @@ public sealed class HomeExportService : IHomeExportService
             TesseractConfirmed = invoice.TesseractConfirmed,
             IsInvoiceAccepted = invoice.IsInvoiceAccepted,
             InvoiceEdits = invoice.InvoiceEdits,
-            Notes = invoice.Notes,
             VendorCountry = invoice.VendorCountry,
             CurrencyCode = invoice.CurrencyCode,
             OcrText = invoice.OcrText
