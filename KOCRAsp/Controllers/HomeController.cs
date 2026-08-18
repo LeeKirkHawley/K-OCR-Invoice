@@ -804,6 +804,10 @@ public class HomeController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ConfirmBatchExported()
     {
+#if BYPASS_BATCH_DELETE
+        return Json(new { success = true });
+#endif
+
         if (User.IsInRole(RoleNames.SuperAdmin))
             return Forbid();
 
@@ -818,6 +822,7 @@ public class HomeController : Controller
             User.FindFirstValue(AppClaimTypes.OrganizationId) ?? string.Empty,
             User.FindFirstValue(AppClaimTypes.TenantName) ?? string.Empty,
             orgUser);
+
         HttpContext.Session.Remove("CurrentBatchId");
 
         return Json(new { success = true });

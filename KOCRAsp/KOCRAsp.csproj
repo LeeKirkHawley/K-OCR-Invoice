@@ -7,7 +7,12 @@
     <RootNamespace>KOCRAsp</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
+    <!--<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+        <DefineConstants>$(DefineConstants);BYPASS_BATCH_DELETE</DefineConstants>
+    </PropertyGroup>-->
+
+
+    <ItemGroup>
     <ProjectReference Include="..\K-OCRLib\K-OCRLib.csproj" />
     <ProjectReference Include="..\OCRQueue\OCRQueue.csproj" />
   </ItemGroup>
