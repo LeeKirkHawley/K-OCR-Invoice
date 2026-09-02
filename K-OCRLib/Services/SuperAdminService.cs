@@ -276,7 +276,7 @@ public class SuperAdminService : ISuperAdminService
 
     public async Task ReEnableOrganizationAsync(string organizationId)
     {
-        var organization = await _dbContext.Organizations
+        Organization? organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId);
 
         if (organization is null)
@@ -289,7 +289,7 @@ public class SuperAdminService : ISuperAdminService
 
     public async Task DeleteOrganizationAsync(string organizationId)
     {
-        var organization = await _dbContext.Organizations
+        Organization? organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId);
 
         if (organization is null)
@@ -298,13 +298,15 @@ public class SuperAdminService : ISuperAdminService
         if (organization.IsActive)
             throw new InvalidOperationException("Organization must be revoked before it can be deleted.");
 
-        var userIds = await _dbContext.UserOrganizationMemberships
+        OrganizationUserOverview? admin = await _organizationAdminService?.GetOrganizationAdmin(organizationId);
+
+        List<string> userIds = await _dbContext.UserOrganizationMemberships
             .Where(m => m.OrganizationId == organizationId)
             .Select(m => m.UserId)
             .Distinct()
             .ToListAsync();
 
-        var memberships = await _dbContext.UserOrganizationMemberships
+        List<UserOrganizationMembership> memberships = await _dbContext.UserOrganizationMemberships
             .Where(m => m.OrganizationId == organizationId)
             .ToListAsync();
         _dbContext.UserOrganizationMemberships.RemoveRange(memberships);
@@ -312,14 +314,14 @@ public class SuperAdminService : ISuperAdminService
         _dbContext.Organizations.Remove(organization);
         await _dbContext.SaveChangesAsync();
 
-        foreach (var userId in userIds)
+        foreach (string userId in userIds)
         {
-            var remainingMemberships = await _dbContext.UserOrganizationMemberships
+            bool remainingMemberships = await _dbContext.UserOrganizationMemberships
                 .AnyAsync(m => m.UserId == userId);
             if (remainingMemberships)
                 continue;
 
-            var user = await _userManager.FindByIdAsync(userId);
+            ApplicationUser? user = await _userManager.FindByIdAsync(userId);
             if (user is null || user.IsGlobalAdmin)
                 continue;
 
@@ -332,13 +334,19 @@ public class SuperAdminService : ISuperAdminService
         // them, so the handles stay alive until the pool is cleared.
         SqliteConnection.ClearAllPools();
 
-        var orgPath = _pathService.GetOrgFolderPath(organization.Name);
+        string orgPath = _pathService.GetOrgFolderPath(organization.Name);
         if (Directory.Exists(orgPath))
             Directory.Delete(orgPath, recursive: true);
 
         _logger.LogInformation(
             "Organization deleted: OrgId={OrgId}, OrgName={OrgName}, IsGuestOrganization={IsGuestOrganization}.",
             organization.Id, organization.Name, organization.IsGuestOrganization);
+
+        await _emailService.SendOrgDeletionNotificationAsync(
+            admin.Email,
+            admin.FullName ?? "User",
+            organization.Name);
+
     }
 
     public async Task MarkOrganizationForDeletionAsync(string organizationId)
