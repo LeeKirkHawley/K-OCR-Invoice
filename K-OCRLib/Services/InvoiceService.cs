@@ -2,6 +2,7 @@
 using Azure.AI.DocumentIntelligence;
 using K_OCRLib.Models;
 using K_OCRLib.Services.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
@@ -13,6 +14,7 @@ namespace K_OCRLib.Services
     {
         private readonly SemaphoreSlim _semaphore;
         private readonly ILogger<InvoiceService> _logger;
+        private readonly IConfiguration _configuration;
 
         // Both document-level and item-level field synonym mappings are loaded once from
         // PipelineService/FieldMappings.json (keys: "DocumentFields" and "ItemFields").
@@ -22,9 +24,10 @@ namespace K_OCRLib.Services
         private static bool _mappingsLoaded;
         private static readonly object _mappingsLock = new();
 
-        public InvoiceService(int maxConcurrentRequests = 3, ILogger<InvoiceService>? logger = null)
+        public InvoiceService(IConfiguration configuration, int maxConcurrentRequests = 3, ILogger<InvoiceService>? logger = null)
         {
             _semaphore = new SemaphoreSlim(maxConcurrentRequests, maxConcurrentRequests);
+            _configuration = configuration;
             _logger = logger ?? NullLogger<InvoiceService>.Instance;
         }
 
@@ -258,7 +261,8 @@ namespace K_OCRLib.Services
         public async Task<List<InvoiceDto>> RunAzureInvoiceParse(string imagePath)
         {
             string endpoint = "https://parsedocimage.cognitiveservices.azure.com/";
-            string key = "8DfAO78fFo48z5mMerbuJ6dLGvUFLS7CcF9qUvsrCVfWPGGno5O6JQQJ99CAACrJL3JXJ3w3AAALACOGJQx4";
+            //string key = "8DfAO78fFo48z5mMerbuJ6dLGvUFLS7CcF9qUvsrCVfWPGGno5O6JQQJ99CAACrJL3JXJ3w3AAALACOGJQx4";
+            string key = _configuration["Azure:CognitiveServicesKey"] ?? string.Empty;
 
             DocumentIntelligenceClientOptions clientOptions = new DocumentIntelligenceClientOptions
             {

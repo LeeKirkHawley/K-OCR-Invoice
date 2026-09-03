@@ -214,10 +214,26 @@ namespace K_OCRLib.Services
                 existing.VendorName = invoiceDto.VendorName;
                 existing.InvoiceId = invoiceDto.InvoiceId;
 
-                if(!String.IsNullOrEmpty(invoiceDto.DueDate))
-                    existing.DueDate = DateTime.Parse(invoiceDto.DueDate);
+                if (!String.IsNullOrEmpty(invoiceDto.DueDate))
+                {
+                    DateTime result;
+                    bool success = DateTime.TryParse(invoiceDto.DueDate, out result);
+
+                    if(success)
+                        existing.DueDate = result;
+                    else
+                        _logger.LogWarning("Failed to parse DueDate '{DueDate}' for {FileName}.", invoiceDto.DueDate, Path.GetFileName(imagePath));
+                }
                 if(!String.IsNullOrEmpty(invoiceDto.InvoiceDate))
-                    existing.InvoiceDate = DateTime.Parse(invoiceDto.InvoiceDate);
+                { 
+                    DateTime result;
+                    bool success = DateTime.TryParse(invoiceDto.InvoiceDate, out result);
+
+                    if(success)
+                        existing.InvoiceDate = result;
+                    else
+                        _logger.LogWarning("Failed to parse InvoiceDate '{InvoiceDate}' for {FileName}.", invoiceDto.InvoiceDate, Path.GetFileName(imagePath));
+                }
 
                 await SaveInvoiceAsync(existing);
                 _logger.LogDebug("[Database] Updated OCR data for: {FileName}.", Path.GetFileName(imagePath));

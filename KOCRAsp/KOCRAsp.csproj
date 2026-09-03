@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>KOCRAsp</RootNamespace>
+    <UserSecretsId>2b1c3504-02d0-4c32-ac20-b623e546ad1c</UserSecretsId>
   </PropertyGroup>
 
     <!--<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
