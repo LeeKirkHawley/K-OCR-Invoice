@@ -5,6 +5,7 @@ using K_OCRLib.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System.Text.Json;
 
@@ -261,8 +262,10 @@ namespace K_OCRLib.Services
         public async Task<List<InvoiceDto>> RunAzureInvoiceParse(string imagePath)
         {
             string endpoint = "https://parsedocimage.cognitiveservices.azure.com/";
-            //string key = "8DfAO78fFo48z5mMerbuJ6dLGvUFLS7CcF9qUvsrCVfWPGGno5O6JQQJ99CAACrJL3JXJ3w3AAALACOGJQx4";
+
             string key = _configuration["Azure:CognitiveServicesKey"] ?? string.Empty;
+            if(String.IsNullOrEmpty(key))
+                throw new InvalidOperationException("Azure:CognitiveServicesKey is not configured.");
 
             DocumentIntelligenceClientOptions clientOptions = new DocumentIntelligenceClientOptions
             {
