@@ -20,7 +20,10 @@ public class StripeProvisioningService : IStripeProvisioningService
     private void EnsureApiKey()
     {
         if (string.IsNullOrEmpty(_secretKey))
+        {
+            _logger.LogError("Stripe:SecretKey is not configured. Cannot perform Stripe operations.");
             throw new InvalidOperationException("Stripe:SecretKey is not configured.");
+        }
         Stripe.StripeConfiguration.ApiKey = _secretKey;
     }
 

@@ -264,8 +264,11 @@ namespace K_OCRLib.Services
             string endpoint = "https://parsedocimage.cognitiveservices.azure.com/";
 
             string key = _configuration["Azure:CognitiveServicesKey"] ?? string.Empty;
-            if(String.IsNullOrEmpty(key))
+            if (String.IsNullOrEmpty(key))
+            {
+                _logger.LogError("Azure:CognitiveServicesKey is not configured. Cannot run Azure OCR.");
                 throw new InvalidOperationException("Azure:CognitiveServicesKey is not configured.");
+            }
 
             DocumentIntelligenceClientOptions clientOptions = new DocumentIntelligenceClientOptions
             {
