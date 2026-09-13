@@ -41,11 +41,12 @@ public sealed class DefaultOcrWorkflow : IQueuedOcrWorkflow
 
     public async Task ExecuteAsync(OcrJob job, CancellationToken ct)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var sp = scope.ServiceProvider;
+        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+        IServiceProvider sp = scope.ServiceProvider;
 
         // Load the Organization from the shared application-level database.
-        var appDb = sp.GetRequiredService<ApplicationDbContext>();
+        ApplicationDbContext applicationDbContext = sp.GetRequiredService<ApplicationDbContext>();
+        var appDb = applicationDbContext;
         var org   = await appDb.Organizations.FindAsync(new object?[] { job.OrgId }, ct);
         if (org is null)
         {

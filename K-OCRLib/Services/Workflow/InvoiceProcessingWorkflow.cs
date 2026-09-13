@@ -74,7 +74,8 @@ public class InvoiceProcessingWorkflow
         // Azure OCR and Tesseract OCR run concurrently, each with its own pre/post hooks.
         await Task.WhenAll(
             RunStepAsync(_azureOcrStep, organization, batch, context, cancellationToken),
-            RunStepAsync(_tesseractOcrStep, organization, batch, context, cancellationToken));
+            RunStepAsync(_tesseractOcrStep, organization, batch, context, cancellationToken)
+        );
 
         // Remaining steps run sequentially in pipeline order.
         IWorkflowStep[] sequentialSteps =

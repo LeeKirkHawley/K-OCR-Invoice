@@ -45,7 +45,7 @@ public sealed class OcrQueueProcessor : BackgroundService, IOcrQueueProcessor
         _logger.LogInformation("[OcrQueue] Pause requested — draining in-flight jobs.");
 
         // Wait for every concurrency slot to be free (all in-flight jobs done).
-        var sem = _concurrencySemaphore;
+        SemaphoreSlim? sem = _concurrencySemaphore;
         if (sem is not null)
         {
             for (var i = 0; i < _settings.MaxConcurrentJobs; i++)

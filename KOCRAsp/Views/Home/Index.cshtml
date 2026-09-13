@@ -1327,12 +1327,9 @@
 
         for (const f of HEADER_FIELDS) 
         {
-            // Skip Notes field - it's rendered separately as a larger textarea at the bottom
-            if (f.key === 'Notes') continue;
-
             const raw     = inv[f.prop];
             const isNum   = f.prop === 'subtotal' || f.prop === 'totalTax' || f.prop === 'discount'  || f.prop === 'total';
-            let value   = isNum ? fmtMoney(raw) : (raw ?? '');
+            let value   = isNum ? fmtMoney(raw) : normalizeInputValue(raw);
 
             // A date field only gets rendered as <input type="date"> if its
             // value can actually be loaded into that control (strict
@@ -1355,7 +1352,7 @@
             // look for the field in _editingInvoiceEdits by prop name (camelCase key) - if found, replace the value
             const editedValue = _editingInvoiceEdits.get(f.prop);
             if (editedValue !== undefined) {
-                value = editedValue;
+                value = normalizeInputValue(editedValue);
             }
 
             // Track the value currently committed to the database (either the
@@ -1365,6 +1362,11 @@
             // so that editing back to the original text after a save is still
             // detected as a real (unsaved) change from what's in the database.
             _committedValues.set(f.key, String(value));
+
+            // Notes is rendered separately as a larger textarea at the bottom,
+            // but its committed baseline still needs to be tracked above so
+            // the blur handler doesn't treat every Notes blur as an edit.
+            if (f.key === 'Notes') continue;
 
             html += `<tr class="inv-field-row${suspect ? ' inv-suspect-row' : ''}" data-fieldkey="${f.key}" data-vtip="${escapeHtml(tipData.value)}" data-vtip-errors="${escapeHtml(tipData.errors.join('\n'))}">
                 <td>${escapeHtml(f.label)}</td>
@@ -1427,10 +1429,10 @@
                 _originalItemEditsJson.set(i, item.itemEdits || '[]');
                 _editingItemEdits.set(i, edits);  // Store the parsing Map for this item
                 // Keep item.itemEdits as JSON string always - do NOT store the Map back
-                const description = edits.get('description') ?? item.description;
-                const quantity = edits.get('quantity') ?? item.quantity;
+                const description = normalizeInputValue(edits.get('description') ?? item.description);
+                const quantity = normalizeInputValue(edits.get('quantity') ?? item.quantity);
                 const unitPriceValue = edits.get('unitPrice') ?? item.unitPrice;
-                const taxRate = edits.get('taxRate') ?? item.taxRate;
+                const taxRate = normalizeInputValue(edits.get('taxRate') ?? item.taxRate);
                 const amountValue = edits.get('amount') ?? item.amount;
 
                 const vtip = t => `data-vtip="${escapeHtml(t.value)}" data-vtip-errors="${escapeHtml(t.errors.join('\n'))}"`;
@@ -1843,6 +1845,17 @@
         if (!stripped) return '';
         const n = Number(stripped.replace(/,/g, ''));
         return Number.isFinite(n) ? n.toFixed(2) : stripped;
+    }
+
+    // Per the WHATWG HTML parsing spec, CR/LF characters inside a `value="..."`
+    // attribute are normalized to spaces by the browser when the HTML is parsed
+    // (e.g. via `container.innerHTML = html`). OCR-extracted text can contain
+    // embedded newlines, so if we store the raw (un-normalized) string as the
+    // "committed" baseline, it will never match the DOM's actual, space-
+    // normalized `.value` - making the blur handler think an untouched field
+    // was edited. Applying the same normalization here keeps both sides in sync.
+    function normalizeInputValue(v) {
+        return String(v ?? '').replace(/[\t\r\n]+/g, ' ');
     }
 
     // The native <input type="date"> control only accepts values in strict

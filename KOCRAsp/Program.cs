@@ -43,7 +43,7 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .WriteTo.Console()
     .WriteTo.File(
-        path: Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "kocrasp-.log"),
+        path: Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "ElkMountainInvoice-.log"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 14)
     .CreateLogger();
