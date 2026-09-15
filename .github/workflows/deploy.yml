@@ -42,6 +42,7 @@ jobs:
       - name: Write production appsettings.json
         env:
           AZURE_COGNITIVE_SERVICES_KEY: ${{ secrets.AZURE_COGNITIVE_SERVICES_KEY }}
+          AZURE_COGNITIVE_SERVICES_ENDPOINT: ${{ secrets.AZURE_COGNITIVE_SERVICES_ENDPOINT }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
@@ -73,8 +74,10 @@ jobs:
             "Kocr": {
               "BaseDirectory": "KOCRBase"
             },
-            "AzureCognitiveServicesKey":      os.environ["AZURE_COGNITIVE_SERVICES_KEY"],
-            "AzureCognitiveServicesEndpoint": base.get("AzureCognitiveServicesEndpoint"),
+            "Azure": {
+              "CognitiveServicesKey":      os.environ["AZURE_COGNITIVE_SERVICES_KEY"],
+              "CognitiveServicesEndpoint": os.environ.get("AZURE_COGNITIVE_SERVICES_ENDPOINT", "https://parsedocimage.cognitiveservices.azure.com/")
+            },
             "OCRProvider":                    base.get("OCRProvider", "Azure"),
             "MaxConcurrentRequests":          base.get("MaxConcurrentRequests", 3),
             "MinConfidenceThreshold":         base.get("MinConfidenceThreshold", 0.8),
