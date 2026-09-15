@@ -76,7 +76,7 @@ jobs:
             },
             "Azure": {
               "CognitiveServicesKey":      os.environ["AZURE_COGNITIVE_SERVICES_KEY"],
-              "CognitiveServicesEndpoint": os.environ.get("AZURE_COGNITIVE_SERVICES_ENDPOINT", "https://parsedocimage.cognitiveservices.azure.com/")
+              "CognitiveServicesEndpoint": os.environ.get("AZURE_COGNITIVE_SERVICES_ENDPOINT") or "https://parsedocimage.cognitiveservices.azure.com/"
             },
             "OCRProvider":                    base.get("OCRProvider", "Azure"),
             "MaxConcurrentRequests":          base.get("MaxConcurrentRequests", 3),
