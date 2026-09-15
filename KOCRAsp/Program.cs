@@ -32,7 +32,13 @@ if (builder.Environment.IsDevelopment())
 {
     var devFile = Path.Combine(builder.Environment.ContentRootPath, "appsettings.development.user.json");
     builder.Configuration.AddJsonFile(devFile, optional: true, reloadOnChange: true);
+    
+    // Load secrets.json for local development (not committed to repo)
+    builder.Configuration.AddUserSecrets<Program>(optional: true, reloadOnChange: true);
 }
+
+// Load environment variables (GitHub Repository Secrets in production, env vars locally)
+builder.Configuration.AddEnvironmentVariables();
 
 var configuration = builder.Configuration;
 

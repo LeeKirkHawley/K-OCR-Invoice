@@ -261,7 +261,12 @@ namespace K_OCRLib.Services
 
         public async Task<List<InvoiceDto>> RunAzureInvoiceParse(string imagePath)
         {
-            string endpoint = "https://parsedocimage.cognitiveservices.azure.com/";
+            string endpoint = _configuration["Azure:CognitiveServicesEndpoint"] ?? "https://parsedocimage.cognitiveservices.azure.com/";
+            if (String.IsNullOrEmpty(endpoint))
+            {
+                _logger.LogError("Azure:CognitiveServicesEndpoint is not configured. Cannot run Azure OCR.");
+                throw new InvalidOperationException("Azure:CognitiveServicesEndpoint is not configured.");
+            }
 
             string key = _configuration["Azure:CognitiveServicesKey"] ?? string.Empty;
             if (String.IsNullOrEmpty(key))
