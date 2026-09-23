@@ -28,7 +28,7 @@ public class EmailServiceTests
                     EnableSsl = false,
                     Username = null,
                     FromAddress = "noreply@test.com",
-                    FromName = "K-OCR"
+                    FromName = "Elk Mountain Invoice"
                 }
             });
 
@@ -38,7 +38,7 @@ public class EmailServiceTests
         await service.SendOrgAdminInviteAsync("admin@test.com", "Admin User", "Acme Org", setupLink);
 
         var message = await server.Message.Task;
-        Assert.Contains("Subject: Your Acme Org account on K-OCR is ready", message);
+        Assert.Contains("Subject: Your Acme Org account on Elk Mountain Invoice is ready", message);
         Assert.Contains("admin@test.com", message);
         Assert.Contains(setupLink, message);
     }

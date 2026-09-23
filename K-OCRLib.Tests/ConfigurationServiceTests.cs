@@ -105,7 +105,7 @@ public class ConfigurationServiceTests
                 var settings = await service.LoadSettingsAsync(path);
 
                 Assert.NotNull(settings.Email);
-                Assert.Equal("K-OCR", settings.Email.FromName);
+                Assert.Equal("Elk Mountain Invoice", settings.Email.FromName);
                 Assert.Null(settings.GoogleAnalyticsMeasurementId);
                 Assert.Null(settings.SearchConsoleVerificationToken);
             }

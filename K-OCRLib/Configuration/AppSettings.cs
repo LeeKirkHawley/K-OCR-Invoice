@@ -115,5 +115,5 @@ public class EmailSettings
     public string? Username { get; set; }
     public string? Password { get; set; }
     public string? FromAddress { get; set; }
-    public string? FromName { get; set; } = "K-OCR";
+    public string? FromName { get; set; } = "Elk Mountain Invoice";
 }

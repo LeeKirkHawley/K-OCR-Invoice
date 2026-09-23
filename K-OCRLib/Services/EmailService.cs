@@ -32,8 +32,8 @@ public class EmailService : IEmailService
             email,
             toEmail,
             displayName: null,
-            subject: "K-OCR — SMTP test email",
-            htmlBody: "<html><body style=\"font-family:sans-serif\"><p>This is a test email from K-OCR. If you received it, your SMTP settings are working.</p></body></html>");
+            subject: "Elk Mountain Invoice — SMTP test email",
+            htmlBody: "<html><body style=\"font-family:sans-serif\"><p>This is a test email from Elk Mountain Invoice. If you received it, your SMTP settings are working.</p></body></html>");
 
         await SendAsync(email, message);
         _logger.LogInformation("Test email sent to {Email}.", toEmail);
@@ -51,10 +51,10 @@ public class EmailService : IEmailService
         if (string.IsNullOrWhiteSpace(email.SmtpHost))
             throw new InvalidOperationException("SMTP host is not configured.");
 
-        var subject = $"Your {organizationName} account on K-OCR is ready";
+        var subject = $"Your {organizationName} account on Elk Mountain Invoice is ready";
         var body = $"""
             <html><body style="font-family:sans-serif;color:#222">
-              <h2>Welcome to K-OCR, {WebUtility.HtmlEncode(toName)}!</h2>
+              <h2>Welcome to Elk Mountain Invoice, {WebUtility.HtmlEncode(toName)}!</h2>
               <p>Your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been set up.</p>
               <p>Click the button below to set your password and get started:</p>
               <p style="margin:24px 0">
@@ -82,12 +82,12 @@ public class EmailService : IEmailService
         if (string.IsNullOrWhiteSpace(email.SmtpHost))
             throw new InvalidOperationException("SMTP host is not configured.");
 
-        var subject = "K-OCR — Reset your password";
+        var subject = "Elk Mountain Invoice — Reset your password";
         var body = $"""
             <html><body style="font-family:sans-serif;color:#222">
-              <h2>Reset your K-OCR password</h2>
+              <h2>Reset your Elk Mountain Invoice password</h2>
               <p>Hi {WebUtility.HtmlEncode(toName)},</p>
-              <p>We received a request to reset the password for your K-OCR account.</p>
+              <p>We received a request to reset the password for your Elk Mountain Invoice account.</p>
               <p>Click the button below to set a new password:</p>
               <p style="margin:24px 0">
                 <a href="{resetLink}"
@@ -126,10 +126,10 @@ public class EmailService : IEmailService
             _                       => "User"
         };
 
-        var subject = $"You've been invited to {organizationName} on K-OCR";
+        var subject = $"You've been invited to {organizationName} on Elk Mountain Invoice";
         var body = $"""
             <html><body style="font-family:sans-serif;color:#222">
-              <h2>Welcome to K-OCR, {WebUtility.HtmlEncode(toName)}!</h2>
+              <h2>Welcome to Elk Mountain Invoice, {WebUtility.HtmlEncode(toName)}!</h2>
               <p>You have been invited to <strong>{WebUtility.HtmlEncode(organizationName)}</strong> as a <strong>{WebUtility.HtmlEncode(friendlyRole)}</strong>.</p>
               <p>Click the button below to set your password and get started:</p>
               <p style="margin:24px 0">
@@ -160,12 +160,12 @@ public class EmailService : IEmailService
         if (string.IsNullOrWhiteSpace(email.SmtpHost))
             throw new InvalidOperationException("SMTP host is not configured.");
 
-        var subject = $"K-OCR — {WebUtility.HtmlEncode(organizationName)} marked for deletion";
+        var subject = $"Elk Mountain Invoice — {WebUtility.HtmlEncode(organizationName)} marked for deletion";
         var body = $"""
             <html><body style="font-family:sans-serif;color:#222">
               <h2>Organization Marked for Deletion</h2>
               <p>Hi {WebUtility.HtmlEncode(toName)},</p>
-              <p>Your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been marked for deletion on K-OCR.</p>
+              <p>Your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been marked for deletion on Elk Mountain Invoice.</p>
               <p>If you would like to reactivate this organization, please contact Elk Mountain Software at <strong>leekirkhawley@gmail.com</strong>.</p>
               <p style="color:#666;font-size:0.9em;margin-top:24px">
                 This organization will be permanently deleted after the configured retention period expires.
@@ -191,7 +191,7 @@ public class EmailService : IEmailService
         if (string.IsNullOrWhiteSpace(email.SmtpHost))
             throw new InvalidOperationException("SMTP host is not configured.");
 
-        var subject = $"K-OCR — Batch '{WebUtility.HtmlEncode(batchName)}' marked for deletion";
+        var subject = $"Elk Mountain Invoice — Batch '{WebUtility.HtmlEncode(batchName)}' marked for deletion";
         var body = $"""
             <html><body style="font-family:sans-serif;color:#222">
               <h2>Batch Marked for Deletion</h2>
@@ -221,7 +221,7 @@ public class EmailService : IEmailService
         if (string.IsNullOrWhiteSpace(email.SmtpHost))
             throw new InvalidOperationException("SMTP host is not configured.");
 
-        var subject = $"K-OCR — Batch '{WebUtility.HtmlEncode(batchName)}' permanently deleted";
+        var subject = $"Elk Mountain Invoice — Batch '{WebUtility.HtmlEncode(batchName)}' permanently deleted";
         var body = $"""
             <html><body style="font-family:sans-serif;color:#222">
               <h2>Batch Permanently Deleted</h2>
@@ -250,7 +250,7 @@ public class EmailService : IEmailService
         if (string.IsNullOrWhiteSpace(email.SmtpHost))
             throw new InvalidOperationException("SMTP host is not configured.");
 
-        var subject = $"K-OCR — Batch '{WebUtility.HtmlEncode(batchName)}' restored";
+        var subject = $"Elk Mountain Invoice — Batch '{WebUtility.HtmlEncode(batchName)}' restored";
         var body = $"""
             <html><body style="font-family:sans-serif;color:#222">
               <h2>Batch Restored</h2>
@@ -284,7 +284,7 @@ public class EmailService : IEmailService
             : email.FromAddress;
 
         var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(email.FromName ?? "K-OCR", fromAddress));
+        message.From.Add(new MailboxAddress(email.FromName ?? "Elk Mountain Invoice", fromAddress));
         message.To.Add(string.IsNullOrWhiteSpace(displayName)
             ? MailboxAddress.Parse(toAddress)
             : new MailboxAddress(displayName, toAddress));
