@@ -163,7 +163,11 @@ builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddResponseCompression(options =>
 {
-    options.EnableForHttps = true;
+    // Disabled: compressing large dynamic responses over HTTPS in Kestrel (as opposed to
+    // behind an IIS reverse proxy that terminates TLS) has known corruption/truncation issues
+    // with big HTML payloads, which was causing ERR_CONTENT_DECODING_FAILED and a truncated
+    // Home/Index response (missing openNewBatchModal script) for local HTTPS dev testing.
+    options.EnableForHttps = false;
     options.Providers.Add<BrotliCompressionProvider>();
     options.Providers.Add<GzipCompressionProvider>();
 });
