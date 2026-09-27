@@ -66,4 +66,8 @@ public interface IEmailService
         string toName,
         string organizationName,
         string batchName);
+
+    Task SendOrgCreationNotificationAsync(
+            string organizationName,
+            string? userEmail = null);
 }

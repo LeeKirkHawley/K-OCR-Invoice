@@ -246,6 +246,8 @@ public class SuperAdminService : ISuperAdminService
                 user.Id, user.Email, user.FullName, organization.Id, RoleNames.OrganizationAdmin);
         }
 
+        await _emailService.SendOrgCreationNotificationAsync(request.Name, request.AdminEmail);
+
         return new CreateOrganizationResult
         {
             OrganizationId = organization.Id,
@@ -584,6 +586,8 @@ public class SuperAdminService : ISuperAdminService
         _logger.LogInformation(
             "User created: UserId={UserId}, Email={Email}, FullName={FullName}, OrganizationId={OrgId}, Role={Role}.",
             user.Id, user.Email, user.FullName, organization.Id, RoleNames.OrganizationAdmin);
+
+        await _emailService.SendOrgCreationNotificationAsync(organization.Name, email);
 
         return new GuestLoginResult
         {

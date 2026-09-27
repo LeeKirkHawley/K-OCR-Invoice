@@ -166,7 +166,7 @@ public class EmailService : IEmailService
               <h2>Organization Marked for Deletion</h2>
               <p>Hi {WebUtility.HtmlEncode(toName)},</p>
               <p>Your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been marked for deletion on Elk Mountain Invoice.</p>
-              <p>If you would like to reactivate this organization, please contact Elk Mountain Software at <strong>leekirkhawley@gmail.com</strong>.</p>
+              <p>If you would like to reactivate this organization, please contact Elk Mountain Software at <strong>admin@elkmountainsoftware.com</strong>.</p>
               <p style="color:#666;font-size:0.9em;margin-top:24px">
                 This organization will be permanently deleted after the configured retention period expires.
               </p>
@@ -267,6 +267,38 @@ public class EmailService : IEmailService
         _logger.LogInformation("Batch restore notification sent to {Email} for batch '{Batch}' in org '{Org}'.", toEmail, batchName, organizationName);
     }
 
+    public async Task SendOrgCreationNotificationAsync(
+        string organizationName,
+        string? userEmail = null)
+    {
+        var settings = await _configService.LoadSettingsAsync();
+        var email = settings.Email ?? new EmailSettings();
+
+        if (string.IsNullOrWhiteSpace(email.SmtpHost))
+            throw new InvalidOperationException("SMTP host is not configured.");
+
+        var userEmailLine = string.IsNullOrWhiteSpace(userEmail)
+            ? "<p>User email: Not provided</p>"
+            : $"<p>User email: <strong>{WebUtility.HtmlEncode(userEmail)}</strong></p>";
+
+        var subject = "Elk Mountain Invoice — New organization created";
+        var body = $"""
+            <html><body style="font-family:sans-serif;color:#222">
+              <h2>New Organization Created</h2>
+              <p>A new organization has been created in Elk Mountain Invoice:</p>
+              <p>Organization name: <strong>{WebUtility.HtmlEncode(organizationName)}</strong></p>
+              {userEmailLine}
+              <p style="color:#666;font-size:0.9em;margin-top:24px">
+                Created at: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC
+              </p>
+            </body></html>
+            """;
+
+        var message = BuildMessage(email, "admin@elkmountainsoftware.com", displayName: null, subject, body);
+        await SendAsync(email, message);
+        _logger.LogInformation("Organization creation notification sent for org '{Org}' (user email: {UserEmail}).", organizationName, userEmail ?? "N/A");
+    }
+
     // -------------------------------------------------------------------------
 
     private static MimeMessage BuildMessage(
@@ -311,8 +343,13 @@ public class EmailService : IEmailService
             if (!string.IsNullOrWhiteSpace(email.Username))
                 await client.AuthenticateAsync(email.Username, email.Password ?? string.Empty);
 
-            await client.SendAsync(message);
+            string ret = await client.SendAsync(message);
             await client.DisconnectAsync(quit: true);
+        }
+        catch(Exception ex)
+        {
+            _logger.LogError("Failed to send email to {Email}.", message.To.ToString());
+            throw;
         }
         finally
         {
