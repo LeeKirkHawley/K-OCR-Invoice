@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Data.Sqlite;
 using K_OCRLib.Services;
+using K_OCRLib.Services.Interfaces;
 using K_OCRLib.Data;
 using K_OCRLib.Configuration;
 
@@ -53,6 +54,7 @@ namespace K_OCRLib.Database
 
             services.AddSingleton<IDbContextFactory<KOCRDbContext>>(sp =>
                 new OptionsDbContextFactory(sp.GetRequiredService<DbContextOptions<KOCRDbContext>>()));
+            services.AddSingleton<IFileService, FileService>();
             services.AddSingleton<OrgDatabaseService>();
 
             return services;
@@ -67,6 +69,7 @@ namespace K_OCRLib.Database
 
             services.AddSingleton<IDbContextFactory<KOCRDbContext>>(sp =>
                 new OptionsDbContextFactory(sp.GetRequiredService<DbContextOptions<KOCRDbContext>>()));
+            services.AddSingleton<IFileService, FileService>();
             services.AddSingleton<OrgDatabaseService>();
 
             return services;

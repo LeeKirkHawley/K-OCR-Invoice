@@ -123,11 +123,10 @@ public class AdapterAndUtilityTests
     }
 
     [Fact]
-    public async Task StripeProvisioningService_ThrowsWhenSecretMissing()
+    public void StripeProvisioningService_ThrowsWhenSecretMissing()
     {
-        var service = new StripeProvisioningService(new ConfigurationBuilder().Build(), Mock.Of<ILogger<StripeProvisioningService>>());
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateCustomerAsync("org-1", "Acme", "user@example.com"));
+        Assert.Throws<InvalidOperationException>(() => 
+            new StripeProvisioningService(new ConfigurationBuilder().Build(), Mock.Of<ILogger<StripeProvisioningService>>()));
     }
 
     private static void CreatePng(string path, int width, int height)

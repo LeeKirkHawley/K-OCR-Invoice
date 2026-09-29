@@ -300,7 +300,9 @@ public class SuperAdminService : ISuperAdminService
         if (organization.IsActive)
             throw new InvalidOperationException("Organization must be revoked before it can be deleted.");
 
-        OrganizationUserOverview? admin = await _organizationAdminService?.GetOrganizationAdmin(organizationId);
+        OrganizationUserOverview? admin = _organizationAdminService is not null 
+            ? await _organizationAdminService.GetOrganizationAdmin(organizationId) 
+            : null;
 
         List<string> userIds = await _dbContext.UserOrganizationMemberships
             .Where(m => m.OrganizationId == organizationId)
@@ -344,10 +346,13 @@ public class SuperAdminService : ISuperAdminService
             "Organization deleted: OrgId={OrgId}, OrgName={OrgName}, IsGuestOrganization={IsGuestOrganization}.",
             organization.Id, organization.Name, organization.IsGuestOrganization);
 
-        await _emailService.SendOrgDeletionNotificationAsync(
-            admin.Email,
-            admin.FullName ?? "User",
-            organization.Name);
+        if (admin is not null)
+        {
+            await _emailService.SendOrgDeletionNotificationAsync(
+                admin.Email,
+                admin.FullName ?? "User",
+                organization.Name);
+        }
 
     }
 
@@ -723,7 +728,9 @@ public class SuperAdminService : ISuperAdminService
         var customerId = organization.StripeCustomerId;
         if (customerId is null)
         {
-            OrganizationUserOverview? admin = await _organizationAdminService?.GetOrganizationAdmin(organization.Id);
+            OrganizationUserOverview? admin = _organizationAdminService is not null 
+                ? await _organizationAdminService.GetOrganizationAdmin(organization.Id)
+                : null;
             string adminEmail = admin?.Email ?? throw new InvalidOperationException("Organization admin not found.");
             customerId = await _stripeProvisioning.CreateCustomerAsync(organization.Id, organization.Name, adminEmail);
             organization.StripeCustomerId = customerId;
