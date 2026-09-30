@@ -148,37 +148,53 @@ namespace K_OCRLib.Services
         private static (decimal? value, List<BoundingBoxDto> boxes) FindTotalInRawOcr(
             List<(string text, List<float> polygon, int pageNumber)> allWords)
         {
-            // Total-related keywords to search for
-            string[] totalKeywords = new[] { "total", "amount", "due", "balance", "payable", "owing" };
+            // Total-related keywords, ranked by how reliably they label the invoice total.
+            // "amount" is weakest because it is also a common line-item column header.
+            Dictionary<string, int> keywordRank = new Dictionary<string, int>
+            {
+                ["total"] = 0,
+                ["due"] = 1, ["balance"] = 1, ["payable"] = 1, ["owing"] = 1,
+                ["amount"] = 2
+            };
 
             // Find all words that might be Total labels
-            List<int> labelIndices = new List<int>();
+            List<(int index, int rank)> candidates = new List<(int index, int rank)>();
             for (int i = 0; i < allWords.Count; i++)
             {
                 var wordLower = allWords[i].text.ToLowerInvariant().Trim();
                 // Remove common punctuation
                 wordLower = wordLower.TrimEnd(':', '.', ',');
-                
-                if (totalKeywords.Contains(wordLower))
+
+                if (keywordRank.TryGetValue(wordLower, out int rank))
                 {
-                    labelIndices.Add(i);
+                    candidates.Add((i, rank));
                 }
             }
-            
-            // For each potential Total label, search for the nearest currency value to the right
+
+            // Best keyword first; within a keyword tier prefer labels lowest on the last page,
+            // where totals normally sit below the line items.
+            List<int> labelIndices = candidates
+                .OrderBy(c => c.rank)
+                .ThenByDescending(c => allWords[c.index].pageNumber)
+                .ThenByDescending(c => GetCenterY(allWords[c.index].polygon))
+                .Select(c => c.index)
+                .ToList();
+
+            // For each potential Total label, search for the farthest currency value to the right
             foreach (int labelIdx in labelIndices)
             {
                 (string text, List<float> polygon, int pageNumber) label = allWords[labelIdx];
                 float labelY = GetCenterY(label.polygon);
                 float labelX = GetRightX(label.polygon);
-                
-                // Search for currency values within reasonable distance
-                // Horizontal: up to 500 pixels to the right
-                // Vertical: within 50 pixels (same line or very close)
+                // Azure polygons use the page's own unit (inches for PDFs, pixels for images),
+                // so the same-line tolerance comes from the label's height, not a fixed value.
+                float lineTolerance = Math.Max(GetHeight(label.polygon) * 0.75f, 1e-3f);
+
+                // Search for currency values anywhere to the right of the label, on the same page and line
                 decimal? bestValue = null;
                 List<float>? bestPolygon = null;
                 int? bestPageNumber = null;
-                double bestDistance = double.MaxValue;
+                float bestHorizontalDist = float.MinValue;
                 
                 for (int i = 0; i < allWords.Count; i++)
                 {
@@ -188,12 +204,12 @@ namespace K_OCRLib.Services
                     float wordY = GetCenterY(word.polygon);
                     float wordX = GetLeftX(word.polygon);
                     
-                    // Check if word is on same horizontal line (within tolerance)
-                    if (Math.Abs(wordY - labelY) > 50) continue;
+                    if (word.pageNumber != label.pageNumber) continue;
+                    if (Math.Abs(wordY - labelY) > lineTolerance) continue;
 
                     // Check if word is to the right of label
                     float horizontalDist = wordX - labelX;
-                    if (horizontalDist < 0 || horizontalDist > 500) 
+                    if (horizontalDist < 0)
                         continue;
 
                     // Try to parse as currency, including negative amounts such as refunds.
@@ -210,11 +226,10 @@ namespace K_OCRLib.Services
                             continue;
                     }
 
-                    // Prefer the closest value
-                    double distance = Math.Sqrt(horizontalDist * horizontalDist + Math.Pow(wordY - labelY, 2));
-                    if (distance < bestDistance)
+                    // Prefer the farthest value to the right
+                    if (horizontalDist > bestHorizontalDist)
                     {
-                        bestDistance = distance;
+                        bestHorizontalDist = horizontalDist;
                         bestValue = value;
                         bestPolygon = word.polygon;
                         bestPageNumber = word.pageNumber;
@@ -245,6 +260,14 @@ namespace K_OCRLib.Services
             return (polygon[1] + polygon[3] + polygon[5] + polygon[7]) / 4;
         }
         
+        private static float GetHeight(List<float> polygon)
+        {
+            if (polygon.Count < 8) return 0;
+            float top = Math.Min(polygon[1], polygon[3]);
+            float bottom = Math.Max(polygon[5], polygon[7]);
+            return Math.Abs(bottom - top);
+        }
+
         private static float GetLeftX(List<float> polygon)
         {
             if (polygon.Count < 2) 
@@ -402,8 +425,10 @@ namespace K_OCRLib.Services
                         if (f.Confidence.HasValue)
                             fieldConfidences[name] = f.Confidence.Value;
 
-                        if (!string.IsNullOrEmpty(f.ValueString)) return f.ValueString!;
-                        if (!string.IsNullOrEmpty(f.Content)) return f.Content!;
+                        if (!string.IsNullOrEmpty(f.ValueString)) 
+                            return f.ValueString!;
+                        if (!string.IsNullOrEmpty(f.Content)) 
+                            return f.Content!;
                     }
                     return string.Empty;
                 }
@@ -426,13 +451,16 @@ namespace K_OCRLib.Services
                         // Capture the ISO 4217 code reported by Azure (first non-null wins).
                         detectedCurrencyCode ??= field.ValueCurrency?.CurrencyCode;
 
-                        if (field.ValueCurrency?.Amount is double a) return (decimal)a;
-                        if (field.ValueDouble is double d) return (decimal)d;
+                        if (field.ValueCurrency?.Amount is double a) 
+                            return (decimal)a;
+                        if (field.ValueDouble is double d) 
+                            return (decimal)d;
                         if (field.ValueInt64 is long l) return l;
 
                         // Last-resort: parse raw OCR content if it looks like a money string.
                         decimal? parsed = CurrencyAmountParser.Parse(field.Content);
-                        if (parsed.HasValue) return parsed;
+                        if (parsed.HasValue) 
+                            return parsed;
                     }
 
                     // Fallback for Total field if not found by Azure
@@ -487,9 +515,12 @@ namespace K_OCRLib.Services
                         string? unitKey = TryGetItemFieldKey(dict, "UnitPrice");
                         if (unitKey != null && dict.TryGetValue(unitKey, out var vUnit))
                         {
-                            if (vUnit.ValueCurrency?.Amount is double ud) unitPrice = (decimal)ud;
-                            else if (vUnit.ValueDouble is double nd) unitPrice = (decimal)nd;
-                            else if (vUnit.ValueInt64 is long nl) unitPrice = nl;
+                            if (vUnit.ValueCurrency?.Amount is double ud) 
+                                unitPrice = (decimal)ud;
+                            else if (vUnit.ValueDouble is double nd) 
+                                unitPrice = (decimal)nd;
+                            else if (vUnit.ValueInt64 is long nl) 
+                                unitPrice = nl;
                             if (vUnit.Confidence.HasValue)
                                 itemFieldConfidences[nameof(InvoiceItemDto.UnitPrice)] = vUnit.Confidence.Value;
                         }

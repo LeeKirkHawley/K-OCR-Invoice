@@ -48,7 +48,6 @@ public class InvoiceValidationService : IInvoiceValidationService
 
     /// <inheritdoc />
     public void ValidateAgainstTesseract(InvoiceDto invoice, string tesseractText)
-
     {
 
         // Skip validation if no Azure OCR data is present (i.e., all key fields and items are empty)
@@ -170,16 +169,17 @@ public class InvoiceValidationService : IInvoiceValidationService
         if (!value.HasValue)
             return; // Not extracted by Azure — nothing to validate
 
-        bool confirmed1 = GenerateDecimalFormats(value.Value)
-            .Any(fmt => normalizedTess.Contains(fmt, StringComparison.OrdinalIgnoreCase));
-
-        
         // GenerateDecimalFormats is creating a list of possible ways the value can be formatted
         // it includes:
         //      values with dollar signs
         //      values with the decimals stripped
         //      values with commas instead of periods
         //      etc.
+
+        // this confirmed1 stuff is for debugging
+        //bool confirmed1 = GenerateDecimalFormats(value.Value)
+        //    .Any(fmt => normalizedTess.Contains(fmt, StringComparison.OrdinalIgnoreCase));
+
         IEnumerable<string> fmt = GenerateDecimalFormats(value.Value);
         bool confirmed = fmt.Any(f => normalizedTess.Contains(f, StringComparison.OrdinalIgnoreCase));
 

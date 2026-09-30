@@ -2073,14 +2073,6 @@
                 poly.style.cursor        = 'pointer';
                 poly.classList.add('viewer-bbox');
 
-        // this block adds the colored border to the polygon based on its state (selected, saved, suspect, ok)
-                // In validation panel: selected > saved/approved/edited > suspect > ok
-                // poly.classList.add(_selectedFieldKey === key ? 'bbox-selected'
-                //                  : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isInvoiceAccepted ? 'bbox-saved'
-                //                  : isSuspect(invoice, key)       ? 'bbox-suspect'
-                //                  :                             'bbox-ok');
-
-         // this line adds the colored border to the one selected field.
                 poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
 
                 svg.appendChild(poly);
@@ -2105,14 +2097,6 @@
                 poly.style.cursor        = 'pointer';
                 poly.classList.add('viewer-bbox');
 
-        // this block adds the colored border to the polygon based on its state (selected, saved, suspect, ok)
-                // In validation panel: selected > saved/approved/edited > suspect > ok
-                // poly.classList.add((_selectedFieldKey && _selectedFieldKey.startsWith(prefix)) ? 'bbox-selected'
-                //                  : _savedFieldKeys.has(key) || _editedFieldKeys.has(key) || invoice.isInvoiceAccepted ? 'bbox-saved'
-                //                  : isItemSuspect(invoice, item, i)                                 ? 'bbox-suspect'
-                //                  :                                                              'bbox-ok');
-
-        // this line adds the colored border to the one selected field.
                 poly.addEventListener('click', e => { e.stopPropagation(); selectField(key); });
 
                 svg.appendChild(poly);
@@ -2205,7 +2189,8 @@
     }
 
     function isSuspect(inv, key) {
-        if (inv.isInvoiceAccepted) return false;
+        if (inv.isInvoiceAccepted) 
+            return false;
         const tc = inv.tesseractConfirmed;
         const mc = inv._mathConfirmed ?? {};
         const fc = inv.fieldConfidences;
@@ -2214,26 +2199,18 @@
             || (fc && key in fc && fc[key] < _minConfidenceThreshold);
     }
 
-    // function fieldTooltip(inv, key) {
-    //     const reasons = [];
-    //     const tc = inv.tesseractConfirmed;
-    //     const mc = inv._mathConfirmed ?? {};
-    //     const fc = inv.fieldConfidences;
-    //     if (tc && key in tc && tc[key] === false) reasons.push('Secondary OCR mismatch');
-    //     if (fc && key in fc && fc[key] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
-    //     if (mc && key in mc && mc[key] === false) reasons.push('Math error');
-    //     return reasons.join(' · ');
-    // }
-
     // Tooltip: value on line 1, one validation error per subsequent line.
     function buildFieldTooltip(inv, key, value) {
         const errors = [];
         const tc = inv.tesseractConfirmed;
         const mc = inv._mathConfirmed ?? {};
         const fc = inv.fieldConfidences;
-        if (tc && key in tc && tc[key] === false) errors.push('Secondary OCR mismatch');
-        if (fc && key in fc && fc[key] < _minConfidenceThreshold) errors.push('Low Azure confidence');
-        if (mc && key in mc && mc[key] === false) errors.push('Math error');
+        if (tc && key in tc && tc[key] === false) 
+            errors.push('Secondary OCR mismatch');
+        if (fc && key in fc && fc[key] < _minConfidenceThreshold) 
+            errors.push('Low Azure confidence');
+        if (mc && key in mc && mc[key] === false) 
+            errors.push('Math error');
         const valueStr = (value !== null && value !== undefined && value !== '') ? String(value) : '—';
         return { value: valueStr, errors };
     }
@@ -2260,20 +2237,6 @@
         }
         return false;
     }
-
-    // function itemFieldTooltip(inv, item, fieldKey, idx) {
-    //     if (inv.isInvoiceAccepted) return '';
-    //     const reasons = [];
-    //     const tc = item.tesseractConfirmed ?? {};
-    //     const fc = item.fieldConfidences ?? {};
-    //     const mc = inv._mathConfirmed ?? {};
-    //     if (tc[fieldKey] === false) reasons.push('Secondary OCR mismatch');
-    //     if (fieldKey in fc && fc[fieldKey] < _minConfidenceThreshold) reasons.push('Low Azure confidence');
-    //     if (fieldKey === 'Amount') {
-    //         if (mc[`LineItem[${idx}].Amount`] === false) reasons.push('Math error');
-    //     }
-    //     return reasons.join(' · ');
-    // }
 
     // Tooltip showing the field value on line 1, then one error per line.
     function buildItemFieldTooltip(inv, item, fieldKey, idx, value) {

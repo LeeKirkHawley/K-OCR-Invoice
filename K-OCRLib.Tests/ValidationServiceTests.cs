@@ -52,6 +52,21 @@ public class ValidationServiceTests
     }
 
     [Fact]
+    public void InvoiceValidationService_ChecksDecimalField_CurrencyWithComma()
+    {
+        InvoiceValidationService service = new InvoiceValidationService();
+
+        Dictionary<string, bool> flags = new Dictionary<string, bool>();
+        string fieldName = "TestField";
+        decimal? value = 1234.56m;
+        string normalizedTess = "1234,56";
+
+        InvoiceValidationService.CheckDecimalField(flags, fieldName, value, normalizedTess);
+
+        Debug.Assert(flags["TestField"] == true);
+    }
+
+    [Fact]
     public void InvoiceValidationService_ChecksDecimalFieldWithComma()
     {
         InvoiceValidationService service = new InvoiceValidationService();
