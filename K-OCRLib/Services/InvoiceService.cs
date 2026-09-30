@@ -327,67 +327,50 @@ namespace K_OCRLib.Services
                 Dictionary<string, List<BoundingBoxDto>> fieldBoundingBoxes = new Dictionary<string, List<BoundingBoxDto>>();
                 Dictionary<string, double> fieldConfidences = new Dictionary<string, double>();
                 string? detectedCurrencyCode = null;
-                
+
                 // Get page dimensions from the first page (Azure provides dimensions in inches)
                 double pageWidth = 8.5;  // Default letter size
                 double pageHeight = 11.0;
                 if (result.Pages != null && result.Pages.Count > 0)
                 {
                     DocumentPage firstPage = result.Pages[0];
-                    if (firstPage.Width.HasValue) 
+                    if (firstPage.Width.HasValue)
                         pageWidth = firstPage.Width.Value;
-                    if (firstPage.Height.HasValue) 
+                    if (firstPage.Height.HasValue)
                         pageHeight = firstPage.Height.Value;
                 }
-                
-                // Extract all words with their positions for fallback total search
-                var allWords = new List<(string text, List<float> polygon, int pageNumber)>();
-                if (result.Pages != null)
-                {
-                    foreach (var page in result.Pages)
-                    {
-                        if (page.Words != null)
-                        {
-                            foreach (var word in page.Words)
-                            {
-                                if (word.Polygon != null && word.Polygon.Count > 0)
-                                {
-                                    allWords.Add((word.Content, word.Polygon.ToList(), page.PageNumber));
-                                }
-                            }
-                        }
-                    }
-                }
-                
+
+                List<(string text, List<float> polygon, int pageNumber)> allWords = ExtractAllWordsFromPage(result);
+
                 // Helper to search for a field by standard name or synonyms
                 string? TryGetFieldName(string standardName)
                 {
                     // First try the standard name
                     if (doc.Fields.ContainsKey(standardName))
                         return standardName;
-                    
+
                     // Try synonyms
                     if (FieldSynonyms.TryGetValue(standardName, out var synonyms))
                     {
                         foreach (var synonym in synonyms)
                         {
                             // Try exact match (case-insensitive)
-                            string? matchingKey = doc.Fields.Keys.FirstOrDefault(k => 
+                            string? matchingKey = doc.Fields.Keys.FirstOrDefault(k =>
                                 string.Equals(k, synonym, StringComparison.OrdinalIgnoreCase));
-                            
+
                             if (matchingKey != null)
                                 return matchingKey;
                         }
                     }
-                    
+
                     return null;
                 }
-                
+
                 // Helper to extract bounding boxes from a field
                 List<BoundingBoxDto> GetBoundingBoxes(string fieldName)
                 {
                     List<BoundingBoxDto> boxes = new List<BoundingBoxDto>();
-                    if (doc.Fields.TryGetValue(fieldName, out Azure.AI.DocumentIntelligence.DocumentField? field) && 
+                    if (doc.Fields.TryGetValue(fieldName, out Azure.AI.DocumentIntelligence.DocumentField? field) &&
                         field.BoundingRegions != null)
                     {
                         foreach (BoundingRegion region in field.BoundingRegions)
@@ -404,7 +387,7 @@ namespace K_OCRLib.Services
                     }
                     return boxes;
                 }
-                
+
                 string GetString(string name)
                 {
                     string? actualFieldName = TryGetFieldName(name);
@@ -451,7 +434,7 @@ namespace K_OCRLib.Services
                         decimal? parsed = CurrencyAmountParser.Parse(field.Content);
                         if (parsed.HasValue) return parsed;
                     }
-                    
+
                     // Fallback for Total field if not found by Azure
                     if (name == "Total" && allWords.Count > 0)
                     {
@@ -463,7 +446,7 @@ namespace K_OCRLib.Services
                             return totalValue;
                         }
                     }
-                    
+
                     return null;
                 }
 
@@ -515,11 +498,11 @@ namespace K_OCRLib.Services
                         string? amtKey = TryGetItemFieldKey(dict, "Amount");
                         if (amtKey != null && dict.TryGetValue(amtKey, out var vAmt))
                         {
-                            if (vAmt.ValueCurrency?.Amount is double ld) 
+                            if (vAmt.ValueCurrency?.Amount is double ld)
                                 lineTotal = (decimal)ld;
-                            else if (vAmt.ValueDouble is double nd2) 
+                            else if (vAmt.ValueDouble is double nd2)
                                 lineTotal = (decimal)nd2;
-                            else if (vAmt.ValueInt64 is long nl2) 
+                            else if (vAmt.ValueInt64 is long nl2)
                                 lineTotal = nl2;
                             if (vAmt.Confidence.HasValue)
                                 itemFieldConfidences[nameof(InvoiceItemDto.Amount)] = vAmt.Confidence.Value;
@@ -556,43 +539,68 @@ namespace K_OCRLib.Services
 
                         items.Add(new InvoiceItemDto
                         {
-                            Description     = desc,
-                            Quantity        = qty,
-                            UnitPrice       = unitPrice,
-                            Amount          = lineTotal,
-                            BoundingBoxes   = itemBoxes,
+                            Description = desc,
+                            Quantity = qty,
+                            UnitPrice = unitPrice,
+                            Amount = lineTotal,
+                            BoundingBoxes = itemBoxes,
                             FieldConfidences = itemFieldConfidences,
-                            TaxRate         = lineTax
+                            TaxRate = lineTax
                         });
                     }
                 }
 
 
 
-                InvoiceDto dto =  new InvoiceDto
+                InvoiceDto dto = new InvoiceDto
                 {
-                    VendorName    = GetString("VendorName"),
-                    CustomerName  = GetString("CustomerName"),
-                    InvoiceId     = GetString("InvoiceId"),
-                    InvoiceDate   = GetString("InvoiceDate"),
-                    DueDate       = GetString("DueDate"),
+                    VendorName = GetString("VendorName"),
+                    CustomerName = GetString("CustomerName"),
+                    InvoiceId = GetString("InvoiceId"),
+                    InvoiceDate = GetString("InvoiceDate"),
+                    DueDate = GetString("DueDate"),
                     PurchaseOrder = GetString("PurchaseOrder"),
-                    Subtotal      = GetDecimal("Subtotal"),
-                    TotalTax      = GetDecimal("TotalTax"),
-                    Discount      = GetDecimal("Discount"),
-                    Total         = GetDecimal("Total"),
-                    CurrencyCode       = detectedCurrencyCode,
-                    Items             = items,
+                    Subtotal = GetDecimal("Subtotal"),
+                    TotalTax = GetDecimal("TotalTax"),
+                    Discount = GetDecimal("Discount"),
+                    Total = GetDecimal("Total"),
+                    CurrencyCode = detectedCurrencyCode,
+                    Items = items,
                     FieldBoundingBoxes = fieldBoundingBoxes,
-                    FieldConfidences   = fieldConfidences,
-                    OriginalPageWidth  = pageWidth,
+                    FieldConfidences = fieldConfidences,
+                    OriginalPageWidth = pageWidth,
                     OriginalPageHeight = pageHeight,
-                    PageCount          = result.Pages?.Count ?? 1
+                    PageCount = result.Pages?.Count ?? 1
                 };
 
                 return dto;
             }).ToList();
         }
+
+        private static List<(string text, List<float> polygon, int pageNumber)> ExtractAllWordsFromPage(AnalyzeResult result)
+        {
+            // Extract all words with their positions for fallback total search
+            var allWords = new List<(string text, List<float> polygon, int pageNumber)>();
+            if (result.Pages != null)
+            {
+                foreach (var page in result.Pages)
+                {
+                    if (page.Words != null)
+                    {
+                        foreach (var word in page.Words)
+                        {
+                            if (word.Polygon != null && word.Polygon.Count > 0)
+                            {
+                                allWords.Add((word.Content, word.Polygon.ToList(), page.PageNumber));
+                            }
+                        }
+                    }
+                }
+            }
+
+            return allWords;
+        }
+
         public async Task<Dictionary<string, List<InvoiceDto>>> ProcessInvoiceBatchAsync(
             IEnumerable<string> imagePaths,
             IProgress<(int completed, int total, string currentFile)>? progress = null)

@@ -19,6 +19,7 @@ public class InvoiceServiceIntegrationTests
     [Fact]
     public async Task RunAzureInvoiceParse_ParsesRealSampleImage()
     {
+        // 9/30/2026 - works
         if (!TryCreateConfiguredInvoiceService(out var invoiceService, out var skipReason))
         {
             Console.WriteLine($"Skipping: {skipReason}");
@@ -61,14 +62,25 @@ public class InvoiceServiceIntegrationTests
 
     private static bool TryCreateConfiguredInvoiceService(out InvoiceService? invoiceService, out string skipReason)
     {
-        var configuration = new ConfigurationBuilder()
-            .AddEnvironmentVariables()
-            .Build();
+        IConfigurationRoot? configuration = null;
+        try
+        {
+            configuration = new ConfigurationBuilder()
+                .AddUserSecrets<InvoiceServiceIntegrationTests>()
+                .AddEnvironmentVariables()
+                .Build();
+        }
+        catch(Exception ex)
+        {
+            invoiceService = null;
+            skipReason = $"Failed to build configuration: {ex.Message}";
+            return false;
+        }
 
         if (string.IsNullOrWhiteSpace(configuration["Azure:CognitiveServicesKey"]))
         {
             invoiceService = null;
-            skipReason = "Azure:CognitiveServicesKey is not configured (set env var Azure__CognitiveServicesKey to run this test).";
+            skipReason = "Azure:CognitiveServicesKey is not configured (set via 'dotnet user-secrets set \"Azure:CognitiveServicesKey\" \"<key>\"' or env var Azure__CognitiveServicesKey).";
             return false;
         }
 
