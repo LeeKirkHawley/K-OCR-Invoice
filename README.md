@@ -1,4 +1,4 @@
-# KOCRAsp
+# KOCR Invoice
 
 KOCRAsp is the web application frontend for **K-OCR**, an AI-powered invoice OCR and batch processing system. Built with ASP.NET Core 8.0 and powered by Azure Document Intelligence, KOCRAsp provides a full-featured multi-tenant web interface for extracting, processing, and managing invoice data at scale.
 
