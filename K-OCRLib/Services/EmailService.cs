@@ -22,13 +22,13 @@ public class EmailService : IEmailService
 
     public async Task SendTestEmailAsync(string toEmail)
     {
-        var settings = await _configService.LoadSettingsAsync();
-        var email = settings.Email ?? new EmailSettings();
+        AppSettings settings = await _configService.LoadSettingsAsync();
+        EmailSettings email = settings.Email ?? new EmailSettings();
 
         if (string.IsNullOrWhiteSpace(email.SmtpHost))
             throw new InvalidOperationException("SMTP host is not configured.");
 
-        var message = BuildMessage(
+        MimeMessage message = BuildMessage(
             email,
             toEmail,
             displayName: null,

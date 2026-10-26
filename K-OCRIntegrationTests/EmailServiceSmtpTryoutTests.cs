@@ -1,6 +1,7 @@
 using K_OCRLib.Configuration;
 using K_OCRLib.Services;
 using K_OCRLib.Services.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -24,15 +25,20 @@ public class EmailServiceSmtpTryoutTests
     private const int Port = 587;                       // 465 = SslOnConnect, 587/25 = StartTls (via EnableSsl+Auto)
     private const bool EnableSsl = true;
     private const bool SkipCertificateValidation = true;
-    private const string? Username = "admin@elkmountainsoftware.com";               // e.g. "someone @example.com"
-    private const string? Password = "EMSRudeboy10";
-    private const string? FromAddress = "admin@elkmountainsoftware.com";             // falls back to Username if blank
+    private const string? Username = "kirk@elkmountainsoftware.com";               // e.g. "someone @example.com"
+    // Set via: dotnet user-secrets set "Smtp:Password" "<password>" --project K-OCRIntegrationTests
+    // (or the Smtp__Password environment variable)
+    private static readonly string? Password = new ConfigurationBuilder()
+        .AddUserSecrets<EmailServiceSmtpTryoutTests>()
+        .AddEnvironmentVariables()
+        .Build()["Smtp:Password"];
+    private const string? FromAddress = "Kirk@elkmountainsoftware.com";             // falls back to Username if blank
     private const string FromName = "Elk Mountain Software";
 
     //works
     //private const string ToEmail = "leekirkhawley@gmail.com";
+    //private const string ToEmail = "fredboggs@elkmountainsoftware.com";
 
-    //private const string ToEmail = "admin@elkmountainsoftware.com";
     private const string ToEmail = "fredboggs@hardscrabble.org";
 
     [Fact]
