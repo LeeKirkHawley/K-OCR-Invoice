@@ -37,6 +37,9 @@ jobs:
           test -f ./publish/KOCRAsp.dll
           test -f ./publish/KOCRAsp.deps.json
           test -f ./publish/KOCRAsp.runtimeconfig.json
+          test -f ./publish/Microsoft.Data.SqlClient.dll
+          test -d ./publish/Assets
+          test -d ./publish/wwwroot/Manual
 
       # Writes production appsettings.json from GitHub Secrets. No secrets in committed files.
       - name: Write production appsettings.json
@@ -185,7 +188,8 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./publish/
           server-dir: /elkmountainsoftware.com/
-          state-name: .ftp-deploy-sync-state-v2.json
+          # New manifest forces one complete re-upload after files were manually removed.
+          state-name: .ftp-deploy-sync-state-v3.json
           # Only upload changed files; does NOT wipe the server directory
           # dangerous-clean-slate would also delete KOCRBase data — keep false
           dangerous-clean-slate: false

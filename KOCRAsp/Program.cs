@@ -368,21 +368,36 @@ app.Use(async (context, next) =>
 });
 app.UseResponseCompression();
 app.UseStaticFiles();
-app.UseStaticFiles(new StaticFileOptions
+var assetsPath = Path.Combine(builder.Environment.ContentRootPath, "Assets");
+if (Directory.Exists(assetsPath))
 {
-    FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "assets")),
-    RequestPath = "/assets"
-});
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(assetsPath),
+        RequestPath = "/assets"
+    });
+}
+else
+{
+    app.Logger.LogWarning("Static assets directory not found at {AssetsPath}; /assets files will not be served.", assetsPath);
+}
 
 // Serve the compiled manual site from wwwroot/Manual at /manual
 var manualPath = Path.Combine(builder.Environment.WebRootPath ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot"), "Manual");
-app.UseFileServer(new FileServerOptions
+if (Directory.Exists(manualPath))
 {
-    FileProvider = new PhysicalFileProvider(manualPath),
-    RequestPath = "/manual",
-    EnableDefaultFiles = true,
-    EnableDirectoryBrowsing = false
-});
+    app.UseFileServer(new FileServerOptions
+    {
+        FileProvider = new PhysicalFileProvider(manualPath),
+        RequestPath = "/manual",
+        EnableDefaultFiles = true,
+        EnableDirectoryBrowsing = false
+    });
+}
+else
+{
+    app.Logger.LogWarning("Manual site directory not found at {ManualPath}; /manual will not be served.", manualPath);
+}
 app.UseRouting();
 app.UseSession();
 app.UseAuthentication();
