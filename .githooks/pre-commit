@@ -1,0 +1,19 @@
+#!/bin/sh
+# Blocks commits that add hardcoded secrets. Enable with:
+#   git config core.hooksPath .githooks
+# Bypass for a verified false positive: git commit --no-verify
+
+pattern='("?(password|pwd|secret|apikey|api_key|accountkey|webhooksecret|secretkey)"?[[:space:]]*[:=][[:space:]]*"[^"$<{][^"]{3,}")|(sk_(live|test)_[A-Za-z0-9]{10,})|(whsec_[A-Za-z0-9]{10,})|(Password=[^;"[:space:]{$]{3,};)'
+
+hits=$(git diff --cached -U0 --no-color -- . ':!*.lock' ':!*package-lock.json' \
+  | grep -E '^\+[^+]' \
+  | grep -iE "$pattern")
+
+if [ -n "$hits" ]; then
+  echo "Commit blocked: possible hardcoded secret(s) in staged changes:"
+  echo "$hits" | sed -E 's/("[^"]{0,3})[^"]*"/\1***"/g'
+  echo
+  echo "Move secrets to user-secrets / environment variables / GitHub secrets."
+  echo "If this is a false positive: git commit --no-verify"
+  exit 1
+fi

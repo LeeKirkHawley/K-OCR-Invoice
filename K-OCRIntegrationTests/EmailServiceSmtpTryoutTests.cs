@@ -56,7 +56,7 @@ public class EmailServiceSmtpTryoutTests
             Port = Port,
             EnableSsl = EnableSsl,
             SkipCertificateValidation = SkipCertificateValidation,
-            Username = Username,
+            UserName = Username,
             Password = Password,
             FromAddress = FromAddress,
             FromName = FromName
@@ -64,7 +64,7 @@ public class EmailServiceSmtpTryoutTests
 
         var configService = new Mock<IConfigurationService>();
         configService
-            .Setup(c => c.LoadSettingsAsync(It.IsAny<string?>()))
+            .Setup(c => c.LoadSettingsAsync())
             .ReturnsAsync(new AppSettings { Email = emailSettings });
 
         using var loggerFactory = LoggerFactory.Create(builder =>

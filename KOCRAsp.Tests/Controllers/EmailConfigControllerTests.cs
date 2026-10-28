@@ -35,7 +35,7 @@ public class EmailConfigControllerTests
     {
         var settings = new AppSettings { Email = new EmailSettings { SmtpHost = "smtp.example.com" } };
         _mockConfigSvc
-            .Setup(s => s.LoadSettingsAsync(null))
+            .Setup(s => s.LoadSettingsAsync())
             .ReturnsAsync(settings);
 
         var result = await _controller.Index();

@@ -1,16 +1,19 @@
 using System.Text.Json.Nodes;
 using K_OCRLib.Configuration;
 using K_OCRLib.Services;
+using Microsoft.Extensions.Configuration;
 
 namespace K_OCRLib.Tests;
 
 public class ConfigurationServiceTests
 {
+    private static ConfigurationService CreateService(Dictionary<string, string?>? values = null) =>
+        new(new ConfigurationBuilder().AddInMemoryCollection(values ?? new()).Build());
+
     [Fact]
     public void GetDefaultSettings_ReturnsExpectedValues()
     {
-        var service = new ConfigurationService();
-        var settings = service.GetDefaultSettings();
+        var settings = CreateService().GetDefaultSettings();
 
         Assert.Equal("https://parsedocimage.cognitiveservices.azure.com/", settings.AzureCognitiveServicesEndpoint);
         Assert.Equal("Azure", settings.OCRProvider);
@@ -24,165 +27,149 @@ public class ConfigurationServiceTests
     }
 
     [Fact]
-    public async Task LoadSettingsAsync_ReturnsDefaultsWhenFileMissing()
+    public async Task LoadSettingsAsync_ReturnsDefaultsWhenConfigurationEmpty()
     {
-        await WithProductionEnvironment(async () =>
-        {
-            var service = new ConfigurationService();
-            var settings = await service.LoadSettingsAsync(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json"));
+        var settings = await CreateService().LoadSettingsAsync();
 
-            Assert.Equal("Azure", settings.OCRProvider);
-            Assert.Equal(2, settings.GuestMaxBatches);
+        Assert.Equal("Azure", settings.OCRProvider);
+        Assert.Equal(2, settings.GuestMaxBatches);
+        Assert.NotNull(settings.Email);
+        Assert.Equal("Elk Mountain Invoice", settings.Email.FromName);
+    }
+
+    [Fact]
+    public async Task LoadSettingsAsync_BindsValuesFromConfiguration()
+    {
+        var service = CreateService(new()
+        {
+            ["Email:SmtpHost"] = "smtp.test",
+            ["Email:Password"] = "from-secrets",
+            ["OCRProvider"] = "Tesseract"
         });
+
+        var settings = await service.LoadSettingsAsync();
+
+        Assert.Equal("smtp.test", settings.Email.SmtpHost);
+        Assert.Equal("from-secrets", settings.Email.Password);
+        Assert.Equal("Tesseract", settings.OCRProvider);
     }
 
     [Fact]
     public async Task SaveSettingsAsync_MergesExistingJson()
     {
-        await WithProductionEnvironment(async () =>
+        var service = CreateService();
+        var path = Path.Combine(Path.GetTempPath(), $"settings-{Guid.NewGuid()}.json");
+        await File.WriteAllTextAsync(path, """
         {
-            var service = new ConfigurationService();
-            var path = Path.Combine(Path.GetTempPath(), $"settings-{Guid.NewGuid()}.json");
-            await File.WriteAllTextAsync(path, """
-            {
-              "AllowedHosts": "*",
-              "Logging": {
-                "LogLevel": {
-                  "Default": "Information"
-                }
-              }
-            }
-            """);
+          "AllowedHosts": "*",
+          "Logging": { "LogLevel": { "Default": "Information" } }
+        }
+        """);
 
-            try
+        try
+        {
+            var settings = new AppSettings
             {
-                var settings = new AppSettings
+                OCRProvider = "Tesseract",
+                GoogleAnalyticsMeasurementId = "G-TEST123",
+                Limits = new LimitsSection
                 {
-                    OCRProvider = "Tesseract",
-                    GuestMaxBatches = 5,
-                    GoogleAnalyticsMeasurementId = "G-TEST123",
-                    SearchConsoleVerificationToken = "verify-token",
-                    Limits = new LimitsSection
-                    {
-                        Guest = new GuestLimits { MaxBatches = 6, MaxInvoicesPerBatch = 7, MaxPagesPerInvoice = 8 },
-                        User = new UserLimits { MaxInvoicesPerBatch = 9, MaxPagesPerInvoice = 10 }
-                    }
-                };
-
-                await service.SaveSettingsAsync(settings, path);
-
-                var root = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
-                Assert.Equal("*", root["AllowedHosts"]!.GetValue<string>());
-                Assert.Equal("Tesseract", root["OCRProvider"]!.GetValue<string>());
-                Assert.Equal("G-TEST123", root["GoogleAnalyticsMeasurementId"]!.GetValue<string>());
-                Assert.Equal("verify-token", root["SearchConsoleVerificationToken"]!.GetValue<string>());
-                Assert.Equal(6, root["Limits"]!["Guest"]!["MaxBatches"]!.GetValue<int>());
-                Assert.Equal(9, root["Limits"]!["User"]!["MaxInvoicesPerBatch"]!.GetValue<int>());
-            }
-            finally
-            {
-                if (File.Exists(path))
-                    File.Delete(path);
-            }
-        });
-    }
-
-    [Fact]
-    public async Task LoadSettingsAsync_ReturnsEmailDefaultsWhenEmailSectionMissing()
-    {
-        await WithProductionEnvironment(async () =>
-        {
-            var service = new ConfigurationService();
-            var path = Path.Combine(Path.GetTempPath(), $"settings-{Guid.NewGuid()}.json");
-            await File.WriteAllTextAsync(path, """
-            {
-              "OCRProvider": "Azure"
-            }
-            """);
-
-            try
-            {
-                var settings = await service.LoadSettingsAsync(path);
-
-                Assert.NotNull(settings.Email);
-                Assert.Equal("Elk Mountain Invoice", settings.Email.FromName);
-                Assert.Null(settings.GoogleAnalyticsMeasurementId);
-                Assert.Null(settings.SearchConsoleVerificationToken);
-            }
-            finally
-            {
-                if (File.Exists(path))
-                    File.Delete(path);
-            }
-        });
-    }
-
-    [Fact]
-    public void GetGuestAndInvoiceLimits_ReadDevelopmentOverrideFile()
-    {
-        RunWithTemporaryCurrentDirectory(dir =>
-        {
-            var overridePath = Path.Combine(dir, "appsettings.development.user.json");
-            File.WriteAllText(overridePath, """
-            {
-              "Limits": {
-                "Guest": {
-                  "MaxBatches": 4,
-                  "MaxInvoicesPerBatch": 5,
-                  "MaxPagesPerInvoice": 6
-                },
-                "User": {
-                  "MaxInvoicesPerBatch": 7,
-                  "MaxPagesPerInvoice": 8
+                    Guest = new GuestLimits { MaxBatches = 6 },
+                    User = new UserLimits { MaxInvoicesPerBatch = 9 }
                 }
-              }
-            }
-            """);
+            };
 
-            var service = new ConfigurationService();
+            await service.SaveSettingsAsync(settings, path);
 
-            Assert.Equal(4, service.GetGuestMaxBatches());
-            Assert.Equal(6, service.GetMaxPagesPerInvoice(true));
-            Assert.Equal(8, service.GetMaxPagesPerInvoice(false));
-            Assert.Equal(5, service.GetMaxInvoicesPerBatch(true));
-            Assert.Equal(7, service.GetMaxInvoicesPerBatch(false));
+            var root = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+            Assert.Equal("*", root["AllowedHosts"]!.GetValue<string>());
+            Assert.Equal("Tesseract", root["OCRProvider"]!.GetValue<string>());
+            Assert.Equal("G-TEST123", root["GoogleAnalyticsMeasurementId"]!.GetValue<string>());
+            Assert.Equal(6, root["Limits"]!["Guest"]!["MaxBatches"]!.GetValue<int>());
+            Assert.Equal(9, root["Limits"]!["User"]!["MaxInvoicesPerBatch"]!.GetValue<int>());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_DoesNotWriteSecretsToFile()
+    {
+        var service = CreateService(new() { ["Email:Password"] = "from-secrets" });
+        var path = Path.Combine(Path.GetTempPath(), $"settings-{Guid.NewGuid()}.json");
+
+        try
+        {
+            var settings = await service.LoadSettingsAsync();
+            settings.Email.SmtpHost = "smtp.test";
+            settings.AzureCognitiveServicesKey = "azure-key";
+
+            await service.SaveSettingsAsync(settings, path);
+
+            var json = await File.ReadAllTextAsync(path);
+            Assert.Contains("smtp.test", json);
+            Assert.DoesNotContain("from-secrets", json);
+            Assert.DoesNotContain("azure-key", json);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_KeepsSecretAlreadyInFile()
+    {
+        var service = CreateService();
+        var path = Path.Combine(Path.GetTempPath(), $"settings-{Guid.NewGuid()}.json");
+        await File.WriteAllTextAsync(path, """{ "Email": { "Password": "deployed-secret" } }""");
+
+        try
+        {
+            var settings = new AppSettings { Email = new EmailSettings { SmtpHost = "smtp.test", Password = "typed-in-ui" } };
+
+            await service.SaveSettingsAsync(settings, path);
+
+            var email = JsonNode.Parse(await File.ReadAllTextAsync(path))!["Email"]!;
+            Assert.Equal("smtp.test", (string?)email["SmtpHost"]);
+            Assert.Equal("deployed-secret", (string?)email["Password"]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void GetGuestAndInvoiceLimits_ReadFromConfiguration()
+    {
+        var service = CreateService(new()
+        {
+            ["Limits:Guest:MaxBatches"] = "4",
+            ["Limits:Guest:MaxInvoicesPerBatch"] = "5",
+            ["Limits:Guest:MaxPagesPerInvoice"] = "6",
+            ["Limits:User:MaxInvoicesPerBatch"] = "7",
+            ["Limits:User:MaxPagesPerInvoice"] = "8"
         });
+
+        Assert.Equal(4, service.GetGuestMaxBatches());
+        Assert.Equal(6, service.GetMaxPagesPerInvoice(true));
+        Assert.Equal(8, service.GetMaxPagesPerInvoice(false));
+        Assert.Equal(5, service.GetMaxInvoicesPerBatch(true));
+        Assert.Equal(7, service.GetMaxInvoicesPerBatch(false));
     }
 
-    private static async Task WithProductionEnvironment(Func<Task> action)
+    [Fact]
+    public void Limits_FallBackToDefaultsWhenNotConfigured()
     {
-        var previous = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Production");
+        var service = CreateService();
 
-        try
-        {
-            await action();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", previous);
-        }
-    }
-
-    private static void RunWithTemporaryCurrentDirectory(Action<string> action)
-    {
-        var previous = Environment.CurrentDirectory;
-        var previousEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        var dir = Path.Combine(Path.GetTempPath(), $"kocr-config-{Guid.NewGuid()}");
-        Directory.CreateDirectory(dir);
-        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Development");
-        Environment.CurrentDirectory = dir;
-
-        try
-        {
-            action(dir);
-        }
-        finally
-        {
-            Environment.CurrentDirectory = previous;
-            Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", previousEnv);
-            if (Directory.Exists(dir))
-                Directory.Delete(dir, recursive: true);
-        }
+        Assert.Equal(2, service.GetGuestMaxBatches());
+        Assert.Equal(20, service.GetMaxPagesPerInvoice(true));
+        Assert.Equal(20, service.GetMaxInvoicesPerBatch(true));
+        Assert.Equal(100, service.GetMaxInvoicesPerBatch(false));
+        Assert.Equal(500, service.GetBetaMaxOcrPages());
     }
 }

@@ -3,20 +3,34 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using K_OCRLib.Configuration;
 using K_OCRLib.Services.Interfaces;
-using Serilog;
+using Microsoft.Extensions.Configuration;
 
-// The configuration service reads/writes a JSON settings file.
-// In Development: reads a local override file (appsettings.development.user.json)
-//   if it exists, otherwise the roaming %AppData%\K-OCR\appsettings.json.
-// In Production: reads/writes the deployed appsettings.json in the app base
-//   directory (AppDomain.CurrentDomain.BaseDirectory). Saves use a JSON merge
-//   so that ASP.NET Core fields (AllowedHosts, Logging, etc.) are preserved.
+// Settings are read from IConfiguration, so appsettings files, user-secrets (Development)
+// and environment variables (e.g. Email__Password) are merged in the standard ASP.NET order.
+// The Settings / Email Config pages save edits to a JSON file (Development: the local
+// appsettings.development.user.json override; Production: the deployed appsettings.json)
+// using a JSON merge so ASP.NET Core fields (AllowedHosts, Logging, etc.) are preserved.
+// Secrets are never written into that file.
 
 namespace K_OCRLib.Services;
 
 public class ConfigurationService : IConfigurationService
 {
     private const string DefaultSettingsFileName = "appsettings.json";
+
+    private static readonly string[][] SecretPaths =
+    [
+        ["AzureCognitiveServicesKey"],
+        ["Email", "Password"],
+        ["Database", "ConnectionString"]
+    ];
+
+    private readonly IConfiguration _configuration;
+
+    public ConfigurationService(IConfiguration configuration)
+    {
+        _configuration = configuration;
+    }
 
     public AppSettings GetDefaultSettings()
     {
@@ -52,44 +66,12 @@ public class ConfigurationService : IConfigurationService
         return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DefaultSettingsFileName);
     }
 
-    public async Task<AppSettings> LoadSettingsAsync(string? path = null)
+    public Task<AppSettings> LoadSettingsAsync()
     {
-        var defaultPath = GetDefaultSettingsPath();
-        var devOverride = GetDevelopmentOverridePath();
-
-        if (IsDevelopment())
-        {
-            // prefer the development override file if it exists, otherwise
-            // fall back to the roaming file (read‑only baseline).
-            path = File.Exists(devOverride) ? devOverride : defaultPath;
-        }
-        else
-        {
-            path ??= defaultPath;
-        }
-
-        if (!File.Exists(path))
-        {
-            return GetDefaultSettings();
-        }
-
-        try
-        {
-            var json = await File.ReadAllTextAsync(path);
-            var settings = JsonSerializer.Deserialize<AppSettings>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-
-            settings ??= GetDefaultSettings();
-            settings.Email ??= new EmailSettings();
-            return settings;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Failed to load settings from {Path}; using defaults.", path);
-            return GetDefaultSettings();
-        }
+        var settings = GetDefaultSettings();
+        _configuration.Bind(settings);
+        settings.Email ??= new EmailSettings();
+        return Task.FromResult(settings);
     }
 
     public async Task SaveSettingsAsync(AppSettings settings, string? path = null)
@@ -112,12 +94,45 @@ public class ConfigurationService : IConfigurationService
         var settingsJson = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
         var updates = JsonNode.Parse(settingsJson)!.AsObject();
 
+        KeepSecretsOutOfFile(updates, root);
+
         foreach (var kvp in updates)
         {
             root[kvp.Key] = kvp.Value?.DeepClone();
         }
 
         await File.WriteAllTextAsync(path, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+
+        // Pick up the change immediately instead of waiting for the file watcher.
+        (_configuration as IConfigurationRoot)?.Reload();
+    }
+
+    // Values from user-secrets / environment variables are bound into the settings object, so
+    // they must not be written back to the file. A value already in the file is left as it was.
+    private static void KeepSecretsOutOfFile(JsonObject updates, JsonObject existing)
+    {
+        foreach (var secretPath in SecretPaths)
+        {
+            var key = secretPath[^1];
+            var target = ParentOf(updates, secretPath);
+            if (target is null) continue;
+
+            var existingValue = ParentOf(existing, secretPath)?[key];
+            target.Remove(key);
+            if (existingValue is not null)
+                target[key] = existingValue.DeepClone();
+        }
+    }
+
+    private static JsonObject? ParentOf(JsonObject node, string[] path)
+    {
+        var current = node;
+        foreach (var segment in path[..^1])
+        {
+            if (current[segment] is not JsonObject next) return null;
+            current = next;
+        }
+        return current;
     }
 
     private string GetDevelopmentOverridePath()
@@ -125,69 +140,20 @@ public class ConfigurationService : IConfigurationService
         return Path.Combine(Directory.GetCurrentDirectory(), "appsettings.development.user.json");
     }
 
-    public int GetGuestMaxBatches()
-    {
-        try
-        {
-            var node = ParseSettingsNode();
-            if (node?["Limits"]?["Guest"]?["MaxBatches"] is { } v1 && v1.GetValueKind() == System.Text.Json.JsonValueKind.Number) return (int)v1;
-            if (node?["GuestMaxBatches"]                 is { } v2 && v2.GetValueKind() == System.Text.Json.JsonValueKind.Number) return (int)v2;
-        }
-        catch { /* fall through */ }
-        return 2;
-    }
+    public int GetGuestMaxBatches() =>
+        _configuration.GetValue<int?>("Limits:Guest:MaxBatches")
+        ?? _configuration.GetValue<int?>("GuestMaxBatches")
+        ?? 2;
 
-    public int GetMaxPagesPerInvoice(bool isGuest)
-    {
-        try
-        {
-            var node = ParseSettingsNode();
-            var key = isGuest ? "Guest" : "User";
-            if (node?["Limits"]?[key]?["MaxPagesPerInvoice"] is { } val && val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
-                return (int)val;
-        }
-        catch { /* fall through */ }
-        return 20;
-    }
+    public int GetMaxPagesPerInvoice(bool isGuest) =>
+        _configuration.GetValue<int?>($"Limits:{(isGuest ? "Guest" : "User")}:MaxPagesPerInvoice") ?? 20;
 
-    public int GetMaxInvoicesPerBatch(bool isGuest)
-    {
-        try
-        {
-            var node = ParseSettingsNode();
-            var key = isGuest ? "Guest" : "User";
-            if (node?["Limits"]?[key]?["MaxInvoicesPerBatch"] is { } val && val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
-                return (int)val;
-        }
-        catch { /* fall through */ }
-        return isGuest ? 20 : 100;
-    }
+    public int GetMaxInvoicesPerBatch(bool isGuest) =>
+        _configuration.GetValue<int?>($"Limits:{(isGuest ? "Guest" : "User")}:MaxInvoicesPerBatch")
+        ?? (isGuest ? 20 : 100);
 
-    public int GetBetaMaxOcrPages()
-    {
-        try
-        {
-            var node = ParseSettingsNode();
-            if (node?["Limits"]?["Beta"]?["MaxOcrPages"] is { } val &&
-                val.GetValueKind() == System.Text.Json.JsonValueKind.Number)
-            {
-                return (int)val;
-            }
-        }
-        catch { /* fall through */ }
-        return 500;
-    }
-
-    private System.Text.Json.Nodes.JsonNode? ParseSettingsNode()
-    {
-        var path = IsDevelopment()
-            ? (File.Exists(GetDevelopmentOverridePath()) ? GetDevelopmentOverridePath() : GetDefaultSettingsPath())
-            : GetDefaultSettingsPath();
-
-        if (!File.Exists(path)) return null;
-        var json = File.ReadAllText(path);
-        return System.Text.Json.Nodes.JsonNode.Parse(json);
-    }
+    public int GetBetaMaxOcrPages() =>
+        _configuration.GetValue<int?>("Limits:Beta:MaxOcrPages") ?? 500;
 
     private static bool IsDevelopment()
     {

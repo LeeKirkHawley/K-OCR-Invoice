@@ -34,7 +34,7 @@ public class SettingsControllerTests
             OCRProvider = "Azure"
         };
         _mockConfigSvc
-            .Setup(s => s.LoadSettingsAsync(null))
+            .Setup(s => s.LoadSettingsAsync())
             .ReturnsAsync(settings);
 
         var result = await _controller.Index();

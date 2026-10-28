@@ -18,7 +18,7 @@ public class EmailServiceTests
         await server.StartAsync();
 
         var config = new Mock<IConfigurationService>();
-        config.Setup(s => s.LoadSettingsAsync(It.IsAny<string?>()))
+        config.Setup(s => s.LoadSettingsAsync())
             .ReturnsAsync(new AppSettings
             {
                 Email = new EmailSettings
@@ -26,7 +26,7 @@ public class EmailServiceTests
                     SmtpHost = "127.0.0.1",
                     Port = server.Port,
                     EnableSsl = false,
-                    Username = null,
+                    UserName = null,
                     FromAddress = "noreply@test.com",
                     FromName = "Elk Mountain Invoice"
                 }

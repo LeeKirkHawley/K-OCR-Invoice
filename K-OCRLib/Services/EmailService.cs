@@ -166,7 +166,7 @@ public class EmailService : IEmailService
               <h2>Organization Marked for Deletion</h2>
               <p>Hi {WebUtility.HtmlEncode(toName)},</p>
               <p>Your organization <strong>{WebUtility.HtmlEncode(organizationName)}</strong> has been marked for deletion on Elk Mountain Invoice.</p>
-              <p>If you would like to reactivate this organization, please contact Elk Mountain Software at <strong>admin@elkmountainsoftware.com</strong>.</p>
+              <p>If you would like to reactivate this organization, please contact Elk Mountain Software at <strong>Kirk@elkmountainsoftware.com</strong>.</p>
               <p style="color:#666;font-size:0.9em;margin-top:24px">
                 This organization will be permanently deleted after the configured retention period expires.
               </p>
@@ -294,7 +294,7 @@ public class EmailService : IEmailService
             </body></html>
             """;
 
-        var message = BuildMessage(email, "admin@elkmountainsoftware.com", displayName: null, subject, body);
+        var message = BuildMessage(email, "Kirk@elkmountainsoftware.com", displayName: null, subject, body);
         await SendAsync(email, message);
         _logger.LogInformation("Organization creation notification sent for org '{Org}' (user email: {UserEmail}).", organizationName, userEmail ?? "N/A");
     }
@@ -312,7 +312,7 @@ public class EmailService : IEmailService
         // Shared hosts (e.g. Network Solutions/FatCow) require the sender domain to resolve in DNS
         // and typically require it to match the authenticated account.
         var fromAddress = string.IsNullOrWhiteSpace(email.FromAddress)
-            ? email.Username ?? "no-reply@example.com"
+            ? email.UserName ?? "no-reply@example.com"
             : email.FromAddress;
 
         var message = new MimeMessage();
@@ -333,15 +333,16 @@ public class EmailService : IEmailService
         using var protocolLog = new MemoryStream();
         using var client = new SmtpClient(new ProtocolLogger(protocolLog));
 
-        if (email.SkipCertificateValidation)
-            client.ServerCertificateValidationCallback = (_, _, _, _) => true;
+        // didn't use to work without this - now it does, so leaving it commented out for now. If you need to skip cert validation, uncomment this line.
+        //if (email.SkipCertificateValidation)
+        //    client.ServerCertificateValidationCallback = (_, _, _, _) => true;
 
         try
         {
             await client.ConnectAsync(email.SmtpHost, email.Port, socketOptions);
 
-            if (!string.IsNullOrWhiteSpace(email.Username))
-                await client.AuthenticateAsync(email.Username, email.Password ?? string.Empty);
+            if (!string.IsNullOrWhiteSpace(email.UserName))
+                await client.AuthenticateAsync(email.UserName, email.Password ?? string.Empty);
 
             string ret = await client.SendAsync(message);
             await client.DisconnectAsync(quit: true);

@@ -112,7 +112,7 @@ public class EmailSettings
     /// whose mail routes through *.smtp.a.cloudfilter.net).
     /// </summary>
     public bool SkipCertificateValidation { get; set; } = false;
-    public string? Username { get; set; }
+    public string? UserName { get; set; }
     public string? Password { get; set; }
     public string? FromAddress { get; set; }
     public string? FromName { get; set; } = "Elk Mountain Invoice";

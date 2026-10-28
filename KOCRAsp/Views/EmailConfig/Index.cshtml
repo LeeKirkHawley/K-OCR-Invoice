@@ -41,8 +41,8 @@
                                    min="1" max="65535" />
                         </div>
                         <div class="col-md-6">
-                            <label asp-for="Username" class="form-label">Username</label>
-                            <input asp-for="Username" type="text" class="form-control"
+                            <label asp-for="UserName" class="form-label">Username</label>
+                            <input asp-for="UserName" type="text" class="form-control"
                                    autocomplete="username" />
                         </div>
                         <div class="col-md-6">
@@ -61,6 +61,7 @@
                                 <label asp-for="EnableSsl" class="form-check-label">Enable SSL/TLS</label>
                             </div>
                         </div>
+                        @*
                         <div class="col-md-6">
                             <div class="form-check mt-2">
                                 <input asp-for="SkipCertificateValidation" class="form-check-input" type="checkbox" />
@@ -70,6 +71,7 @@
                                 <div class="form-text">Use only with trusted hosts that have mismatched certificates.</div>
                             </div>
                         </div>
+                        *@
                     </div>
 
                     <div class="mt-4">

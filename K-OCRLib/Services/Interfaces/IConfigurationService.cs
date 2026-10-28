@@ -5,9 +5,9 @@ namespace K_OCRLib.Services.Interfaces;
 public interface IConfigurationService
 {
     /// <summary>
-    /// Load application settings from the specified path or default location
+    /// Load application settings from configuration (appsettings files, user-secrets, environment variables)
     /// </summary>
-    Task<AppSettings> LoadSettingsAsync(string? path = null);
+    Task<AppSettings> LoadSettingsAsync();
     
     /// <summary>
     /// Save application settings to the specified path or default location

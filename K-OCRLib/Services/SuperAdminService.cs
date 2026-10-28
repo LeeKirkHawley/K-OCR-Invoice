@@ -1,6 +1,7 @@
 using K_OCRLib.Configuration;
 using K_OCRLib.Data;
 using K_OCRLib.Identity;
+using K_OCRLib.Models;
 using K_OCRLib.Models.Api.OrganizationAdmin;
 using K_OCRLib.Models.Api.SuperAdmin;
 using K_OCRLib.Security;
@@ -11,6 +12,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Stripe;
 using System.Text;
 
 namespace K_OCRLib.Services;
@@ -78,20 +80,20 @@ public class SuperAdminService : ISuperAdminService
     {
         await EnsureRolesAsync();
 
-        var trimmedName = request.Name.Trim();
+        string trimmedName = request.Name.Trim();
 
         // Check for duplicate display name or conflicting sanitized folder name
-        var existingNames = await _dbContext.Organizations.Select(o => o.Name).ToArrayAsync();
+        string[] existingNames = await _dbContext.Organizations.Select(o => o.Name).ToArrayAsync();
         if (existingNames.Any(n => string.Equals(n, trimmedName, StringComparison.OrdinalIgnoreCase)))
             throw new DuplicateOrganizationNameException(
                 $"An organization named \"{trimmedName}\" already exists.");
 
-        var sanitizedNew = _pathService.SanitizeName(trimmedName);
+        string sanitizedNew = _pathService.SanitizeName(trimmedName);
         if (existingNames.Any(n => _pathService.SanitizeName(n) == sanitizedNew))
             throw new DuplicateOrganizationNameException(
                 $"The organization name \"{trimmedName}\" would produce a folder name that conflicts with an existing organization. Choose a different name.");
 
-        var organization = new Organization
+        Organization organization = new Organization
         {
             Name = trimmedName,
             Description = request.Description?.Trim(),
@@ -103,7 +105,7 @@ public class SuperAdminService : ISuperAdminService
         await _dbContext.Organizations.AddAsync(organization);
         await _dbContext.SaveChangesAsync();
 
-        var existingUser = await _userManager.FindByEmailAsync(request.AdminEmail);
+        ApplicationUser? existingUser = await _userManager.FindByEmailAsync(request.AdminEmail);
 
         ApplicationUser user;
         string invitationToken;
@@ -139,7 +141,7 @@ public class SuperAdminService : ISuperAdminService
                 LockoutEnabled = true
             };
 
-            var result = await _userManager.CreateAsync(user, tempPassword);
+            IdentityResult result = await _userManager.CreateAsync(user, tempPassword);
             if (!result.Succeeded)
             {
                 _dbContext.Organizations.Remove(organization);
@@ -157,7 +159,7 @@ public class SuperAdminService : ISuperAdminService
 
         if (!reusingExistingUser)
         {
-            var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(invitationToken));
+            string encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(invitationToken));
             setupLink = string.IsNullOrEmpty(baseUrl)
                 ? string.Empty
                 : $"{baseUrl}/auth/setpassword?userId={Uri.EscapeDataString(user.Id)}&token={encodedToken}";
@@ -175,7 +177,7 @@ public class SuperAdminService : ISuperAdminService
         }
 
         // Create org folder on disk
-        var orgPath = _pathService.GetOrgFolderPath(organization.Name);
+        string orgPath = _pathService.GetOrgFolderPath(organization.Name);
         try
         {
             Directory.CreateDirectory(orgPath);
@@ -202,13 +204,13 @@ public class SuperAdminService : ISuperAdminService
         }
 
         // Create and migrate the per-org SQLite database
-        var orgDbPath = _pathService.GetOrgDbPath(organization.Name);
+        string orgDbPath = _pathService.GetOrgDbPath(organization.Name);
         try
         {
-            var dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
+            DbContextOptions<KOCRDbContext> dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
                 .UseSqlite($"Data Source={orgDbPath}")
                 .Options;
-            await using var orgDb = new KOCRDbContext(dbOptions);
+            await using KOCRDbContext orgDb = new KOCRDbContext(dbOptions);
             await orgDb.Database.MigrateAsync();
             _logger.LogInformation("Per-org database created at {DbPath} for organization {OrgId}.", orgDbPath, organization.Id);
         }
@@ -230,7 +232,7 @@ public class SuperAdminService : ISuperAdminService
         string? stripeProvisioningError = null;
         if (!organization.IsTrialOrganization())
         {
-            var stripeResult = await TryProvisionStripeAsync(organization, priceId: null);
+            (bool Success, string? Error) stripeResult = await TryProvisionStripeAsync(organization, priceId: null);
             stripeProvisioned = stripeResult.Success;
             stripeProvisioningError = stripeResult.Error;
         }
@@ -265,7 +267,7 @@ public class SuperAdminService : ISuperAdminService
 
     public async Task RevokeOrganizationAsync(string organizationId)
     {
-        var organization = await _dbContext.Organizations
+        Organization? organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId);
 
         if (organization is null)
@@ -358,7 +360,7 @@ public class SuperAdminService : ISuperAdminService
 
     public async Task MarkOrganizationForDeletionAsync(string organizationId)
     {
-        var organization = await _dbContext.Organizations
+        Organization? organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId);
 
         if (organization is null)
@@ -381,7 +383,7 @@ public class SuperAdminService : ISuperAdminService
             .Where(m => m.OrganizationId == organizationId && m.Role == RoleNames.OrganizationAdmin)
             .Select(m => m.User)
             .ToListAsync();
-        foreach (var admin in orgAdmins)
+        foreach (ApplicationUser? admin in orgAdmins)
         {
             try
             {
@@ -404,7 +406,7 @@ public class SuperAdminService : ISuperAdminService
 
     public async Task ReinstateMarkedOrganizationAsync(string organizationId)
     {
-        var organization = await _dbContext.Organizations
+        Organization? organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId);
 
         if (organization is null)
@@ -424,14 +426,14 @@ public class SuperAdminService : ISuperAdminService
         if (retention <= TimeSpan.Zero)
             return 0;
 
-        var cutoff = DateTime.UtcNow - retention;
-        var expired = await _dbContext.Organizations
+        DateTime cutoff = DateTime.UtcNow - retention;
+        string[] expired = await _dbContext.Organizations
             .AsNoTracking()
             .Where(o => o.MarkedForDeletionAtUtc != null && o.MarkedForDeletionAtUtc <= cutoff)
             .Select(o => o.Id)
             .ToArrayAsync(cancellationToken);
 
-        var deletedCount = 0;
+        int deletedCount = 0;
         foreach (var orgId in expired)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -445,9 +447,9 @@ public class SuperAdminService : ISuperAdminService
     public async Task<IReadOnlyList<string>> CleanupExpiredGuestAccountsAsync(TimeSpan retention, CancellationToken cancellationToken = default)
     {
         if (retention <= TimeSpan.Zero)
-            return [];
+            return Array.Empty<string>();
 
-        var cutoff = DateTime.UtcNow - retention;
+        DateTime cutoff = DateTime.UtcNow - retention;
         var newlyExpired = await _dbContext.Organizations
             .Where(o => o.IsGuestOrganization
                      && o.MarkedForDeletionAtUtc == null
@@ -502,17 +504,17 @@ public class SuperAdminService : ISuperAdminService
         try
         {
             guestNo = ReadGuestNo() + 1;
-            await File.WriteAllTextAsync(GuestNoFilePath, guestNo.ToString());
+            await System.IO.File.WriteAllTextAsync(GuestNoFilePath, guestNo.ToString());
         }
         finally
         {
             _guestLock.Release();
         }
 
-        var userName = $"Guest{guestNo}";
-        var orgName  = $"Guest{guestNo}Organization";
+        string userName = $"Guest{guestNo}";
+        string orgName  = $"Guest{guestNo}Organization";
 
-        var organization = new Organization
+        Organization organization = new Organization
         {
             Name               = orgName,
             Description        = $"Guest organization for {userName}",
@@ -523,8 +525,8 @@ public class SuperAdminService : ISuperAdminService
         await _dbContext.Organizations.AddAsync(organization);
         await _dbContext.SaveChangesAsync();
 
-        var password = GenerateTemporaryPassword();
-        var user = new ApplicationUser
+        string password = GenerateTemporaryPassword();
+        ApplicationUser user = new ApplicationUser
         {
             UserName             = userName,
             Email                = email,
@@ -534,7 +536,7 @@ public class SuperAdminService : ISuperAdminService
             LockoutEnabled       = false
         };
 
-        var result = await _userManager.CreateAsync(user, password);
+        IdentityResult result = await _userManager.CreateAsync(user, password);
         if (!result.Succeeded)
         {
             _dbContext.Organizations.Remove(organization);
@@ -545,7 +547,7 @@ public class SuperAdminService : ISuperAdminService
 
         await EnsureMembershipAsync(user, organization.Id, RoleNames.OrganizationAdmin);
 
-        var orgPath = _pathService.GetOrgFolderPath(organization.Name);
+        string orgPath = _pathService.GetOrgFolderPath(organization.Name);
         try
         {
             Directory.CreateDirectory(orgPath);
@@ -567,13 +569,13 @@ public class SuperAdminService : ISuperAdminService
             _logger.LogWarning(ex, "Failed to write OrgConfig.json for guest org {OrgName}", orgName);
         }
 
-        var orgDbPath = _pathService.GetOrgDbPath(organization.Name);
+        string orgDbPath = _pathService.GetOrgDbPath(organization.Name);
         try
         {
-            var dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
+            DbContextOptions<KOCRDbContext> dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
                 .UseSqlite($"Data Source={orgDbPath}")
                 .Options;
-            await using var orgDb = new KOCRDbContext(dbOptions);
+            await using KOCRDbContext orgDb = new KOCRDbContext(dbOptions);
             await orgDb.Database.MigrateAsync();
         }
         catch (Exception ex)
@@ -605,21 +607,21 @@ public class SuperAdminService : ISuperAdminService
 
     private int ReadGuestNo()
     {
-        if (!File.Exists(GuestNoFilePath)) return 0;
-        var text = File.ReadAllText(GuestNoFilePath).Trim();
+        if (!System.IO.File.Exists(GuestNoFilePath)) return 0;
+        string text = System.IO.File.ReadAllText(GuestNoFilePath).Trim();
         return int.TryParse(text, out var n) ? n : 0;
     }
 
     private async Task EnsureRolesAsync()
     {
-        foreach (var role in new[] { RoleNames.SuperAdmin, RoleNames.OrganizationUser })
+        foreach (string? role in new[] { RoleNames.SuperAdmin, RoleNames.OrganizationUser })
             if (!await _roleManager.RoleExistsAsync(role))
                 await _roleManager.CreateAsync(new IdentityRole(role));
     }
 
     private async Task EnsureMembershipAsync(ApplicationUser user, string organizationId, string role)
     {
-        var existingMembership = await _dbContext.UserOrganizationMemberships
+        UserOrganizationMembership? existingMembership = await _dbContext.UserOrganizationMemberships
             .FirstOrDefaultAsync(m => m.UserId == user.Id && m.OrganizationId == organizationId);
 
         if (existingMembership is null)
@@ -642,13 +644,13 @@ public class SuperAdminService : ISuperAdminService
 
     private static string GenerateTemporaryPassword()
     {
-        var segment = Guid.NewGuid().ToString("N")[..6];
+        string segment = Guid.NewGuid().ToString("N")[..6];
         return $"Kocr!{segment}";
     }
 
     private async Task DeleteUserAndLogAsync(ApplicationUser user, string reason)
     {
-        var result = await _userManager.DeleteAsync(user);
+        IdentityResult result = await _userManager.DeleteAsync(user);
         if (!result.Succeeded)
             throw new InvalidOperationException(
                 $"Unable to delete user: {string.Join("; ", result.Errors.Select(e => e.Description))}");
@@ -660,7 +662,7 @@ public class SuperAdminService : ISuperAdminService
 
     public async Task<StripeStatusResult> SyncStripeStatusAsync(string organizationId)
     {
-        var organization = await _dbContext.Organizations
+        Organization organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId)
             ?? throw new KeyNotFoundException("Organization not found.");
 
@@ -679,7 +681,7 @@ public class SuperAdminService : ISuperAdminService
 
         try
         {
-            var status = await _stripeProvisioning.GetSubscriptionStatusAsync(organization.StripeSubscriptionId);
+            string status = await _stripeProvisioning.GetSubscriptionStatusAsync(organization.StripeSubscriptionId);
             organization.StripeSubscriptionStatus = status;
             await _dbContext.SaveChangesAsync();
 
@@ -689,7 +691,7 @@ public class SuperAdminService : ISuperAdminService
 
             return new StripeStatusResult(true, status);
         }
-        catch (Exception ex)
+        catch (StripeException ex)
         {
             _logger.LogError(ex,
                 "Failed to fetch Stripe subscription status for org {OrgId}. OCR will be blocked.",
@@ -725,7 +727,7 @@ public class SuperAdminService : ISuperAdminService
             organizationId, resolvedPriceId,
             !string.IsNullOrWhiteSpace(priceId) ? "caller" : "Stripe:DefaultPriceId config");
 
-        var customerId = organization.StripeCustomerId;
+        string? customerId = organization.StripeCustomerId;
         if (customerId is null)
         {
             OrganizationUserOverview? admin = _organizationAdminService is not null 
@@ -737,7 +739,7 @@ public class SuperAdminService : ISuperAdminService
             await _dbContext.SaveChangesAsync();
         }
 
-        var sub = await _stripeProvisioning.CreateSubscriptionAsync(customerId, resolvedPriceId);
+        StripeSubscriptionResult sub = await _stripeProvisioning.CreateSubscriptionAsync(customerId, resolvedPriceId);
         organization.StripeSubscriptionId = sub.SubscriptionId;
         organization.StripeSubscriptionItemId = sub.SubscriptionItemId;
         organization.StripePriceId = resolvedPriceId;
@@ -770,7 +772,7 @@ public class SuperAdminService : ISuperAdminService
         if (maxOcrPages <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxOcrPages), "Beta max OCR pages must be greater than 0.");
 
-        var organization = await _dbContext.Organizations
+        Organization organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId)
             ?? throw new KeyNotFoundException("Organization not found.");
 
@@ -783,25 +785,25 @@ public class SuperAdminService : ISuperAdminService
 
     public async Task<PromoteOrganizationResult> PromoteOrganizationAsync(string organizationId, string? newOrganizationName = null)
     {
-        var organization = await _dbContext.Organizations
+        Organization organization = await _dbContext.Organizations
             .FirstOrDefaultAsync(o => o.Id == organizationId)
             ?? throw new KeyNotFoundException("Organization not found.");
 
         if (!organization.IsTrialOrganization())
             throw new InvalidOperationException("Only guest or beta-test organizations can be promoted.");
 
-        var oldName = organization.Name;
-        var targetName = string.IsNullOrWhiteSpace(newOrganizationName)
+        string oldName = organization.Name;
+        string targetName = string.IsNullOrWhiteSpace(newOrganizationName)
             ? oldName
             : newOrganizationName.Trim();
 
         if (!string.Equals(oldName, targetName, StringComparison.OrdinalIgnoreCase))
             await EnsureOrganizationNameAvailableAsync(organizationId, targetName);
 
-        var oldOrgPath = _pathService.GetOrgFolderPath(oldName);
-        var newOrgPath = _pathService.GetOrgFolderPath(targetName);
+        string oldOrgPath = _pathService.GetOrgFolderPath(oldName);
+        string newOrgPath = _pathService.GetOrgFolderPath(targetName);
 
-        var folderMoved = false;
+        bool folderMoved = false;
         if (!string.Equals(oldOrgPath, newOrgPath, StringComparison.OrdinalIgnoreCase))
         {
             if (Directory.Exists(newOrgPath))
@@ -835,7 +837,7 @@ public class SuperAdminService : ISuperAdminService
             throw;
         }
 
-        var stripeResult = await TryProvisionStripeAsync(organization, priceId: null);
+        (bool Success, string? Error) stripeResult = await TryProvisionStripeAsync(organization, priceId: null);
         return new PromoteOrganizationResult
         {
             OrganizationName = organization.Name,
@@ -861,7 +863,7 @@ public class SuperAdminService : ISuperAdminService
 
     private async Task EnsureOrganizationNameAvailableAsync(string currentOrganizationId, string targetName)
     {
-        var existingNames = await _dbContext.Organizations
+        string[] existingNames = await _dbContext.Organizations
             .Where(o => o.Id != currentOrganizationId)
             .Select(o => o.Name)
             .ToArrayAsync();
@@ -870,7 +872,7 @@ public class SuperAdminService : ISuperAdminService
             throw new DuplicateOrganizationNameException(
                 $"An organization named \"{targetName}\" already exists.");
 
-        var sanitizedNew = _pathService.SanitizeName(targetName);
+        string sanitizedNew = _pathService.SanitizeName(targetName);
         if (existingNames.Any(n => _pathService.SanitizeName(n) == sanitizedNew))
             throw new DuplicateOrganizationNameException(
                 $"The organization name \"{targetName}\" would produce a folder name that conflicts with an existing organization. Choose a different name.");
@@ -878,15 +880,15 @@ public class SuperAdminService : ISuperAdminService
 
     private async Task RewriteOrgStoragePathsAsync(string newOrgPath, string oldOrgPath, string targetName)
     {
-        var orgDbPath = Path.Combine(newOrgPath, "kocr.db");
-        if (!File.Exists(orgDbPath))
+        string orgDbPath = Path.Combine(newOrgPath, "kocr.db");
+        if (!System.IO.File.Exists(orgDbPath))
             return;
 
-        var dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
+        DbContextOptions<KOCRDbContext> dbOptions = new DbContextOptionsBuilder<KOCRDbContext>()
             .UseSqlite($"Data Source={orgDbPath}")
             .Options;
 
-        await using var orgDb = new KOCRDbContext(dbOptions);
+        await using KOCRDbContext orgDb = new KOCRDbContext(dbOptions);
         await orgDb.Database.MigrateAsync();
 
         static string ReplacePrefix(string value, string oldPrefix, string newPrefix)
@@ -896,17 +898,17 @@ public class SuperAdminService : ISuperAdminService
             return newPrefix + value[oldPrefix.Length..];
         }
 
-        var batches = await orgDb.Batches.ToListAsync();
+        List<Batch> batches = await orgDb.Batches.ToListAsync();
         foreach (var batch in batches)
             batch.FolderPath = ReplacePrefix(batch.FolderPath, oldOrgPath, newOrgPath);
 
-        var invoices = await orgDb.Invoices
+        List<Models.Invoice> invoices = await orgDb.Invoices
             .Where(i => i.FilePath != null)
             .ToListAsync();
         foreach (var invoice in invoices)
             invoice.FilePath = ReplacePrefix(invoice.FilePath!, oldOrgPath, newOrgPath);
 
-        var jobs = await orgDb.OcrJobs.ToListAsync();
+        List<OcrJobEntity> jobs = await orgDb.OcrJobs.ToListAsync();
         foreach (var job in jobs)
         {
             job.FilePath = ReplacePrefix(job.FilePath, oldOrgPath, newOrgPath);

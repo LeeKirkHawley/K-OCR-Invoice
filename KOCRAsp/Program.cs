@@ -24,7 +24,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Load the per-user settings file from %AppData%\K-OCR so IConfiguration always
 // reflects what the user has configured via the Settings page.
-var configService = new ConfigurationService();
+var configService = new ConfigurationService(builder.Configuration);
 var userSettingsPath = configService.GetDefaultSettingsPath();
 builder.Configuration.AddJsonFile(userSettingsPath, optional: true, reloadOnChange: true);
 
