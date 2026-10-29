@@ -18,7 +18,7 @@
                     Catch Errors Before They Hit Your Books
                 </p>
                 <p class="lead mb-4">
-                    Dual OCR Invoice Validation with math checks, confidence flags, and human review. Export clean JSON or Excel.
+                    Elk Mountain Invoice reads each invoice twice with independent OCR engines, checks the OCR confidence, checks the math, and flags every field that doesn’t hold up. Fix what’s flagged, skip what isn’t, and export data you can trust.
                 </p>
                 <div class="d-flex flex-wrap justify-content-center gap-2 mb-4">
                     <a class="btn btn-primary btn-lg" asp-controller="Auth" asp-action="Login">Log in</a>
@@ -40,24 +40,26 @@
             <div class="col-md-4">
                 <div class="card h-100 shadow-sm">
                     <div class="card-body">
-                        <h2 class="h5 card-title">Upload invoices</h2>
-                        <p class="card-text text-muted mb-0">Add PDFs or images to a batch and keep related invoices together.</p>
+                        <h2 class="h5 card-title">Two engines, cross-checked</h2>
+                        <p class="card-text text-muted mb-0">Every invoice is read by Microsoft Azure Document Intelligence and by Tesseract. If either engine isn’t confident in a field, or the two disagree about what it says, the field is flagged for review. Errors that slip past a single OCR engine tend to get caught by the second.</p>
                     </div>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="card h-100 shadow-sm">
                     <div class="card-body">
-                        <h2 class="h5 card-title">Review OCR results</h2>
-                        <p class="card-text text-muted mb-0">Check extracted fields, validate totals, and correct issues before export.</p>
+                        <h2 class="h5 card-title">The math has to add up</h2>
+                        <p class="card-text text-muted mb-0">Each line item is checked (price × quantity must equal the line total), and the line totals must add up to the invoice total. When they don’t, the exact line or total is flagged, which also catches arithmetic mistakes made by the vendor.</p>
                     </div>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="card h-100 shadow-sm">
                     <div class="card-body">
-                        <h2 class="h5 card-title">Export batch data</h2>
-                        <p class="card-text text-muted mb-0">Move finished work into JSON or Excel for downstream processing.</p>
+                        <h2 class="h5 card-title">Flags that explain themselves</h2>
+                        <p class="card-text text-muted mb-0">
+                            Hover over any flagged field to see exactly what’s wrong, whether that’s low confidence, an engine mismatch, or a total that doesn’t add up. Correct it, move on, and export clean JSON or Excel when the batch is done.
+                        </p>
                     </div>
                 </div>
             </div>
